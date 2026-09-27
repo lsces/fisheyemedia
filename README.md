@@ -77,6 +77,4 @@ storage roots and Plex matching work, and the complete list of what isn't built 
   locally for everything you care about
 
 Since this package isn't through a stable install/upgrade cycle yet, see `MANUAL.md` in this repo
-for the current schema-deployment approach if you're installing it fresh (`CLAUDE.md` is a dated
-development log, not a reference — useful for *why* something's built the way it is, not *how* to
-set it up).
+for the current schema-deployment approach if you're installing it fresh.

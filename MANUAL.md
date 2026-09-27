@@ -1,7 +1,6 @@
 # Fisheyemedia Package — Reference Manual
 
-How the package actually works today. For the history of *why* — decisions, bugs found, wrong
-turns — see `CLAUDE.md`'s dated session log instead; this file only tracks current behaviour.
+How the package actually works today - current behaviour only, not a history of how it got here.
 
 ## What this is
 
