@@ -8,16 +8,36 @@ namespace Bitweaver\Fisheyemedia;
 use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\Liberty\LibertyContent;
 
+define( 'FISHEYEMEDIAGALLERY_CONTENT_TYPE_GUID', 'fisheyemediagallery' );
+
 /**
- * Intermediate layer between base fisheye's FisheyeGallery and the media content types that need
- * gallery container semantics (FisheyeProgram) - holds logic that only makes sense once media is
- * involved, kept off FisheyeGallery itself so a plain photo-gallery site never carries it.
+ * Layer between base fisheye's FisheyeGallery and the media content types that need gallery
+ * container semantics - holds logic that only makes sense once media is involved (an artist's own
+ * discography strip layout, unloaded-album/video folder detection), kept off FisheyeGallery itself
+ * so a plain photo-gallery site never carries it. Used two ways: as the base class FisheyeProgram
+ * extends (a TV show, still fundamentally a gallery of its own seasons), and directly, as its own
+ * registered content type (content_type_guid='fisheyemediagallery') for a Music artist/composer
+ * gallery - load_music.php creates these directly rather than a plain FisheyeGallery, specifically
+ * so the music_grid layout's own getCategorizedItems()/hasUnloadedAlbumCandidates() calls resolve.
  *
  * @package fisheyemedia
  */
 #[\AllowDynamicProperties]
 class FisheyeMediaGallery extends FisheyeGallery {
 	use FisheyeMediaTrait;
+
+	public function __construct( $pGalleryId = null, $pContentId = null ) {
+		parent::__construct( $pGalleryId, $pContentId );
+		$this->mContentTypeGuid = FISHEYEMEDIAGALLERY_CONTENT_TYPE_GUID;
+		$this->registerContentType( FISHEYEMEDIAGALLERY_CONTENT_TYPE_GUID, [
+			'content_type_guid' => FISHEYEMEDIAGALLERY_CONTENT_TYPE_GUID,
+			'content_name'      => 'Media Gallery',
+			'handler_class'     => 'FisheyeMediaGallery',
+			'handler_package'   => 'fisheyemedia',
+			'handler_file'      => 'FisheyeMediaGallery.php',
+			'maintainer_url'    => 'https://www.bitweaver.org',
+		] );
+	}
 
 	/**
 	 * Whether this artist/composer gallery's own folder under Music/ has at least one album folder

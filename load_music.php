@@ -124,7 +124,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		if( load_music_gallery_id_for_title( $folderName ) ) {
 			continue;
 		}
-		$gallery = new FisheyeGallery();
+		$gallery = new FisheyeMediaGallery();
 		$storeHash = [ 'title' => $folderName, 'gallery_pagination' => FISHEYE_PAGINATION_MUSIC_GRID ];
 		if( $gallery->store( $storeHash ) ) {
 			$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_MUSIC_GRID );
