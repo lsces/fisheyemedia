@@ -8,7 +8,10 @@ namespace Bitweaver\Fisheyemedia;
 use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\Liberty\LibertyContent;
 
-define( 'FISHEYEMEDIAGALLERY_CONTENT_TYPE_GUID', 'fisheyemediagallery' );
+// liberty_content_types.content_type_guid is VARCHAR(16) - 'fisheyemediagallery' (19 chars)
+// overflowed it, same class of issue already hit and abbreviated around for contactwiki's own
+// content-type guids.
+define( 'FISHEYEMEDIAGALLERY_CONTENT_TYPE_GUID', 'fisheyemediagal' );
 
 /**
  * Layer between base fisheye's FisheyeGallery and the media content types that need gallery
@@ -16,9 +19,10 @@ define( 'FISHEYEMEDIAGALLERY_CONTENT_TYPE_GUID', 'fisheyemediagallery' );
  * discography strip layout, unloaded-album/video folder detection), kept off FisheyeGallery itself
  * so a plain photo-gallery site never carries it. Used two ways: as the base class FisheyeProgram
  * extends (a TV show, still fundamentally a gallery of its own seasons), and directly, as its own
- * registered content type (content_type_guid='fisheyemediagallery') for a Music artist/composer
- * gallery - load_music.php creates these directly rather than a plain FisheyeGallery, specifically
- * so the music_grid layout's own getCategorizedItems()/hasUnloadedAlbumCandidates() calls resolve.
+ * registered content type (content_type_guid='fisheyemediagal', abbreviated - see the VARCHAR(16)
+ * comment above) for a Music artist/composer gallery - load_music.php creates these directly rather
+ * than a plain FisheyeGallery, specifically so the music_grid layout's own
+ * getCategorizedItems()/hasUnloadedAlbumCandidates() calls resolve.
  *
  * @package fisheyemedia
  */
