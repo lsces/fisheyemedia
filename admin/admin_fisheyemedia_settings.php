@@ -3,11 +3,9 @@
  * General settings for fisheyemedia's own external media library (storage paths + Plex lookup) -
  * moved out of fisheye's own General Settings tab (fisheye/admin/admin_fisheye_inc.php), where
  * they'd been left only because this page didn't exist yet. Same standalone-script pattern as
- * admin_import_film.php - its own verifyPermission() call, not routed through kernel/admin/
- * index.php's generic ?page= dispatcher (which would need a dedicated p_fisheyemedia_admin
- * permission registered and re-synced via the installer for an already-active package; reusing
- * fisheye's own p_fisheye_admin avoids that entirely, and is the same permission every other
- * fisheyemedia admin action already checks).
+ * admin_import_film.php - its own verifyPermission() call on p_fisheyemedia_admin, not routed
+ * through kernel/admin/index.php's generic ?page= dispatcher. Linked from
+ * menu_fisheyemedia_admin.tpl.
  *
  * @package fisheyemedia
  */
@@ -20,7 +18,7 @@ require_once '../../kernel/includes/setup_inc.php';
 
 global $gBitSystem, $gBitSmarty;
 
-$gBitSystem->verifyPermission( 'p_fisheye_admin' );
+$gBitSystem->verifyPermission( 'p_fisheyemedia_admin' );
 
 $formFisheyeMediaGeneral = [
 	"fisheye_disk_storage_root" => [

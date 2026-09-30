@@ -21,7 +21,7 @@ require_once '../../kernel/includes/setup_inc.php';
 
 global $gBitSystem, $gBitSmarty, $gBitDb, $gLibertySystem;
 
-$gBitSystem->verifyPermission( 'p_fisheye_admin' );
+$gBitSystem->verifyPermission( 'p_fisheyemedia_admin' );
 
 require_once dirname( __DIR__ ).'/../liberty/plugins/mime.film.php';
 if( !$gLibertySystem->isPluginActive( 'mimefilm' ) ) {

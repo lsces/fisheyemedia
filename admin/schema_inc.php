@@ -24,3 +24,12 @@ $gBitInstaller->registerContentObjects( FISHEYEMEDIA_PKG_NAME, [
 	'FisheyeAlbum'=>FISHEYEMEDIA_PKG_CLASS_PATH.'FisheyeAlbum.php',
 	'FisheyeProgram'=>FISHEYEMEDIA_PKG_CLASS_PATH.'FisheyeProgram.php',
 ] );
+
+// ### Default User Permissions
+// fisheye's own permissions still gate the actual Film/TV/Music load/edit/view flows - these are
+// fisheye galleries/images like any other, no need for a duplicate permission concept.
+// p_fisheyemedia_admin is only for this package's own admin pages (the admin menu itself is gated
+// on 'p_'.$package.'_admin').
+$gBitInstaller->registerUserPermissions( FISHEYEMEDIA_PKG_NAME, [
+	[ 'p_fisheyemedia_admin', 'Can admin Fisheye Media settings', 'admin', FISHEYEMEDIA_PKG_NAME ],
+] );
