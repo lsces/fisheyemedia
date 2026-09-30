@@ -78,7 +78,11 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 		$plexResult = [ 'items' => [] ];
 		$plexResultEmptyLabel = $reloadResult['error'];
 	} else {
-		$plexResult = [ 'items' => [ ( $reloadResult['tracks'] ?? 0 ).' track(s) re-scanned' ] ];
+		$c = $reloadResult['counts'] ?? [];
+		$plexResult = [ 'items' => [
+			( $reloadResult['tracks'] ?? 0 ).' track(s) re-scanned',
+			( $c['unchanged'] ?? 0 ).' row(s) unchanged, '.( $c['inserted'] ?? 0 ).' added, '.( $c['archived'] ?? 0 ).' archived to history, '.( $c['kept_local'] ?? 0 ).' kept as locally edited',
+		] ];
 	}
 } elseif( !empty( $_REQUEST['delete'] ) ) {
 	// Same delete flow as edit_film.php/edit_program.php's own - the track/cover files on disk

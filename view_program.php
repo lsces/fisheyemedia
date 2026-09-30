@@ -1,7 +1,7 @@
 <?php
 /**
  * Dedicated view page for a TV show ("program" - FisheyeProgram, extends FisheyeGallery) -
- * show-level facts (genre/cast/rating/external links, same allXrefs() pattern view_film.php
+ * show-level facts (genre/cast/rating/external links, same liveXrefs() pattern view_film.php
  * uses) plus a grid of this show's own season members. Deliberately separate from the generic
  * gallery view.php, same reasoning as view_film.php being separate from view_image.php.
  *
@@ -41,14 +41,14 @@ if( !$gContent || !$gContent->isValid() || !( $gContent instanceof FisheyeProgra
 $gContent->verifyViewPermission();
 $gContent->addHit();
 
-// bucket this show's own xref data - same flat allXrefs() pass as view_film.php, no group names
+// bucket this show's own xref data - same flat liveXrefs() pass as view_film.php, no group names
 // hardcoded (see that page's own comment for why that matters).
 $gContent->loadXrefInfo();
 $genres = $directors = $writers = $stars = [];
 $contentRating = $durationMs = null;
 $externalLinks = [];
 if( $gContent->mXrefInfo ) {
-	foreach( $gContent->mXrefInfo->allXrefs() as $xref ) {
+	foreach( $gContent->liveXrefs() as $xref ) {
 		switch( $xref['item'] ) {
 			case 'genre':          $genres[]     = $xref['xkey_ext']; break;
 			case 'director':       $directors[]  = $xref['xkey_ext']; break;

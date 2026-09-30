@@ -34,7 +34,7 @@ $tracks = [];
 $artist = null;
 $externalLinks = [];
 if( $gContent->mXrefInfo ) {
-	foreach( $gContent->mXrefInfo->allXrefs() as $xref ) {
+	foreach( $gContent->liveXrefs() as $xref ) {
 		// External links (mbid/discogs/...) - same generic cross_ref_href convention FisheyeFilm's
 		// own imdb/tmdb links use, identified by having one rather than by item name, so any future
 		// liberty_xref_item source added for fisheyealbum picks this up for free. Unlike imdb/tmdb
@@ -57,17 +57,26 @@ if( $gContent->mXrefInfo ) {
 					'xref_id'    => $xref['xref_id'],
 					'title'      => $data['title'] ?? $xref['xkey_ext'],
 					'disc'       => $data['disc'] ?? 1,
+					// The track's real number from its own tags/filename, not its position in the
+					// list - a missing track then shows as a visible gap (1, 4, 5...) the way the
+					// edit page's Tracks tab already shows it, rather than being silently renumbered.
+					'trackNum'   => isset( $data['track'] ) ? (int)$data['track'] : null,
 					// The track's own per-credit performer (a various-artists/composers
 					// compilation's real value-add over the album-level 'artist' xref already
 					// shown above the list) - null on a normal single-artist album, where it'd
 					// just repeat that same value. ARTISTS (MusicBrainz's own raw multi-artist
 					// credit) is the fallback for a release with no plain ARTIST tag at all - seen
 					// on Classic Composers, which only carries ARTISTS/ARTISTSORT per track.
-					'artist'     => $data['ARTIST'] ?? $data['ARTISTS'] ?? null,
+					// ARTISTS is a list once a track credits several artists (see
+					// FisheyeAlbum::readTrackTags()), shown joined. PERFORMERS (an older rip's own
+					// "Performers" comment - orchestra, soloists, "X, conductor" one per line) is the
+					// last fallback, for a single-composer classical album whose ARTIST/ARTISTS got
+					// promoted to album level, leaving the performing credit as the only per-track one.
+					'artist'     => is_array( $x = $data['ARTIST'] ?? $data['ARTISTS'] ?? null ) ? implode( ', ', $x ) : ( $x ?? ( isset( $data['PERFORMERS'] ) ? preg_replace( '/\s*\R\s*/', ', ', trim( $data['PERFORMERS'] ) ) : null ) ),
 					// Same TSST (ID3v2) / DISCSUBTITLE (Vorbis) precedence as getDiscTitle() uses
 					// for a box set's own per-disc title - here it's just extra context after the
 					// "Disc X" heading on a single flattened multi-disc album, not the title itself.
-					'discSubtitle' => $data['TSST'] ?? $data['DISCSUBTITLE'] ?? null,
+					'discSubtitle' => is_array( $x = $data['TSST'] ?? $data['DISCSUBTITLE'] ?? null ) ? implode( '; ', $x ) : $x,
 					'durationMs' => $data['duration'] ?? null,
 					'xorder'     => (int)$xref['xorder'],
 				];

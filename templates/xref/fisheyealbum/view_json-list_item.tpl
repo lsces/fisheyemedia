@@ -19,7 +19,7 @@
 		<table class="table-condensed table-borderless" style="margin:0">
 			{foreach $jsonData as $jkey => $jval}
 				{if $jkey neq 'track' && $jkey neq 'disc'}
-					<tr><th style="padding-right:.5em">{$jkey|replace:'_':' '|capitalize}</th><td>{$jval|escape}</td></tr>
+					<tr><th style="padding-right:.5em">{$jkey|replace:'_':' '|capitalize}</th><td>{if $jval|is_array}{$jval|join:', '|escape}{else}{$jval|escape}{/if}</td></tr>
 				{/if}
 			{/foreach}
 		</table>

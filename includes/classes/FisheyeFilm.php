@@ -319,7 +319,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 
 	/**
 	 * This film's own facts, xref data and tab content, bucketed once for view_film.php/
-	 * view_film.tpl - same "one flat pass over allXrefs(), keyed by item name only" shape as
+	 * view_film.tpl - same "one flat pass over liveXrefs(), keyed by item name only" shape as
 	 * FisheyeSeason::getSeasonViewData(), rather than view_film.php hand-rolling its own near-
 	 * identical bucketing loop. Deliberately not keyed off which x_group an item happens to be
 	 * organised under (that's a tab-layout concern - see media.php's xref_schemes) - hardcoding
@@ -347,7 +347,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 		// item).
 		$featurettes = [];
 		if( $this->mXrefInfo ) {
-			foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+			foreach( $this->liveXrefs() as $xref ) {
 				switch( $xref['item'] ) {
 					case 'genre':          $genres[]     = $xref['xkey_ext']; break;
 					case 'director':       $directors[]  = $xref['xkey_ext']; break;
@@ -658,7 +658,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 		$this->loadXrefInfo();
 		$existingImagePaths = [];
 		$xorder = 0;
-		foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+		foreach( $this->liveXrefs() as $xref ) {
 			if( $xref['item'] === 'image' ) {
 				$existingImagePaths[] = $xref['xkey_ext'];
 				$xorder = max( $xorder, (int)$xref['xorder'] );

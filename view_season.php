@@ -40,7 +40,7 @@ $gContent->addHit();
 $gContent->loadXrefInfo();
 $externalLinks = [];
 if( $gContent->mXrefInfo ) {
-	foreach( $gContent->mXrefInfo->allXrefs() as $xref ) {
+	foreach( $gContent->liveXrefs() as $xref ) {
 		if( !empty( $xref['cross_ref_href'] ) && !empty( $xref['xkey'] )) {
 			$externalLinks[] = [
 				'title' => $xref['xref_title'] ?? strtoupper( $xref['item'] ),

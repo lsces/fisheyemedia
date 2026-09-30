@@ -17,6 +17,28 @@ namespace Bitweaver\Fisheyemedia;
 trait FisheyeMediaTrait {
 
 	/**
+	 * Every live xref row on this content object, across all groups except liberty's synthetic
+	 * 'history' group (rows with an end_date - archived by a reload's reconcile, or by hand).
+	 * liberty's own LibertyXrefContent::allXrefs() deliberately includes history, since the
+	 * generic xref grid shows it on its own History tab; the media view/edit code here wants
+	 * current data only, so it reads through this instead. Empty if xref info isn't loaded.
+	 *
+	 * @return array
+	 */
+	public function liveXrefs(): array {
+		$ret = [];
+		foreach( $this->mXrefInfo->mGroups ?? [] as $groupName => $group ) {
+			if( $groupName === 'history' ) {
+				continue;
+			}
+			foreach( $group->mXrefs as $xref ) {
+				$ret[] = $xref;
+			}
+		}
+		return $ret;
+	}
+
+	/**
 	 * Grab a frame from a given video file and store it as a new 'image' xref on THIS content
 	 * object - the shared engine behind FisheyeSeason::grabVideoFrameImage() (source: its own
 	 * seed episode) and FisheyeProgram::grabVideoFrameImage() (source: its first season's own

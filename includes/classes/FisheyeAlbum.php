@@ -123,10 +123,75 @@ const FISHEYEALBUM_COMMON_TAG_ALTERNATES = [
 	'language'       => [ 'LANGUAGE' ],
 	// IMUS is another non-standard tagger's own frame for composer, same concept as COMPOSER.
 	'composer'       => [ 'COMPOSER', 'IMUS' ],
+	'conductor'      => [ 'CONDUCTOR' ],
 	// ICNT is another non-standard tagger's own frame for country, same concept as RELEASECOUNTRY.
 	'country'        => [ 'RELEASECOUNTRY', 'MUSICBRAINZ_ALBUM_RELEASE_COUNTRY', 'ICNT' ],
 	'release_type'   => [ 'RELEASETYPE', 'MUSICBRAINZ_ALBUM_TYPE' ],
 	'release_status' => [ 'RELEASESTATUS', 'MUSICBRAINZ_ALBUM_STATUS' ],
+];
+
+// Album credits - one row per person, in the xref item for their job (media.php's own role items).
+// Built by buildCredits(), never from a raw credit string.
+const FISHEYEALBUM_CREDIT_ITEMS = [ 'artist', 'composer', 'conductor', 'orchestra', 'performer' ];
+// Common-tag items the credit builder consumes instead of storing them as album rows of their own
+// (still promoted, so the matching raw tags stay out of every track's data). The ones that aren't
+// themselves credit items are retired - a reload archives any old row still carrying them.
+const FISHEYEALBUM_CREDIT_SOURCE_ITEMS = [ 'artist', 'artists', 'artistsort', 'mb_artistid', 'composer', 'conductor' ];
+const FISHEYEALBUM_RETIRED_ITEMS = [ 'artists', 'artistsort', 'mb_artistid' ];
+// MusicBrainz's own special "Various Artists" artist - a compilation marker, not a person to credit.
+const FISHEYEALBUM_MB_VARIOUS_ARTISTS = '89ad4ac3-39f7-470e-963a-56509c546377';
+
+// getID3's own ID3v2 comment names -> the normalized key readTrackTags() stores, matching the name
+// ffprobe used to produce for the same frame, so stored track data and every constant above keep
+// working unchanged. '' drops the frame (a derived track total, TMCL which no v2.3 file here
+// carries, MCDI's binary TOC, WXXX links, lyrics). 'comment' is read from the raw COMM frames instead (see
+// readTrackTags()), and TDAT (DDMM) is folded back into DATE there. Anything not listed falls through as normalizeTagKey($name).
+const FISHEYEALBUM_ID3V2_KEY_MAP = [
+	'title'                   => 'TITLE',
+	'artist'                  => 'ARTIST',
+	'album'                   => 'ALBUM',
+	'track_number'            => 'TRACK',
+	'track'                   => 'TRACK',
+	'part_of_a_set'           => 'DISC',
+	'genre'                   => 'GENRE',
+	'year'                    => 'DATE',
+	'recording_time'          => 'DATE',
+	'date'                    => 'TDAT',
+	'original_year'           => 'TORY',
+	'media_type'              => 'TMED',
+	'publisher'               => 'PUBLISHER',
+	'band'                    => 'ALBUMARTIST',
+	'conductor'               => 'CONDUCTOR',
+	'composer'                => 'COMPOSER',
+	'lyricist'                => 'LYRICIST',
+	'remixer'                 => 'REMIXER',
+	'album_artist_sort_order' => 'TSO2',
+	'performer_sort_order'    => 'ARTISTSORT',
+	'title_sort_order'        => 'TITLESORT',
+	'album_sort_order'        => 'ALBUMSORT',
+	'isrc'                    => 'ISRC',
+	'part_of_a_compilation'   => 'COMPILATION',
+	'set_subtitle'            => 'TSST',
+	'length'                  => 'TLEN',
+	'comment'                 => '',
+	'encoded_by'              => 'ENCODEDBY',
+	'encoder_settings'        => 'ENCODER',
+	'language'                => 'LANGUAGE',
+	'totaltracks'             => '',
+	'musician_credits_list'   => '',
+	'music_cd_identifier'     => '',
+	'copyright_message'       => 'COPYRIGHT',
+	'content_group_description' => 'GROUPING',
+	'url_user'                => '',
+	'unsynchronised_lyric'    => '',
+];
+// Raw tags already surfaced as a track's own structured title/disc/track fields - left out of the
+// per-track data so each isn't shown twice.
+const FISHEYEALBUM_TRACK_DATA_EXCLUDED_KEYS = [ 'TITLE' => true, 'DISC' => true, 'TRACK' => true, 'TRACKNUMBER' => true ];
+// Vorbis comment names that ffprobe renamed (and so everything downstream expects renamed).
+const FISHEYEALBUM_VORBIS_KEY_MAP = [
+	'TRACKNUMBER' => 'TRACK',
+	'DISCNUMBER'  => 'DISC',
 ];
 
 class FisheyeAlbum extends FisheyeMediaImage {
@@ -184,7 +249,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		// producing a literal "Music/Music/<artist>/<title>/" path that obviously never exists).
 		$this->loadXrefInfo();
 		if( $this->mXrefInfo ) {
-			foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+			foreach( $this->liveXrefs() as $xref ) {
 				if( $xref['item'] === 'category' && !empty( $xref['xkey_ext'] ) ) {
 					array_unshift( $pathSegments, $xref['xkey_ext'] );
 					break;
@@ -493,7 +558,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 
 		$existingImagePaths = [];
 		$xorder = 0;
-		foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+		foreach( $this->liveXrefs() as $xref ) {
 			if( $xref['item'] === 'image' ) {
 				$existingImagePaths[] = $xref['xkey_ext'];
 				$xorder = max( $xorder, (int)$xref['xorder'] );
@@ -554,14 +619,162 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
-	 * Every real track's embedded format_tags via a single ffprobe call - one process per file
-	 * (an album is a few tracks to a couple of dozen, nowhere near mpeg2_tidy.php's whole-library
-	 * scale, so the parallel xargs pattern that needs isn't worth the complexity here).
+	 * Every real track's embedded tags, normalized tag name => value. A tag holding one value is a
+	 * plain string; a genuinely multi-valued one (several MusicBrainz artist ids, several ARTISTS
+	 * names) is a list, in the tagger's own order - Picard writes ids and names in matching order,
+	 * so the two lists pair up index for index.
+	 *
+	 * MP3 and FLAC (the whole library) go through getID3 (util/includes/getid3), not ffprobe:
+	 * ffprobe flattens a multi-valued Vorbis field into one ';'-joined string and never outputs an
+	 * MP3's UFID frame at all, which is where Picard stores the MusicBrainz recording id - the key
+	 * to per-recording performer/composer credits. Every MP3 here is ID3v2.3, which has no native
+	 * multi-value text frames, so Picard '/'-joins them in the file itself; those are split back
+	 * into lists here (see splitId3v23MultiValues()). Key names match what ffprobe produced (TRACK,
+	 * DISC, ALBUMARTIST, ARTISTSORT...), so nothing downstream sees a rename. Any other container
+	 * falls back to ffprobe.
+	 *
+	 * Deliberately never calls getid3_lib::CopyTagsToComments() - it merges an MP3's own
+	 * "MusicBrainz Album Artist Id" TXXX into "MusicBrainz Artist Id", silently giving every track
+	 * the whole album credit's ids (confirmed on a Samuel Barber release).
+	 *
+	 * @param string $pAbsolutePath
+	 * @return array<string,string|list<string>>  normalized tag name => value, empty if none found
+	 */
+	private static function readTrackTags( string $pAbsolutePath ): array {
+		$ext = strtolower( pathinfo( $pAbsolutePath, PATHINFO_EXTENSION ) );
+		if( !in_array( $ext, [ 'mp3', 'flac' ], true ) ) {
+			return self::readTrackTagsFfprobe( $pAbsolutePath );
+		}
+		static $getID3 = null;
+		if( $getID3 === null ) {
+			require_once UTIL_PKG_INCLUDE_PATH.'getid3/getid3/getid3.php';
+			$getID3 = new \getID3();
+		}
+		$info = $getID3->analyze( $pAbsolutePath );
+
+		$lists = [];
+		$add = function( string $pKey, $pValues ) use ( &$lists ) {
+			foreach( (array)$pValues as $value ) {
+				if( !is_scalar( $value ) ) {
+					continue;
+				}
+				$value = trim( (string)$value );
+				if( $value !== '' && !in_array( $value, $lists[$pKey] ?? [], true ) ) {
+					$lists[$pKey][] = $value;
+				}
+			}
+		};
+
+		if( !empty( $info['tags']['vorbiscomment'] ) ) {
+			foreach( $info['tags']['vorbiscomment'] as $key => $values ) {
+				$key = self::normalizeTagKey( $key );
+				$add( FISHEYEALBUM_VORBIS_KEY_MAP[$key] ?? $key, $values );
+			}
+		}
+		if( !empty( $info['id3v2']['comments'] ) ) {
+			foreach( $info['id3v2']['comments'] as $key => $values ) {
+				if( $key === 'text' ) {
+					// TXXX user frames, keyed by their own description ("MusicBrainz Artist Id")
+					foreach( $values as $description => $value ) {
+						$add( self::normalizeTagKey( $description ), $value );
+					}
+				} elseif( isset( FISHEYEALBUM_ID3V2_KEY_MAP[$key] ) ) {
+					if( FISHEYEALBUM_ID3V2_KEY_MAP[$key] !== '' ) {
+						$add( FISHEYEALBUM_ID3V2_KEY_MAP[$key], $values );
+					}
+				} elseif( !in_array( $key, [ 'picture', 'involved_people_list' ], true ) ) {
+					$add( self::normalizeTagKey( $key ), $values );
+				}
+			}
+			// COMM frames raw - the merged 'comment' list drops each frame's own description, which
+			// is what distinguishes an old rip's "Performers" credit comment from ripper noise.
+			foreach( $info['id3v2']['COMM'] ?? [] as $comm ) {
+				$description = trim( \getid3_lib::iconv_fallback( $comm['encoding'], 'UTF-8', $comm['description'] ?? '' ) );
+				$add( $description === '' ? 'COMMENT' : self::normalizeTagKey( $description ), \getid3_lib::iconv_fallback( $comm['encoding'], 'UTF-8', $comm['data'] ?? '' ) );
+			}
+			// ID3v2.3 splits a full release date across TYER (year) and TDAT (DDMM).
+			if( isset( $lists['DATE'], $lists['TDAT'] ) && preg_match( '/^\d{4}$/', $lists['DATE'][0] ) && preg_match( '/^(\d{2})(\d{2})$/', $lists['TDAT'][0], $dm ) ) {
+				$lists['DATE'] = [ $lists['DATE'][0].'-'.$dm[2].'-'.$dm[1] ];
+			}
+			unset( $lists['TDAT'] );
+			foreach( $info['id3v2']['UFID'] ?? [] as $ufid ) {
+				if( ( $ufid['ownerid'] ?? '' ) === 'http://musicbrainz.org' ) {
+					$add( 'MUSICBRAINZTRACKID', $ufid['data'] ?? '' );
+				}
+			}
+			// IPLS (v2.3) / TIPL (v2.4) - getID3 already splits these into role/person pairs.
+			foreach( [ 'IPLS', 'TIPL' ] as $frame ) {
+				foreach( $info['id3v2'][$frame] ?? [] as $entry ) {
+					foreach( (array)( $entry['data'] ?? [] ) as $pair ) {
+						if( is_array( $pair ) && !empty( $pair['person'] ) ) {
+							$add( 'INVOLVEDPEOPLE', trim( ( $pair['position'] ?? '' ).': '.$pair['person'], ': ' ) );
+						}
+					}
+				}
+			}
+			$lists = self::splitId3v23MultiValues( $lists );
+		} elseif( !empty( $info['id3v1']['comments'] ) ) {
+			foreach( $info['id3v1']['comments'] as $key => $values ) {
+				$add( FISHEYEALBUM_ID3V2_KEY_MAP[$key] ?? self::normalizeTagKey( $key ), $values );
+			}
+		}
+
+		$tags = [];
+		foreach( $lists as $key => $values ) {
+			$tags[$key] = count( $values ) === 1 ? $values[0] : $values;
+		}
+		return $tags;
+	}
+
+	/**
+	 * ID3v2.3 has no native multi-value text frame, so Picard '/'-joins several values in one
+	 * frame. MusicBrainz id fields are split whenever every part is a real MBID (an id can never
+	 * contain '/'). ARTISTS - plain names, where '/' can be part of a real name ("AC/DC") - is only
+	 * split when the parts line up exactly with an already-split MUSICBRAINZARTISTID list, the same
+	 * one-name-per-id pairing Picard writes.
+	 *
+	 * @param array<string,list<string>> $pLists
+	 * @return array<string,list<string>>
+	 */
+	private static function splitId3v23MultiValues( array $pLists ): array {
+		$uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+		foreach( $pLists as $key => $values ) {
+			if( str_starts_with( $key, 'MUSICBRAINZ' ) && count( $values ) === 1 && preg_match( "#^$uuid(/$uuid)+$#i", $values[0] ) ) {
+				$pLists[$key] = explode( '/', $values[0] );
+			}
+		}
+		if( isset( $pLists['ARTISTS'], $pLists['MUSICBRAINZARTISTID'] ) && count( $pLists['ARTISTS'] ) === 1 ) {
+			$parts = array_map( 'trim', explode( '/', $pLists['ARTISTS'][0] ) );
+			if( count( $parts ) > 1 && count( $parts ) === count( $pLists['MUSICBRAINZARTISTID'] ) ) {
+				$pLists['ARTISTS'] = $parts;
+			}
+		}
+		return $pLists;
+	}
+
+	/**
+	 * A tag value as one plain string - for the handful of callers that only ever want a single
+	 * value (track/disc number, title, disc subtitle) regardless of whether the file carried one.
+	 *
+	 * @param string|list<string>|null $pValue
+	 * @return string|null
+	 */
+	private static function tagString( $pValue ): ?string {
+		if( is_array( $pValue ) ) {
+			return $pValue ? implode( '; ', $pValue ) : null;
+		}
+		return $pValue;
+	}
+
+	/**
+	 * Fallback for containers getID3 isn't used for (anything but mp3/flac - not present in the
+	 * current library): every embedded format_tag via a single ffprobe call, one process per file.
+	 * Multi-valued fields arrive flattened to one ';'-joined string here.
 	 *
 	 * @param string $pAbsolutePath
 	 * @return array<string,string>  normalized tag name => value, empty if ffprobe found none
 	 */
-	private static function readTrackTags( string $pAbsolutePath ): array {
+	private static function readTrackTagsFfprobe( string $pAbsolutePath ): array {
 		$cmd = 'ffprobe -v error -show_entries format_tags -of default=noprint_wrappers=1 '.escapeshellarg( $pAbsolutePath ).' 2>/dev/null';
 		$output = shell_exec( $cmd ) ?? '';
 		$tags = [];
@@ -654,9 +867,10 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * @param string $pTagKey  embedded tag name (normalizeTagKey() applied here, so callers can
 	 *                         pass FISHEYEALBUM_COMMON_TAG_MAP/_ALTERNATES' own Vorbis-style
 	 *                         spelling regardless of how this particular file's tagger wrote it)
-	 * @return string|null
+	 * @return string|list<string>|null  a list only when the tag is multi-valued (and the same
+	 *                                    list, in the same order, on every track)
 	 */
-	private static function commonTagValue( array $pTrackFiles, string $pTagKey ): ?string {
+	private static function commonTagValue( array $pTrackFiles, string $pTagKey ): string|array|null {
 		$pTagKey = self::normalizeTagKey( $pTagKey );
 		$value = null;
 		foreach( $pTrackFiles as $track ) {
@@ -670,36 +884,313 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
-	 * Stores one already-promoted common-tag xref - 'mb_artistid' gets special-cased, everything
-	 * else is a plain single-row store exactly as before. Confirmed live against a real library
-	 * (Samuel Barber's own gallery, content_id 309, every album mixing ';'-delimited and '/'-
-	 * delimited forms): the underlying MUSICBRAINZ_ARTISTID/MUSICBRAINZ_ALBUMARTISTID tag can bundle
-	 * several different people's MusicBrainz ids into one delimited string on a classical release
-	 * (composer, conductor, orchestra, soloist), not just the one real "artist" the item was designed
-	 * to hold - see THOUGHTS.txt's own 2026-09-26 dump for the fuller diagnosis. Splitting on either
-	 * delimiter and storing one xref row per id (xorder preserving the original list order) turns a
-	 * value that previously either broke a MusicBrainz lookup outright or silently matched the wrong
-	 * thing into a clean, individually-resolvable list - the first one is consistently the same
-	 * person across every album under one composer's own gallery (almost certainly the actual
-	 * composer/primary artist credit, xorder=1), everything after it the varying performers/
-	 * conductors/orchestras. Which id is actually which *role* isn't resolved here at all - that
-	 * needs the ARTIST/ARTISTS/ARTISTSORT tags cross-referenced, not designed yet.
+	 * Pair MusicBrainz artist ids with their names, index for index. Picard writes the ids in the
+	 * same order as the credited names, so a names list of matching length pairs directly. A single
+	 * credit string (an album-artist tag, "Samuel Barber, Ernst Toch, Paul Creston; The Louisville
+	 * Orchestra") is only split when it's one id per piece - one id and the string stays whole, so
+	 * "Emerson, Lake & Palmer" or "Diana Ross & The Supremes" is never broken up. Anything that
+	 * doesn't line up keeps the ids with no name (a later MusicBrainz lookup can fill it in).
+	 *
+	 * @param string|list<string>|null $pIds
+	 * @param string|list<string>|null $pNames
+	 * @return list<array{mbid:string, name:?string}>
 	 */
-	private function storeCommonTagXref( string $pXrefItem, string $pValue ): void {
-		if( $pXrefItem === 'mb_artistid' && preg_match( '/[;\/]/', $pValue ) ) {
-			$xorder = 0;
-			foreach( preg_split( '/[;\/]/', $pValue ) as $id ) {
-				$id = trim( $id );
-				if( $id === '' ) {
-					continue;
-				}
-				$xrefHash = [ 'content_id' => $this->mContentId, 'item' => $pXrefItem, 'xkey_ext' => $id, 'xorder' => ++$xorder ];
-				$this->storeXref( $xrefHash );
-			}
-			return;
+	private static function pairCredits( string|array|null $pIds, string|array|null $pNames ): array {
+		$ids = array_values( array_filter( array_map( 'trim', (array)$pIds ) ) );
+		if( !$ids ) {
+			return [];
 		}
-		$xrefHash = [ 'content_id' => $this->mContentId, 'item' => $pXrefItem, 'xkey_ext' => $pValue ];
-		$this->storeXref( $xrefHash );
+		$names = null;
+		if( is_array( $pNames ) && count( $pNames ) === count( $ids ) ) {
+			$names = array_values( $pNames );
+		} elseif( is_string( $pNames ) && $pNames !== '' ) {
+			$parts = count( $ids ) === 1 ? [ $pNames ] : preg_split( '#\s*(?:;|,|/| & | and | feat\.? | featuring | with )\s*#i', $pNames );
+			if( count( $parts ) === count( $ids ) ) {
+				$names = $parts;
+			}
+		}
+		$pairs = [];
+		foreach( $ids as $i => $id ) {
+			$pairs[] = [ 'mbid' => $id, 'name' => isset( $names[$i] ) ? trim( $names[$i] ) : null ];
+		}
+		return $pairs;
+	}
+
+	/**
+	 * This album's own credits, one entry per person, each with the job it goes under - built from
+	 * the tags every track shares: the album-artist credit (ids + names), the shared track artist,
+	 * and COMPOSER/CONDUCTOR where the files carry them. A credited person named in COMPOSER or
+	 * CONDUCTOR gets that job; everyone else is 'artist' for now (a MusicBrainz lookup of the
+	 * release can refine that - composer vs orchestra vs soloist - without the files saying so).
+	 * Never a raw credit string: no ids at all is the one case a whole album-artist string is kept,
+	 * as a single unpaired credit, since there's nothing to split it by safely.
+	 *
+	 * @param array $pTrackFiles
+	 * @return list<array{role:string, name:?string, mbid:?string}>
+	 */
+	private static function buildCredits( array $pTrackFiles ): array {
+		$asList = function( $pValue ): array {
+			$values = [];
+			foreach( (array)$pValue as $v ) {
+				foreach( preg_split( '#\s*/\s*#', (string)$v ) as $part ) {
+					if( trim( $part ) !== '' ) {
+						$values[] = trim( $part );
+					}
+				}
+			}
+			return $values;
+		};
+		$composers  = array_map( 'mb_strtolower', $asList( self::commonTagValue( $pTrackFiles, 'COMPOSER' ) ?? self::commonTagValue( $pTrackFiles, 'IMUS' ) ) );
+		$conductors = array_map( 'mb_strtolower', $asList( self::commonTagValue( $pTrackFiles, 'CONDUCTOR' ) ) );
+
+		$credits = [];
+		$add = function( ?string $pName, ?string $pMbid, string $pRole ) use ( &$credits ) {
+			if( $pMbid === FISHEYEALBUM_MB_VARIOUS_ARTISTS || ( $pName === null && $pMbid === null ) ) {
+				return;
+			}
+			$key = $pMbid ?: 'name:'.mb_strtolower( (string)$pName );
+			if( isset( $credits[$key] ) ) {
+				// Already credited (album artist and shared track artist are often the same person) -
+				// keep the more specific job and fill a missing name.
+				if( $credits[$key]['role'] === 'artist' ) {
+					$credits[$key]['role'] = $pRole;
+				}
+				$credits[$key]['name'] ??= $pName;
+				return;
+			}
+			$credits[$key] = [ 'role' => $pRole, 'name' => $pName, 'mbid' => $pMbid ];
+		};
+		$roleFor = function( ?string $pName ) use ( $composers, $conductors ): string {
+			$name = mb_strtolower( (string)$pName );
+			return in_array( $name, $composers, true ) ? 'composer' : ( in_array( $name, $conductors, true ) ? 'conductor' : 'artist' );
+		};
+
+		$albumArtist = self::commonTagValue( $pTrackFiles, 'ALBUMARTIST' );
+		$trackArtist = self::commonTagValue( $pTrackFiles, 'ARTISTS' ) ?? self::commonTagValue( $pTrackFiles, 'ARTIST' );
+		$pairs = array_merge(
+			self::pairCredits( self::commonTagValue( $pTrackFiles, 'MUSICBRAINZALBUMARTISTID' ), $albumArtist ),
+			self::pairCredits( self::commonTagValue( $pTrackFiles, 'MUSICBRAINZARTISTID' ), $trackArtist )
+		);
+		foreach( $pairs as $pair ) {
+			$add( $pair['name'], $pair['mbid'], $roleFor( $pair['name'] ) );
+		}
+		if( !$pairs && ( $albumArtist ?? $trackArtist ) !== null ) {
+			$add( self::tagString( $albumArtist ?? $trackArtist ), null, 'artist' );
+		}
+		// Anyone the role tags name who isn't in the id-bearing credits - name only.
+		$byName = [];
+		foreach( $credits as $credit ) {
+			$byName[mb_strtolower( (string)$credit['name'] )] = true;
+		}
+		foreach( [ 'composer' => self::commonTagValue( $pTrackFiles, 'COMPOSER' ), 'conductor' => self::commonTagValue( $pTrackFiles, 'CONDUCTOR' ) ] as $role => $value ) {
+			foreach( $asList( $value ) as $name ) {
+				if( !isset( $byName[mb_strtolower( $name )] ) ) {
+					$add( $name, null, $role );
+				}
+			}
+		}
+		return array_values( $credits );
+	}
+
+	/**
+	 * Bring one xref item's live rows on this album in line with what the files now say, without
+	 * ever wiping them - the xref table records when each row was created and last edited, and a
+	 * reload must keep that. Rows are matched by a natural key (a track's own file path, a person's
+	 * MusicBrainz id, or '' for a single-valued item):
+	 *   - no live row for a key          -> insert
+	 *   - live row locally owned         -> left alone (see below), whatever the files say
+	 *   - live row, different value      -> old row archived as-is (end_date set, fully reversible
+	 *                                       via the xref history), new value inserted in its place
+	 *   - live row, same value           -> untouched, nothing written
+	 *   - live row the files no longer
+	 *     mention, not locally owned     -> archived
+	 *
+	 * "Locally owned" = hand-edited: last_update_date later than entry_date. This routine only ever
+	 * inserts or archives, never edits a live row in place, so a live row carrying a later update
+	 * stamp can only have come from a hand edit (the xref edit page) - a correction a reload must
+	 * never overwrite. A few seconds' grace covers entry_date/last_update_date being stamped by two
+	 * separate clock reads on insert. With $pStrictOwnership (credit rows), a row with no 'source'
+	 * in its data is also locally owned - every row this code writes carries one, so a row without
+	 * it was added by hand. The one exception is xorder 0: the old single-row common-tag storage
+	 * (the whole credit string in one 'artist' row, say) never carried a source either, and is
+	 * exactly what the per-person rows replace.
+	 *
+	 * Not LibertyXref::stepXref(expunge=2): that writes the incoming values onto the row it closes
+	 * (losing the old value) and numbers the continuation xorder+1 (colliding with the next track).
+	 *
+	 * @param string $pItem
+	 * @param list<array{key:string, xorder:int, xkey_ext?:string, xkey?:string, data?:array}> $pWanted
+	 * @param string|callable|null $pKey  how a live row's key is read: a column name ('xkey_ext'
+	 *                                    for a track's path), a callable taking the row, or null
+	 *                                    for a single-valued item
+	 * @param bool $pStrictOwnership
+	 * @return array<string,int>  counts: inserted/archived/unchanged/kept_local
+	 */
+	private function reconcileXrefItem( string $pItem, array $pWanted, string|callable|null $pKey, bool $pStrictOwnership = false ): array {
+		$counts = [ 'inserted' => 0, 'archived' => 0, 'unchanged' => 0, 'kept_local' => 0 ];
+		$live = $this->mDb->getAll(
+			"SELECT `xref_id`, `xorder`, `xkey`, `xkey_ext`, `data`, `entry_date`, `last_update_date`
+			 FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL",
+			[ $this->mContentId, $pItem ]
+		);
+		$liveByKey = [];
+		foreach( $live as $row ) {
+			$key = $pKey === null ? '' : ( is_callable( $pKey ) ? $pKey( $row ) : (string)$row[$pKey] );
+			$liveByKey[$key][] = $row;
+		}
+		$isLocal = function( array $row ) use ( $pStrictOwnership ): bool {
+			if( (int)$row['last_update_date'] - (int)$row['entry_date'] > 5 ) {
+				return true;
+			}
+			if( $pStrictOwnership && (int)$row['xorder'] > 0 ) {
+				$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : null;
+				return empty( $data['source'] );
+			}
+			return false;
+		};
+		$archive = function( array $row ) use ( &$counts ) {
+			$stepHash = [ 'xref_id' => (int)$row['xref_id'], 'expunge' => 1 ];
+			$this->stepXref( $stepHash );
+			$counts['archived']++;
+		};
+
+		foreach( $pWanted as $want ) {
+			$candidates = $liveByKey[$want['key']] ?? [];
+			unset( $liveByKey[$want['key']] );
+			if( array_filter( $candidates, $isLocal ) ) {
+				// A hand-corrected row wins outright; any other live row under the same key is
+				// left too rather than second-guessed.
+				$counts['kept_local']++;
+				continue;
+			}
+			$current = array_shift( $candidates );
+			foreach( $candidates as $duplicate ) {
+				$archive( $duplicate );
+			}
+			if( $current
+				&& (int)$current['xorder'] === (int)$want['xorder']
+				&& (string)$current['xkey_ext'] === (string)( $want['xkey_ext'] ?? '' )
+				&& (string)$current['xkey'] === (string)( $want['xkey'] ?? '' )
+				&& ( !empty( $current['data'] ) ? json_decode( $current['data'], true ) : null ) == ( $want['data'] ?? null ) ) {
+				$counts['unchanged']++;
+				continue;
+			}
+			if( $current ) {
+				$archive( $current );
+			}
+			$xrefHash = [ 'content_id' => $this->mContentId, 'item' => $pItem, 'xorder' => (int)$want['xorder'] ];
+			foreach( [ 'xkey_ext', 'xkey' ] as $field ) {
+				if( isset( $want[$field] ) && $want[$field] !== '' ) {
+					$xrefHash[$field] = $want[$field];
+				}
+			}
+			if( isset( $want['data'] ) ) {
+				$xrefHash['edit'] = json_encode( $want['data'] );
+			}
+			$this->storeXref( $xrefHash );
+			$counts['inserted']++;
+		}
+
+		// Whatever's left is no longer in the files - archived, unless locally owned.
+		foreach( $liveByKey as $rows ) {
+			foreach( $rows as $row ) {
+				if( $isLocal( $row ) ) {
+					$counts['kept_local']++;
+				} else {
+					$archive( $row );
+				}
+			}
+		}
+		return $counts;
+	}
+
+	/**
+	 * The one path both registerFromDisk() (a new album - every row an insert) and reloadTracks()
+	 * (an existing one) take to write an album's track/common-tag/credit xrefs, so the two can't
+	 * drift apart. Everything goes through reconcileXrefItem() - nothing is wiped.
+	 *
+	 * @param array $pTrackFiles      scanTrackFiles()' own result
+	 * @param array $pCommonTags      extractCommonTags()' xref item => value
+	 * @param array $pPromotedTagKeys extractCommonTags()' promoted/ignored raw tag keys
+	 * @return array<string,int>  summed reconcile counts
+	 */
+	private function reconcileAlbumXrefs( array $pTrackFiles, array $pCommonTags, array $pPromotedTagKeys ): array {
+		$counts = [];
+		$tally = function( array $pCounts ) use ( &$counts ) {
+			foreach( $pCounts as $key => $n ) {
+				$counts[$key] = ( $counts[$key] ?? 0 ) + $n;
+			}
+		};
+
+		// A single-disc album showing "Disc: 1" identically on every single track row is just noise
+		// (found live once the json-list view actually rendered per-track data for the first time) -
+		// only worth including once there's genuinely more than one disc to distinguish.
+		$isMultiDisc = count( array_unique( array_column( $pTrackFiles, 'disc' ) ) ) > 1;
+		$wantedTracks = [];
+		foreach( $pTrackFiles as $track ) {
+			// Flattened alongside title/disc rather than nested under its own 'tags' key - the
+			// generic json-list xref template (view_json-list_item.tpl) just dumps every top-level
+			// key as its own row, so nesting only bought a Smarty "Array" render instead of a usable
+			// one. TITLE/DISC/TRACK themselves are excluded since they're already surfaced as the
+			// clean 'title'/'disc'/'track' fields - anything identical across every track (real
+			// MusicBrainz ids, label/catalog/barcode/country/genre, the credits) has already been
+			// promoted to the album itself (see extractCommonTags()), so it isn't duplicated into
+			// every single track's own data. A tag that happens to vary per track this time (a
+			// various-artists compilation's own per-track ARTIST, a disc id that only applies within
+			// one disc of a multi-disc set) stays here.
+			$trackTagsForData = array_diff_key( $track['tags'], $pPromotedTagKeys, FISHEYEALBUM_TRACK_DATA_EXCLUDED_KEYS );
+			$trackData = [ 'title' => $track['title'], 'track' => $track['track_num'] ];
+			if( $isMultiDisc ) {
+				$trackData['disc'] = $track['disc'];
+			}
+			$trackData['duration'] = $track['duration_ms'];
+			$wantedTracks[] = [
+				// Bare (or "CDxx/filename" for an album keeping its own CD-subfolder layer) - see
+				// getImageStorageRoot()'s own docblock for why the album's folder itself is never
+				// baked into this. Also the track's natural key for reconciling.
+				'key'      => $track['relative'],
+				'xkey_ext' => $track['relative'],
+				'xorder'   => count( $wantedTracks ) + 1,
+				'data'     => array_merge( $trackData, $trackTagsForData ),
+			];
+		}
+		$tally( $this->reconcileXrefItem( 'track', $wantedTracks, 'xkey_ext' ) );
+
+		// Plain single-valued common tags - one the files no longer carry reconciles to an empty
+		// wanted list, archiving its old row. The credit-source items are handled below instead.
+		$commonItems = array_diff(
+			array_unique( array_merge( array_values( FISHEYEALBUM_COMMON_TAG_MAP ), array_keys( FISHEYEALBUM_COMMON_TAG_ALTERNATES ) ) ),
+			FISHEYEALBUM_CREDIT_SOURCE_ITEMS
+		);
+		foreach( $commonItems as $xrefItem ) {
+			$wanted = isset( $pCommonTags[$xrefItem] ) ? [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => (string)self::tagString( $pCommonTags[$xrefItem] ) ] ] : [];
+			$tally( $this->reconcileXrefItem( $xrefItem, $wanted, null ) );
+		}
+
+		// Credits - one row per person under their job, keyed by MusicBrainz id (or name, for a
+		// credit with no id).
+		$wantedByRole = array_fill_keys( FISHEYEALBUM_CREDIT_ITEMS, [] );
+		foreach( self::buildCredits( $pTrackFiles ) as $credit ) {
+			$wantedByRole[$credit['role']][] = [
+				'key'      => $credit['mbid'] ?: 'name:'.mb_strtolower( (string)$credit['name'] ),
+				'xkey_ext' => $credit['name'] ?? $credit['mbid'],
+				'xorder'   => count( $wantedByRole[$credit['role']] ) + 1,
+				'data'     => array_filter( [ 'mbid' => $credit['mbid'], 'source' => 'tags' ] ),
+			];
+		}
+		$creditKey = function( array $row ): string {
+			$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : null;
+			return !empty( $data['mbid'] ) ? $data['mbid'] : 'name:'.mb_strtolower( (string)$row['xkey_ext'] );
+		};
+		foreach( $wantedByRole as $role => $wanted ) {
+			$tally( $this->reconcileXrefItem( $role, $wanted, $creditKey, true ) );
+		}
+
+		// Items the credits replace - any old row still carrying one is archived.
+		foreach( FISHEYEALBUM_RETIRED_ITEMS as $xrefItem ) {
+			$tally( $this->reconcileXrefItem( $xrefItem, [], 'xkey_ext' ) );
+		}
+		return $counts;
 	}
 
 	/**
@@ -770,7 +1261,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		foreach( $trackFiles as &$track ) {
 			$tags = self::readTrackTags( $pAbsoluteFolder.$track['relative'] );
 			$track['tags'] = $tags;
-			$trackNum = $tags['TRACK'] ?? $tags['TRACKNUMBER'] ?? null;
+			$trackNum = self::tagString( $tags['TRACK'] ?? $tags['TRACKNUMBER'] ?? null );
 			if( $trackNum !== null ) {
 				$track['track_num'] = (int)explode( '/', $trackNum )[0];
 			} else {
@@ -780,9 +1271,9 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				$track['track_num'] = isset( $m[1] ) ? (int)$m[1] : 0;
 			}
 			if( !empty( $tags['DISC'] ) ) {
-				$track['disc'] = (int)explode( '/', $tags['DISC'] )[0];
+				$track['disc'] = (int)explode( '/', self::tagString( $tags['DISC'] ) )[0];
 			}
-			$track['title'] = $tags['TITLE'] ?? pathinfo( $track['relative'], PATHINFO_FILENAME );
+			$track['title'] = self::tagString( $tags['TITLE'] ?? null ) ?? pathinfo( $track['relative'], PATHINFO_FILENAME );
 			// From the file's own container, not the (culled, unreliable) embedded TLEN tag - same
 			// source episodes/featurettes already use for their own duration.
 			$track['duration_ms'] = \Bitweaver\Liberty\mime_film_get_duration_ms( $pAbsoluteFolder.$track['relative'] );
@@ -883,7 +1374,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			$ext = strtolower( pathinfo( $entry, PATHINFO_EXTENSION ) );
 			if( in_array( $ext, FISHEYEALBUM_TRACK_EXTENSIONS, true ) ) {
 				$tags = self::readTrackTags( $pAbsoluteDiscFolder.$entry );
-				return $tags['TSST'] ?? $tags['DISCSUBTITLE'] ?? null;
+				return self::tagString( $tags['TSST'] ?? $tags['DISCSUBTITLE'] ?? null );
 			}
 		}
 		return null;
@@ -943,9 +1434,10 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * Re-scan an already-registered album's own folder and refresh its track/common-tag xrefs -
 	 * for a re-tag in Picard after the fact, or a metadata-schema change here (a newly-promoted
 	 * common tag, like this file's own compilation/release_status additions) that a plain edit
-	 * page reload can't retroactively apply to already-registered albums. Cover art is untouched -
-	 * only 'track' and whichever common-tag items are currently defined get cleared and re-stored,
-	 * same distinction registerFromDisk() itself already draws between the two.
+	 * page reload can't retroactively apply to already-registered albums. Cover art is untouched.
+	 * 'track' and every currently-defined common-tag item are reconciled against the files, never
+	 * wiped (see reconcileXrefItem()): unchanged rows keep their entry_date, changed values archive
+	 * the old row and insert the new one, and a hand-corrected row is never overwritten.
 	 *
 	 * Folder resolution mirrors load_album.php's own: this album's title is expected to match a
 	 * real folder directly under its parent gallery's own folder under Music/ - same one-level
@@ -969,44 +1461,9 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		[ $commonTags, $promotedTagKeys ] = self::extractCommonTags( $trackFiles );
 
 		// 'image' xrefs (cover art) are deliberately left alone - this is a track/tag refresh only.
-		$clearableItems = array_unique( array_merge(
-			[ 'track' ],
-			array_values( FISHEYEALBUM_COMMON_TAG_MAP ),
-			array_keys( FISHEYEALBUM_COMMON_TAG_ALTERNATES )
-		) );
-		\Bitweaver\Liberty\LibertyContent::deleteXrefByItem( $this->mContentId, $clearableItems );
+		$counts = $this->reconcileAlbumXrefs( $trackFiles, $commonTags, $promotedTagKeys );
 
-		// A single-disc album showing "Disc: 1" identically on every single track row is just noise
-		// (found live once the json-list view actually rendered per-track data for the first time) -
-		// only worth including once there's genuinely more than one disc to distinguish.
-		$isMultiDisc = count( array_unique( array_column( $trackFiles, 'disc' ) ) ) > 1;
-		$xorder = 0;
-		foreach( $trackFiles as $track ) {
-			// See registerFromDisk()'s own identical block for why this is flattened rather than
-			// nested under a 'tags' key, and why TITLE/DISC are excluded here.
-			$trackTagsForData = array_diff_key( $track['tags'], $promotedTagKeys, [ 'TITLE' => true, 'DISC' => true ] );
-			$trackData = [ 'title' => $track['title'], 'track' => $track['track_num'] ];
-			if( $isMultiDisc ) {
-				$trackData['disc'] = $track['disc'];
-			}
-			$trackData['duration'] = $track['duration_ms'];
-			$xrefHash = [
-				'content_id' => $this->mContentId,
-				'item'       => 'track',
-				// Bare (or "CDxx/filename" for an album keeping its own CD-subfolder layer) -
-				// see getImageStorageRoot()'s own docblock for why the album's folder itself is
-				// never baked into this.
-				'xkey_ext'   => $track['relative'],
-				'edit'       => json_encode( array_merge( $trackData, $trackTagsForData ) ),
-				'xorder'     => ++$xorder,
-			];
-			$this->storeXref( $xrefHash );
-		}
-		foreach( $commonTags as $xrefItem => $value ) {
-			$this->storeCommonTagXref( $xrefItem, $value );
-		}
-
-		return [ 'tracks' => count( $trackFiles ) ];
+		return [ 'tracks' => count( $trackFiles ), 'counts' => $counts ];
 	}
 
 	/**
@@ -1114,43 +1571,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			$linked = $gallery->addItem( $album->mContentId );
 		}
 
-		// A single-disc album showing "Disc: 1" identically on every single track row is just noise -
-		// only worth including once there's genuinely more than one disc to distinguish.
-		$isMultiDisc = count( array_unique( array_column( $trackFiles, 'disc' ) ) ) > 1;
-		$xorder = 0;
-		foreach( $trackFiles as $track ) {
-			// Flattened alongside title/disc rather than nested under its own 'tags' key - the
-			// generic json-list xref template (view_json-list_item.tpl) just dumps every top-level
-			// key as its own row, so nesting only bought a Smarty "Array" render instead of a
-			// usable one. TITLE/DISC themselves are excluded here since they're already surfaced
-			// as the clean 'title'/'disc' fields - anything identical across every track (real
-			// MusicBrainz ids, label/catalog/barcode/country/genre/composer/artist) has already
-			// been promoted to a real xref on the album itself instead (see extractCommonTags()),
-			// so it isn't duplicated into every single track's own data. A tag that happens to
-			// vary per track this time (a various-artists compilation's own per-track ARTIST, a
-			// disc id that only applies within one disc of a multi-disc set) stays here.
-			$trackTagsForData = array_diff_key( $track['tags'], $promotedTagKeys, [ 'TITLE' => true, 'DISC' => true ] );
-			$trackData = [ 'title' => $track['title'], 'track' => $track['track_num'] ];
-			if( $isMultiDisc ) {
-				$trackData['disc'] = $track['disc'];
-			}
-			$trackData['duration'] = $track['duration_ms'];
-			$xrefHash = [
-				'content_id' => $album->mContentId,
-				'item'       => 'track',
-				// Bare (or "CDxx/filename" for an album keeping its own CD-subfolder layer) -
-				// see getImageStorageRoot()'s own docblock for why the album's folder itself is
-				// never baked into this.
-				'xkey_ext'   => $track['relative'],
-				'edit'       => json_encode( array_merge( $trackData, $trackTagsForData ) ),
-				'xorder'     => ++$xorder,
-			];
-			$album->storeXref( $xrefHash );
-		}
-
-		foreach( $commonTags as $xrefItem => $value ) {
-			$album->storeCommonTagXref( $xrefItem, $value );
-		}
+		$album->reconcileAlbumXrefs( $trackFiles, $commonTags, $promotedTagKeys );
 		if( $pCategory !== null && $pCategory !== '' ) {
 			$categoryXrefHash = [ 'content_id' => $album->mContentId, 'item' => 'category', 'xkey_ext' => $pCategory ];
 			$album->storeXref( $categoryXrefHash );
@@ -1197,7 +1618,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		$this->loadXrefInfo();
 		$mbid = null;
 		if( $this->mXrefInfo ) {
-			foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+			foreach( $this->liveXrefs() as $xref ) {
 				if( $xref['item'] === 'mbid' ) {
 					$mbid = $xref['xkey_ext'];
 				} elseif( $xref['item'] === 'discogs' ) {

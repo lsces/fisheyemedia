@@ -55,7 +55,7 @@
 								<tbody>
 									{foreach from=$discTracks item=track name=trackRow}
 										<tr class="fisheye-track-row" data-xref-id="{$track.xref_id}">
-											<td>{$smarty.foreach.trackRow.iteration}</td>
+											<td>{$track.trackNum|default:$smarty.foreach.trackRow.iteration}</td>
 											<td>{$track.title|escape}</td>
 											<td>{if $track.artist}{$track.artist|escape}{/if}</td>
 											<td>{if $track.durationMs}{($track.durationMs/1000)|display_duration}{/if}</td>

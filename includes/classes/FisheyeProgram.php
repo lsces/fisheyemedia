@@ -659,7 +659,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 		$this->loadXrefInfo();
 		$existingImagePaths = [];
 		$xorder = 0;
-		foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+		foreach( $this->liveXrefs() as $xref ) {
 			if( $xref['item'] === 'image' ) {
 				$existingImagePaths[] = $xref['xkey_ext'];
 				$xorder = max( $xorder, (int)$xref['xorder'] );

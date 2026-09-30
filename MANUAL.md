@@ -190,10 +190,19 @@ using the generic `href` template. All served by fisheye's existing generic xref
 bespoke per-field markup needed anywhere in this extension.
 
 **Pages must never hardcode which `x_group` an item lives in.** Use
-`LibertyXrefContent::allXrefs()` (a flat pass across every loaded group, same "ignore group name"
+`FisheyeMediaTrait::liveXrefs()` (a flat pass across every loaded group, same "ignore group name"
 spirit as the existing `findByItem()`/`allItems()`) and bucket by item name only. A page that reads
 `$xrefInfo->mGroups['metadata']` directly breaks silently the next time an item moves to a
-different tab — already happened once with `star`'s move into `cast`.
+different tab — already happened once with `star`'s move into `cast`. `liveXrefs()` skips liberty's
+synthetic `history` group (rows with an `end_date`); liberty's own `LibertyXrefContent::allXrefs()`
+includes it on purpose, for the generic grid's History tab, so media pages never call that directly.
+
+**Reloads reconcile, never wipe** (albums so far — `FisheyeAlbum::reconcileXrefItem()`). Each
+row is matched by a natural key (a track's file path, a person's id, the item itself for a
+single-valued one): unchanged rows are left alone with their `entry_date`, a changed value archives
+the old row (into history) and inserts the new one, a row the files no longer mention is archived,
+and a hand-edited row (`last_update_date` later than `entry_date`) is never touched. Film/Season/
+Program/featurette reloads still delete-and-rebuild — the same fix is pending there.
 
 **Episode** is a `liberty_xref` row under its season's own `content_id` (not a separate gallery
 level) — `xkey_ext` holds the video file path relative to the season's storage root, `data` holds

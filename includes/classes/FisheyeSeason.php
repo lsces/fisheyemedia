@@ -220,7 +220,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 	/**
 	 * The images/episodes/featurettes arrays view_season.php and view_program.php's own
 	 * single-season dispatch both need from this season's own xrefs - previously two separate,
-	 * near-identical copies of the same switch-over-allXrefs() logic (missing 'featurette'
+	 * near-identical copies of the same switch-over-liveXrefs() logic (missing 'featurette'
 	 * entirely in both, since that item type didn't exist yet), factored out here rather than
 	 * adding a third copy. `$externalLinks` (view_season.php's own IMDB/TVDB/TMDB link list) stays
 	 * that page's own separate concern - view_program.php's single-season page never built it, so
@@ -234,7 +234,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		$episodes = [];
 		$featurettes = [];
 		if( $this->mXrefInfo ) {
-			foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+			foreach( $this->liveXrefs() as $xref ) {
 				$data = !empty( $xref['data'] ) ? json_decode( $xref['data'], true ) : [];
 				switch( $xref['item'] ) {
 					case 'image':
@@ -298,7 +298,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		$this->loadXrefInfo();
 		$words = [];
 		if( $this->mXrefInfo ) {
-			foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+			foreach( $this->liveXrefs() as $xref ) {
 				if( $xref['item'] !== 'episode' ) {
 					continue;
 				}
@@ -455,7 +455,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 
 		$this->loadXrefInfo();
 		$episodeXrefs = $this->mXrefInfo
-			? array_filter( $this->mXrefInfo->allXrefs(), fn( $xref ) => $xref['item'] === 'episode' )
+			? array_filter( $this->liveXrefs(), fn( $xref ) => $xref['item'] === 'episode' )
 			: [];
 		if( empty( $episodeXrefs ) ) {
 			return null;
@@ -546,7 +546,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 
 		$this->loadXrefInfo();
 		$episodeXrefs = $this->mXrefInfo
-			? array_filter( $this->mXrefInfo->allXrefs(), fn( $xref ) => $xref['item'] === 'episode' )
+			? array_filter( $this->liveXrefs(), fn( $xref ) => $xref['item'] === 'episode' )
 			: [];
 		$seedXref = current( $episodeXrefs );
 		if( !empty( $seedXref['xkey_ext'] ) ) {
@@ -649,7 +649,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		if( !$this->mXrefInfo ) {
 			return 0;
 		}
-		return count( array_filter( $this->mXrefInfo->allXrefs(), fn( $xref ) => $xref['item'] === 'episode' ) );
+		return count( array_filter( $this->liveXrefs(), fn( $xref ) => $xref['item'] === 'episode' ) );
 	}
 
 	/**
@@ -989,7 +989,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 	private function fallbackFrameGrabImage( array &$summary ): void {
 		$this->loadXrefInfo();
 		if( $this->mXrefInfo ) {
-			foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+			foreach( $this->liveXrefs() as $xref ) {
 				if( $xref['item'] === 'image' ) {
 					return;
 				}
@@ -1027,7 +1027,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 
 		$existingImagePaths = [];
 		$xorder = 0;
-		foreach( $this->mXrefInfo->allXrefs() as $xref ) {
+		foreach( $this->liveXrefs() as $xref ) {
 			if( $xref['item'] === 'image' ) {
 				$existingImagePaths[] = $xref['xkey_ext'];
 				$xorder = max( $xorder, (int)$xref['xorder'] );
