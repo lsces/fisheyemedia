@@ -1215,16 +1215,96 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
+	 * Every distinct credited person across one artist/composer folder's albums, read straight from
+	 * the files on disk (before anything is imported) - for contactwiki's people pass, which matches
+	 * or creates a contact for each one first so an album import can link credits by contact rather
+	 * than by name. Walks the folder the same way load_album.php does: an album folder directly
+	 * under it, or one level down inside a discography category or box set. Each track contributes
+	 * its own artist ids (MUSICBRAINZARTISTID, paired with ARTISTS) and the album-artist ids
+	 * (MUSICBRAINZALBUMARTISTID, paired with ALBUMARTIST) - see pairCredits(). MusicBrainz's own
+	 * "Various Artists" entity is skipped: a compilation marker, not a person.
+	 *
+	 * @param string $pAbsoluteArtistFolder  trailing slash
+	 * @return array{albums:int, tracks:int, unreadable:list<string>, people:list<array{mbid:string, names:list<string>,
+	 *               albums:int, tracks:int, album_artist:bool, track_artist:bool}>}
+	 */
+	public static function surveyArtistCredits( string $pAbsoluteArtistFolder ): array {
+		$albumFolders = [];
+		$collect = function( string $pDir, int $pDepth ) use ( &$collect, &$albumFolders ) {
+			$entries = scandir( $pDir ) ?: [];
+			natsort( $entries );
+			foreach( $entries as $entry ) {
+				if( str_starts_with( $entry, '.' ) || !is_dir( $pDir.$entry ) ) {
+					continue;
+				}
+				if( self::folderHasTracks( $pDir.$entry.'/' ) ) {
+					$albumFolders[] = $pDir.$entry.'/';
+				} elseif( $pDepth < 1 ) {
+					$collect( $pDir.$entry.'/', $pDepth + 1 );
+				}
+			}
+		};
+		$collect( $pAbsoluteArtistFolder, 0 );
+
+		$people = [];
+		$trackTotal = 0;
+		$unreadable = [];
+		foreach( $albumFolders as $albumIndex => $albumFolder ) {
+			foreach( self::scanTrackFiles( $albumFolder, false ) as $track ) {
+				$trackTotal++;
+				// A file the web server can't read yields no tags at all - counted, not silently
+				// treated as "credits nobody".
+				if( !is_readable( $albumFolder.$track['relative'] ) ) {
+					$unreadable[] = substr( $albumFolder, strlen( $pAbsoluteArtistFolder ) ).$track['relative'];
+					continue;
+				}
+				$tags = $track['tags'];
+				$credits = [
+					'track_artist' => self::pairCredits( $tags['MUSICBRAINZARTISTID'] ?? null, $tags['ARTISTS'] ?? $tags['ARTIST'] ?? null ),
+					'album_artist' => self::pairCredits( $tags['MUSICBRAINZALBUMARTISTID'] ?? null, $tags['ALBUMARTIST'] ?? null ),
+				];
+				$seenThisTrack = [];
+				foreach( $credits as $as => $pairs ) {
+					foreach( $pairs as $pair ) {
+						$mbid = strtolower( $pair['mbid'] );
+						if( $mbid === FISHEYEALBUM_MB_VARIOUS_ARTISTS ) {
+							continue;
+						}
+						$people[$mbid] ??= [ 'mbid' => $mbid, 'names' => [], 'albums' => [], 'tracks' => 0, 'album_artist' => false, 'track_artist' => false ];
+						if( $pair['name'] !== null && !in_array( $pair['name'], $people[$mbid]['names'], true ) ) {
+							$people[$mbid]['names'][] = $pair['name'];
+						}
+						$people[$mbid]['albums'][$albumIndex] = true;
+						$people[$mbid][$as] = true;
+						if( !isset( $seenThisTrack[$mbid] ) ) {
+							$people[$mbid]['tracks']++;
+							$seenThisTrack[$mbid] = true;
+						}
+					}
+				}
+			}
+		}
+		foreach( $people as &$person ) {
+			$person['albums'] = count( $person['albums'] );
+		}
+		unset( $person );
+		usort( $people, fn( $a, $b ) => [ $b['tracks'], $a['names'][0] ?? $a['mbid'] ] <=> [ $a['tracks'], $b['names'][0] ?? $b['mbid'] ] );
+		return [ 'albums' => count( $albumFolders ), 'tracks' => $trackTotal, 'unreadable' => $unreadable, 'people' => $people ];
+	}
+
+	/**
 	 * Scan one album folder's track files, read each one's embedded tags, and sort into final
 	 * (disc, track) order - shared by registerFromDisk() (a brand new album) and reloadTracks()
 	 * (re-scanning an already-registered one, e.g. after re-tagging in Picard or a metadata-schema
 	 * change like promoting a new common tag).
 	 *
 	 * @param string $pAbsoluteFolder
+	 * @param bool $pWithDuration  also probe each file's real duration (one ffprobe per track) -
+	 *                             skipped by surveyArtistCredits(), which only needs the tags
 	 * @return array  each entry: 'relative' (path relative to $pAbsoluteFolder), 'disc', 'tags',
-	 *                'track_num', 'title' - empty if no track files found
+	 *                'track_num', 'title' (+ 'duration_ms') - empty if no track files found
 	 */
-	private static function scanTrackFiles( string $pAbsoluteFolder ): array {
+	private static function scanTrackFiles( string $pAbsoluteFolder, bool $pWithDuration = true ): array {
 		// Multi-disc sets (Black Sabbath-style CD1/CD2 subfolders) walked one level deep; a flat
 		// album folder (Bob Marley/Classic Composers-style) has its track files directly inside -
 		// both shapes scanned the same way, disc number just stays 1 for the flat case.
@@ -1276,7 +1356,9 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			$track['title'] = self::tagString( $tags['TITLE'] ?? null ) ?? pathinfo( $track['relative'], PATHINFO_FILENAME );
 			// From the file's own container, not the (culled, unreliable) embedded TLEN tag - same
 			// source episodes/featurettes already use for their own duration.
-			$track['duration_ms'] = \Bitweaver\Liberty\mime_film_get_duration_ms( $pAbsoluteFolder.$track['relative'] );
+			if( $pWithDuration ) {
+				$track['duration_ms'] = \Bitweaver\Liberty\mime_film_get_duration_ms( $pAbsoluteFolder.$track['relative'] );
+			}
 		}
 		unset( $track );
 		usort( $trackFiles, fn( $a, $b ) => [ $a['disc'], $a['track_num'] ] <=> [ $b['disc'], $b['track_num'] ] );
