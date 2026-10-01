@@ -73,7 +73,7 @@ if( !empty( $_REQUEST['fImport'] ) ) {
 	// identical two-step pagination handling (see that method's own comment). Without this, a
 	// freshly-created "Videos" gallery fell back to the site's own default pagination style
 	// (Galleriffic) instead of the film grid its own content (FisheyeFilm rows) actually needs.
-	$videosGalleryResult = FisheyeGallery::findOrCreateNestedGallery( 'Videos', (int)$gallery->mContentId, FISHEYE_PAGINATION_FILM_GRID, FisheyeMediaGallery::class );
+	$videosGalleryResult = FisheyeGallery::findOrCreateNestedGallery( FISHEYEMEDIA_VIDEOS_GALLERY_TITLE, (int)$gallery->mContentId, FISHEYE_PAGINATION_FILM_GRID, FisheyeMediaGallery::class );
 	if( !empty( $videosGalleryResult['error'] ) ) {
 		$result = [ 'error' => $videosGalleryResult['error'] ];
 	} else {

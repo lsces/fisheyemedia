@@ -31,6 +31,9 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 	define( 'FISHEYE_PAGINATION_FILM_GRID', 'film_grid' );
 	define( 'FISHEYE_PAGINATION_PROGRAM_GRID', 'program_grid' );
 	define( 'FISHEYE_PAGINATION_MUSIC_GRID', 'music_grid' );
+	// Title of the nested gallery load_video.php keeps an artist's videos in - getCategorizedItems()
+	// lists its contents as the artist page's own Videos strip.
+	define( 'FISHEYEMEDIA_VIDEOS_GALLERY_TITLE', 'Videos' );
 
 	global $gLibertySystem;
 

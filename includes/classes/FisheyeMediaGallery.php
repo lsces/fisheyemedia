@@ -203,13 +203,14 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	 * one per item. A nested FisheyeGallery item (a box set or the "Videos" subgallery - see
 	 * FisheyeAlbum::createSubGallery()/findOrCreateNestedGallery(), both addItem() straight into
 	 * this gallery the same as a plain album) carries no category of its own, so those land in a
-	 * trailing 'collections' bucket instead. The 'other' bucket (last of
+	 * trailing 'collections' bucket instead - except the Videos subgallery, whose own videos are
+	 * listed directly in a final 'videos' bucket so they show on the artist page itself. The 'other' bucket (last of
 	 * FISHEYEALBUM_CATEGORY_FOLDER_NAMES) also catches any album whose category doesn't match a
 	 * known name - every album registered through the current flow always gets a real category, so
 	 * in practice this should stay empty.
 	 *
 	 * @return array<string, LibertyContent[]> keyed by category, empty groups dropped, fixed
-	 *         FISHEYEALBUM_CATEGORY_FOLDER_NAMES order with 'collections' last
+	 *         FISHEYEALBUM_CATEGORY_FOLDER_NAMES order, then 'collections', then 'videos'
 	 */
 	public function getCategorizedItems(): array {
 		// loadImages() takes its param by reference - can't pass the array literal directly. A
@@ -222,6 +223,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			$groups[$category] = [];
 		}
 		$collections = [];
+		$videos = [];
 
 		if( $this->mItems ) {
 			$albumContentIds = [];
@@ -244,7 +246,17 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			}
 
 			foreach( $this->mItems as $contentId => $item ) {
-				if( $item->isContentType( 'fisheyegallery' ) ) {
+				// Any gallery object, not just content_type_guid 'fisheyegallery' - nested galleries
+				// are created as FisheyeMediaGallery now (findOrCreateNestedGallery()'s class param).
+				if( $item instanceof FisheyeGallery ) {
+					if( $item->getTitle() === FISHEYEMEDIA_VIDEOS_GALLERY_TITLE ) {
+						// load_video.php's own Videos gallery - its videos are shown directly in a
+						// trailing strip rather than as one more collection tile to click into.
+						$videosHash = [ 'page' => -1, 'offset' => 0, 'max_records' => 1000 ];
+						$item->loadImages( $videosHash );
+						$videos += (array)$item->mItems;
+						continue;
+					}
 					$collections[$contentId] = $item;
 					continue;
 				}
@@ -259,6 +271,9 @@ class FisheyeMediaGallery extends FisheyeGallery {
 		$groups = array_filter( $groups );
 		if( $collections ) {
 			$groups['collections'] = $collections;
+		}
+		if( $videos ) {
+			$groups['videos'] = $videos;
 		}
 		return $groups;
 	}
