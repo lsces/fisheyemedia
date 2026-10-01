@@ -1250,16 +1250,16 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				'xorder'   => count( $wantedTracks ) + 1,
 			];
 			// The track's own artist(s) as contacts - read from the raw tags, since an id shared by
-			// every track has been promoted out of the track data. One artist (the common case): the
-			// row's own xref/xkey. Several: a 'contacts' list in the data, index for index with the
-			// ids (null where no contact holds that id yet).
+			// every track has been promoted out of the track data. The row's own xref/xkey take the
+			// first credited artist (MusicBrainz orders the primary credit first) - the one plain SQL
+			// can reach. Several artists: the full list is also kept as 'contacts' in the data, index
+			// for index with the ids (null where no contact holds that id yet).
 			$artistIds = array_values( array_filter( (array)( $track['tags']['MUSICBRAINZARTISTID'] ?? [] ) ) );
-			if( count( $artistIds ) === 1 ) {
-				if( $contact = self::contactForMusicBrainzId( $artistIds[0] ) ) {
-					$wantedTrack['xref'] = $contact['content_id'];
-					$wantedTrack['xkey'] = (string)$contact['external_id'];
-				}
-			} elseif( count( $artistIds ) > 1 ) {
+			if( $artistIds && ( $contact = self::contactForMusicBrainzId( $artistIds[0] ) ) ) {
+				$wantedTrack['xref'] = $contact['content_id'];
+				$wantedTrack['xkey'] = (string)$contact['external_id'];
+			}
+			if( count( $artistIds ) > 1 ) {
 				$trackData['contacts'] = array_map( fn( $id ) => self::contactForMusicBrainzId( $id )['content_id'] ?? null, $artistIds );
 			}
 			$wantedTrack['data'] = array_merge( $trackData, $trackTagsForData );
