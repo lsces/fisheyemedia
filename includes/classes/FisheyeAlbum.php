@@ -1635,7 +1635,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		// gallery without it kept a generic default row count instead. Created as a
 		// FisheyeMediaGallery - music_gallery_icons_inc.tpl/the music_grid layout call its own
 		// methods, which a plain FisheyeGallery doesn't have.
-		$result = FisheyeGallery::findOrCreateNestedGallery( $containerTitle, (int)$pParentContentId, FISHEYE_PAGINATION_MUSIC_GRID, FisheyeMediaGallery::class );
+		$result = FisheyeMediaGallery::findOrCreateNestedGallery( $containerTitle, (int)$pParentContentId, FISHEYE_PAGINATION_MUSIC_GRID );
 		if( empty( $result['error'] ) && empty( $result['already'] ) ) {
 			// Music-grid pagination only makes sense freshly created, not re-applied to a gallery
 			// that might already have its own preference set some other way. content_id (not
@@ -1710,7 +1710,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 *                                     be safe back when every gallery had a unique name, but
 	 *                                     "Studio"/"Live"/"Compilation" etc. are now deliberately
 	 *                                     shared names across different artists (see
-	 *                                     FisheyeGallery::findOrCreateNestedGallery()'s own
+	 *                                     FisheyeMediaGallery::findOrCreateNestedGallery()'s own
 	 *                                     docblock), so it silently linked into whichever
 	 *                                     same-titled gallery happened to exist first (found live:
 	 *                                     every artist's newly-loaded albums were ending up in Bob

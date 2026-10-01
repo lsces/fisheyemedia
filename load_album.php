@@ -69,7 +69,7 @@ $gallery->load();
 // assignment is never cleared when load()'s query comes back empty. A bogus/no-longer-existent
 // gallery_id was passing this check and falling through to an empty getTitle(), which degenerated
 // into treating the bare Music/ folder itself as the candidate list (found live, a content_id
-// mistakenly used as a gallery_id - see FisheyeGallery::findOrCreateNestedGallery()'s own docblock
+// mistakenly used as a gallery_id - see FisheyeMediaGallery::findOrCreateNestedGallery()'s own docblock
 // for how that number got into a URL in the first place).
 if( !$gallery->isValid() || empty( $gallery->getTitle() ) ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No gallery exists with the given ID.' ) );

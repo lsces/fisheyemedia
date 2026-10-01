@@ -275,7 +275,7 @@ own candidate logic.
 
 **Videos** — a concert DVD or music video sitting in an artist's own `Videos/` subfolder registers
 as a real `FisheyeFilm` (same content type normal Films use), linked into a small nested "Videos"
-gallery under the artist (`FisheyeGallery::findOrCreateNestedGallery()`, `FISHEYE_PAGINATION_FILM_GRID`
+gallery under the artist (`FisheyeMediaGallery::findOrCreateNestedGallery()`, `FISHEYE_PAGINATION_FILM_GRID`
 so it renders as a film grid, not the site's default Galleriffic style). Doesn't gate on a Plex
 match the way `load_film.php` does — Plex almost never scans this path, so every selected video
 registers regardless, with Plex metadata fetched opportunistically when a match does exist.

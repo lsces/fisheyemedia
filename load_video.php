@@ -19,7 +19,7 @@
  *
  * Gallery linking is done by this page itself, not via registerFromDisk()'s own $pGalleryTitle
  * param - that does a bare title lookup with no parent scoping, unsafe once more than one artist
- * has its own generically-titled "Videos" gallery (see FisheyeGallery::findOrCreateNestedGallery()'s
+ * has its own generically-titled "Videos" gallery (see FisheyeMediaGallery::findOrCreateNestedGallery()'s
  * own docblock for the same nesting shape FisheyeAlbum's box sets already use).
  *
  * @package fisheyemedia
@@ -73,7 +73,7 @@ if( !empty( $_REQUEST['fImport'] ) ) {
 	// identical two-step pagination handling (see that method's own comment). Without this, a
 	// freshly-created "Videos" gallery fell back to the site's own default pagination style
 	// (Galleriffic) instead of the film grid its own content (FisheyeFilm rows) actually needs.
-	$videosGalleryResult = FisheyeGallery::findOrCreateNestedGallery( FISHEYEMEDIA_VIDEOS_GALLERY_TITLE, (int)$gallery->mContentId, FISHEYE_PAGINATION_FILM_GRID, FisheyeMediaGallery::class );
+	$videosGalleryResult = FisheyeMediaGallery::findOrCreateNestedGallery( FISHEYEMEDIA_VIDEOS_GALLERY_TITLE, (int)$gallery->mContentId, FISHEYE_PAGINATION_FILM_GRID );
 	if( !empty( $videosGalleryResult['error'] ) ) {
 		$result = [ 'error' => $videosGalleryResult['error'] ];
 	} else {
