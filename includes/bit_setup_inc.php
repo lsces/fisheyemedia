@@ -94,4 +94,12 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 			FISHEYE_PAGINATION_MUSIC_GRID   => [ 'rows' => 4, 'cols' => 8 ],
 		],
 	] );
+
+	// Films/Music/TV Shows/Library jumps inside fisheye's own menu - fisheye's menu_fisheye.tpl
+	// includes every 'fisheye_menu_tpl' generically, same arrangement as contactwiki's section of
+	// contact's menu. Own service name: registerService() keys by it, so sharing
+	// 'fisheye_gallery_layout' above would overwrite that registration.
+	$gLibertySystem->registerService( FISHEYEMEDIA_PKG_NAME, FISHEYEMEDIA_PKG_NAME, [
+		'fisheye_menu_tpl' => 'bitpackage:fisheyemedia/fisheye_menu_inc.tpl',
+	] );
 }
