@@ -44,6 +44,44 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * A music gallery's own folder, relative to the storage root ('Music/.../', trailing slash), or
+	 * null if none is found. Shared by load_album.php, load_video.php and the hasUnloaded*()
+	 * checks below. Tried in order: Music/<title>/ (an artist/composer gallery); Music/<parent>/
+	 * <title>/ (a box set nested directly under its artist); Music/<parent>/<category>/<title>/ (a
+	 * box set kept inside a discography category folder - Studio/Live/... - which gets no gallery
+	 * of its own, see FisheyeAlbum::isCategoryFolder()).
+	 *
+	 * @param FisheyeGallery $pGallery any gallery object - static so callers holding a plain
+	 *                                 FisheyeGallery can use it too
+	 * @return string|null
+	 */
+	public static function resolveMusicFolder( FisheyeGallery $pGallery ): ?string {
+		$root = \Bitweaver\Liberty\mime_film_get_storage_root();
+		$galleryTitle = $pGallery->getTitle();
+		if( empty( $root ) || empty( $galleryTitle ) ) {
+			return null;
+		}
+		$musicDir = $root.'Music/';
+		if( is_dir( $musicDir.$galleryTitle.'/' ) ) {
+			return 'Music/'.$galleryTitle.'/';
+		}
+		$parentGalleries = $pGallery->getParentGalleries();
+		$parentTitle = $parentGalleries ? current( $parentGalleries )['title'] : null;
+		if( empty( $parentTitle ) || !is_dir( $musicDir.$parentTitle.'/' ) ) {
+			return null;
+		}
+		if( is_dir( $musicDir.$parentTitle.'/'.$galleryTitle.'/' ) ) {
+			return 'Music/'.$parentTitle.'/'.$galleryTitle.'/';
+		}
+		foreach( scandir( $musicDir.$parentTitle.'/' ) ?: [] as $entry ) {
+			if( FisheyeAlbum::isCategoryFolder( $entry ) && is_dir( $musicDir.$parentTitle.'/'.$entry.'/'.$galleryTitle.'/' ) ) {
+				return 'Music/'.$parentTitle.'/'.$entry.'/'.$galleryTitle.'/';
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Whether this artist/composer gallery's own folder under Music/ has at least one album folder
 	 * not yet registered - cheap short-circuit (stops at the first match) version of load_album.php's
 	 * own candidate scan, so music_gallery_icons_inc.tpl can hide "Load Album" entirely once there's
@@ -58,18 +96,8 @@ class FisheyeMediaGallery extends FisheyeGallery {
 		if( empty( $root ) ) {
 			return false;
 		}
-		$musicDir = $root.'Music/';
-		$galleryTitle = $this->getTitle();
-		$artistDir = null;
-		if( is_dir( $musicDir.$galleryTitle.'/' ) ) {
-			$artistDir = $musicDir.$galleryTitle.'/';
-		} else {
-			$parentGalleries = $this->getParentGalleries();
-			$parentTitle = $parentGalleries ? current( $parentGalleries )['title'] : null;
-			if( $parentTitle && is_dir( $musicDir.$parentTitle.'/'.$galleryTitle.'/' ) ) {
-				$artistDir = $musicDir.$parentTitle.'/'.$galleryTitle.'/';
-			}
-		}
+		$artistRelative = self::resolveMusicFolder( $this );
+		$artistDir = $artistRelative ? $root.$artistRelative : null;
 		if( !$artistDir ) {
 			return false;
 		}
@@ -117,18 +145,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 		if( empty( $root ) ) {
 			return false;
 		}
-		$musicDir = $root.'Music/';
-		$galleryTitle = $this->getTitle();
-		$artistRelative = null;
-		if( is_dir( $musicDir.$galleryTitle.'/' ) ) {
-			$artistRelative = 'Music/'.$galleryTitle.'/';
-		} else {
-			$parentGalleries = $this->getParentGalleries();
-			$parentTitle = $parentGalleries ? current( $parentGalleries )['title'] : null;
-			if( $parentTitle && is_dir( $musicDir.$parentTitle.'/'.$galleryTitle.'/' ) ) {
-				$artistRelative = 'Music/'.$parentTitle.'/'.$galleryTitle.'/';
-			}
-		}
+		$artistRelative = self::resolveMusicFolder( $this );
 		$videosDir = $artistRelative ? $root.$artistRelative.'Videos/' : null;
 		if( !$videosDir || !is_dir( $videosDir ) ) {
 			return false;

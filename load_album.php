@@ -77,23 +77,12 @@ if( !$gallery->isValid() || empty( $gallery->getTitle() ) ) {
 $galleryTitle = $gallery->getTitle();
 
 $root = \Bitweaver\Liberty\mime_film_get_storage_root();
-$musicDir = $root.'Music/';
 $artistDir = null;
 $artistRelative = null;
-if( !empty( $root ) ) {
-	if( is_dir( $musicDir.$galleryTitle.'/' ) ) {
-		$artistDir = $musicDir.$galleryTitle.'/';
-		$artistRelative = 'Music/'.$galleryTitle.'/';
-	} else {
-		// Not directly under Music/ - a box set's own nested gallery, one level deeper under its
-		// real parent (the artist/composer gallery) instead.
-		$parentGalleries = $gallery->getParentGalleries();
-		$parentTitle = $parentGalleries ? current( $parentGalleries )['title'] : null;
-		if( $parentTitle && is_dir( $musicDir.$parentTitle.'/'.$galleryTitle.'/' ) ) {
-			$artistDir = $musicDir.$parentTitle.'/'.$galleryTitle.'/';
-			$artistRelative = 'Music/'.$parentTitle.'/'.$galleryTitle.'/';
-		}
-	}
+// Music/<title>/, or under its artist (directly or inside a Studio/Live/... category folder) for a
+// box set's own nested gallery - see FisheyeMediaGallery::resolveMusicFolder().
+if( $artistRelative = FisheyeMediaGallery::resolveMusicFolder( $gallery ) ) {
+	$artistDir = $root.$artistRelative;
 }
 
 $importResult = null;
@@ -126,7 +115,7 @@ if( !empty( $_REQUEST['fImportAlbums'] ) ) {
 		// picked at a time), so it still gets that treatment even when found inside a category
 		// folder (e.g. "Studio/Some Box Set").
 		if( FisheyeAlbum::isBoxSetFolder( $artistDir.$relativeAlbumPath.'/' ) ) {
-			$row = FisheyeAlbum::createSubGallery( $artistRelative.$relativeAlbumPath, $galleryTitle );
+			$row = FisheyeAlbum::createSubGallery( $artistRelative.$relativeAlbumPath, (int)$gallery->mContentId );
 			if( !empty( $row['error'] ) ) {
 				$importResult['errors'][] = [ 'folder' => $albumFolder, 'error' => $row['error'] ];
 			} else {

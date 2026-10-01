@@ -58,22 +58,9 @@ if( !$gallery->isValid() || empty( $gallery->getTitle() ) ) {
 }
 $galleryTitle = $gallery->getTitle();
 
-// Same folder resolution as load_album.php - Music/<title>/ directly, or one level under this
-// gallery's own real parent for a nested gallery (a box set's own "Videos" folder, say).
+// Same folder resolution as load_album.php - see FisheyeMediaGallery::resolveMusicFolder().
 $root = \Bitweaver\Liberty\mime_film_get_storage_root();
-$musicDir = $root.'Music/';
-$artistRelative = null;
-if( !empty( $root ) ) {
-	if( is_dir( $musicDir.$galleryTitle.'/' ) ) {
-		$artistRelative = 'Music/'.$galleryTitle.'/';
-	} else {
-		$parentGalleries = $gallery->getParentGalleries();
-		$parentTitle = $parentGalleries ? current( $parentGalleries )['title'] : null;
-		if( $parentTitle && is_dir( $musicDir.$parentTitle.'/'.$galleryTitle.'/' ) ) {
-			$artistRelative = 'Music/'.$parentTitle.'/'.$galleryTitle.'/';
-		}
-	}
-}
+$artistRelative = FisheyeMediaGallery::resolveMusicFolder( $gallery );
 $videosDir = $artistRelative ? $root.$artistRelative.'Videos/' : null;
 $videosRelativePrefix = $artistRelative ? $artistRelative.'Videos/' : null;
 
@@ -86,7 +73,7 @@ if( !empty( $_REQUEST['fImport'] ) ) {
 	// identical two-step pagination handling (see that method's own comment). Without this, a
 	// freshly-created "Videos" gallery fell back to the site's own default pagination style
 	// (Galleriffic) instead of the film grid its own content (FisheyeFilm rows) actually needs.
-	$videosGalleryResult = FisheyeGallery::findOrCreateNestedGallery( 'Videos', $galleryTitle, FISHEYE_PAGINATION_FILM_GRID );
+	$videosGalleryResult = FisheyeGallery::findOrCreateNestedGallery( 'Videos', (int)$gallery->mContentId, FISHEYE_PAGINATION_FILM_GRID, FisheyeMediaGallery::class );
 	if( !empty( $videosGalleryResult['error'] ) ) {
 		$result = [ 'error' => $videosGalleryResult['error'] ];
 	} else {

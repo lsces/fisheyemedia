@@ -256,6 +256,20 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				}
 			}
 		}
+		// The parent gallery's own folder first (FisheyeMediaGallery::resolveMusicFolder() - also
+		// covers a box set kept inside a Studio/Live/... category folder, which the walk below
+		// can't see since that category has no gallery of its own).
+		$parentGalleries = $this->getParentGalleries();
+		if( $parentGalleries ) {
+			$parentGallery = new FisheyeGallery( null, current( $parentGalleries )['content_id'] );
+			$parentGallery->load();
+			if( $parentRelative = FisheyeMediaGallery::resolveMusicFolder( $parentGallery ) ) {
+				$candidate = $root.$parentRelative.implode( '/', $pathSegments ).'/';
+				if( is_dir( $candidate ) ) {
+					return $candidate;
+				}
+			}
+		}
 		$contentId = $this->mContentId;
 		for( $i = 0; $i < 3; $i++ ) {
 			$candidate = $root.'Music/'.implode( '/', $pathSegments ).'/';
@@ -1601,11 +1615,11 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * @param string $pRelativeFolderPath  the container's own folder, relative to
 	 *                                     mime_film_get_storage_root() - same shape
 	 *                                     registerFromDisk() takes
-	 * @param string $pParentGalleryTitle  the artist/composer gallery this container's own nested
-	 *                                     gallery gets linked into
+	 * @param int    $pParentContentId     content_id of the artist/composer gallery this container's
+	 *                                     own nested gallery gets linked into
 	 * @return array 'gallery_id'=>the container's own new/existing gallery, or 'error'=>string
 	 */
-	public static function createSubGallery( string $pRelativeFolderPath, string $pParentGalleryTitle ): array {
+	public static function createSubGallery( string $pRelativeFolderPath, int $pParentContentId ): array {
 		$root = \Bitweaver\Liberty\mime_film_get_storage_root();
 		if( empty( $root ) ) {
 			return [ 'error' => 'fisheye_disk_storage_root is not configured.' ];
@@ -1618,8 +1632,10 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		// Passing the pagination style through to the initial store() call itself (not just the
 		// storePreference() below) is what gets rows_per_page/cols_per_page force-set to 4*8 at
 		// creation time - see findOrCreateNestedGallery()'s own docblock for why a freshly created
-		// gallery without it kept a generic default row count instead.
-		$result = FisheyeGallery::findOrCreateNestedGallery( $containerTitle, $pParentGalleryTitle, FISHEYE_PAGINATION_MUSIC_GRID );
+		// gallery without it kept a generic default row count instead. Created as a
+		// FisheyeMediaGallery - music_gallery_icons_inc.tpl/the music_grid layout call its own
+		// methods, which a plain FisheyeGallery doesn't have.
+		$result = FisheyeGallery::findOrCreateNestedGallery( $containerTitle, (int)$pParentContentId, FISHEYE_PAGINATION_MUSIC_GRID, FisheyeMediaGallery::class );
 		if( empty( $result['error'] ) && empty( $result['already'] ) ) {
 			// Music-grid pagination only makes sense freshly created, not re-applied to a gallery
 			// that might already have its own preference set some other way. content_id (not
