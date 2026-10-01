@@ -918,11 +918,13 @@ class FisheyeAlbum extends FisheyeMediaImage {
 
 	/**
 	 * The content (in practice a contactwiki individual/group, but nothing here depends on that)
-	 * holding a given MusicBrainz artist id in its own 'musicbrainz' xref, plus its 'wikidata' qid if
-	 * it has one - what an album's credit/track rows link to. Cached per request: an album repeats
-	 * the same few ids on every track.
+	 * holding a given MusicBrainz artist id in its own 'musicbrainz' xref, plus its best external id
+	 * for a credit row's xkey: its Wikidata qid ('Q...') when it has one, otherwise its Discogs artist
+	 * id (plain digits - a contact created from MusicBrainz alone often has only that). The two are
+	 * told apart by format alone; a MusicBrainz id (36 chars) doesn't fit xkey (32). Cached per
+	 * request: an album repeats the same few ids on every track.
 	 *
-	 * @return array{content_id:int, qid:?string}|null
+	 * @return array{content_id:int, external_id:?string}|null
 	 */
 	private static function contactForMusicBrainzId( string $pMbid ): ?array {
 		static $cache = [];
@@ -935,13 +937,16 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				 WHERE x.`item` = 'musicbrainz' AND x.`xkey_ext` = ? AND x.`end_date` IS NULL",
 				[ $mbid ]
 			);
-			$cache[$mbid] = $contentId ? [
-				'content_id' => (int)$contentId,
-				'qid'        => $gBitDb->getOne(
-					"SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'wikidata' AND `end_date` IS NULL",
+			$externalId = null;
+			if( $contentId ) {
+				$ids = $gBitDb->getAssoc(
+					"SELECT `item`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref`
+					 WHERE `content_id` = ? AND `item` IN ( 'wikidata', 'discogs_artist' ) AND `end_date` IS NULL",
 					[ $contentId ]
-				) ?: null,
-			] : null;
+				) ?: [];
+				$externalId = ( $ids['wikidata'] ?? null ) ?: ( $ids['discogs_artist'] ?? null ) ?: null;
+			}
+			$cache[$mbid] = $contentId ? [ 'content_id' => (int)$contentId, 'external_id' => $externalId ] : null;
 		}
 		return $cache[$mbid];
 	}
@@ -1252,7 +1257,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			if( count( $artistIds ) === 1 ) {
 				if( $contact = self::contactForMusicBrainzId( $artistIds[0] ) ) {
 					$wantedTrack['xref'] = $contact['content_id'];
-					$wantedTrack['xkey'] = (string)$contact['qid'];
+					$wantedTrack['xkey'] = (string)$contact['external_id'];
 				}
 			} elseif( count( $artistIds ) > 1 ) {
 				$trackData['contacts'] = array_map( fn( $id ) => self::contactForMusicBrainzId( $id )['content_id'] ?? null, $artistIds );
@@ -1284,11 +1289,12 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				'data'     => array_filter( [ 'mbid' => $credit['mbid'], 'source' => 'tags' ] ),
 			];
 			// Linked to the person's contact once one exists (contactwiki's people pass creates them
-			// ahead of import): xref = its content_id, xkey = its Wikidata qid when it has one. The
-			// name stays in xkey_ext as display text / fallback for anyone not yet a contact.
+			// ahead of import): xref = its content_id (the authority), xkey = its best external id -
+			// Wikidata qid ('Q...'), else Discogs artist id (digits). The name stays in xkey_ext as
+			// display text / fallback for anyone not yet a contact.
 			if( $credit['mbid'] && ( $contact = self::contactForMusicBrainzId( $credit['mbid'] ) ) ) {
 				$wanted['xref'] = $contact['content_id'];
-				$wanted['xkey'] = (string)$contact['qid'];
+				$wanted['xkey'] = (string)$contact['external_id'];
 			}
 			$wantedByRole[$credit['role']][] = $wanted;
 		}
