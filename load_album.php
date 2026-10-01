@@ -56,7 +56,7 @@ $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 // load_collection.php all already needed.
 require_once dirname( __DIR__ ).'/liberty/plugins/mime.film.php';
 
-const LOAD_ALBUM_LIMIT = 20;
+const LOAD_ALBUM_LIMIT = 10;
 
 $galleryIdParam = (int)( $_REQUEST['gallery_id'] ?? 0 );
 if( !$galleryIdParam ) {
