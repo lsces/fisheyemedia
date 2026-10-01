@@ -180,6 +180,21 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * An artist/composer page (music_grid, anything but the top-level "Music" pool - same split as
+	 * fisheye_music_grid_inc.tpl) shows every item in strips, never a grid page - so load them all
+	 * up front rather than the 4*8 first page, which silently dropped everything past the 32nd.
+	 *
+	 * @param array $pListHash
+	 */
+	public function prepDisplayList( array &$pListHash ): void {
+		if( $this->getLayout() === FISHEYE_PAGINATION_MUSIC_GRID && $this->getTitle() !== 'Music' ) {
+			$pListHash['page'] = -1;
+			$pListHash['offset'] = 0;
+			$pListHash['max_records'] = -1;
+		}
+	}
+
+	/**
 	 * Groups this gallery's own items for the artist-page "strip" layout (Plex-style, one row
 	 * per discography category) that fisheye_music_grid_inc.tpl renders instead of a single
 	 * paginated grid. Loads every item in one call (see the large max_records below) since
@@ -197,8 +212,9 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	 *         FISHEYEALBUM_CATEGORY_FOLDER_NAMES order with 'collections' last
 	 */
 	public function getCategorizedItems(): array {
-		// loadImages() takes its param by reference - can't pass the array literal directly.
-		$listHash = [ 'page' => -1, 'offset' => 0, 'max_records' => 1000 ];
+		// loadImages() takes its param by reference - can't pass the array literal directly. A
+		// no-op when the gallery page already loaded every item (prepDisplayList() below).
+		$listHash = [ 'page' => -1, 'offset' => 0, 'max_records' => -1 ];
 		$this->loadImages( $listHash );
 
 		$groups = [];
