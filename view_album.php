@@ -31,7 +31,7 @@ $gContent->addHit();
 
 $gContent->loadXrefInfo();
 $tracks = [];
-$artist = null;
+$credits = [];
 $externalLinks = [];
 if( $gContent->mXrefInfo ) {
 	foreach( $gContent->liveXrefs() as $xref ) {
@@ -78,14 +78,40 @@ if( $gContent->mXrefInfo ) {
 					// "Disc X" heading on a single flattened multi-disc album, not the title itself.
 					'discSubtitle' => is_array( $x = $data['TSST'] ?? $data['DISCSUBTITLE'] ?? null ) ? implode( '; ', $x ) : $x,
 					'durationMs' => $data['duration'] ?? null,
+					// A single-artist track linked to its contact (FisheyeAlbum::reconcileAlbumXrefs()) -
+					// the root index.php?content_id= dispatcher routes to whatever the contact's own
+					// display page is, so nothing here needs to know which package it belongs to.
+					'artistUrl'  => !empty( $xref['xref'] ) ? BIT_ROOT_URL.'index.php?content_id='.(int)$xref['xref'] : null,
 					'xorder'     => (int)$xref['xorder'],
 				];
 				break;
-			case 'artist': $artist = $xref['xkey_ext']; break;
+			default:
+				// Album credits - one row per person under their job (artist/composer/conductor/...),
+				// see FISHEYEALBUM_CREDIT_ITEMS. Linked to the person's contact when xref is set,
+				// otherwise to their MusicBrainz artist page when the id is known.
+				if( in_array( $xref['item'], FISHEYEALBUM_CREDIT_ITEMS, true ) ) {
+					$data = !empty( $xref['data'] ) ? json_decode( $xref['data'], true ) : [];
+					$credits[$xref['item']][] = [
+						'name'   => $xref['xkey_ext'],
+						'xorder' => (int)$xref['xorder'],
+						'url'    => !empty( $xref['xref'] ) ? BIT_ROOT_URL.'index.php?content_id='.(int)$xref['xref']
+							: ( !empty( $data['mbid'] ) ? 'https://musicbrainz.org/artist/'.$data['mbid'] : null ),
+						'local'  => !empty( $xref['xref'] ),
+					];
+				}
+				break;
 		}
 	}
 }
 usort( $tracks, fn( $a, $b ) => $a['xorder'] <=> $b['xorder'] );
+// Credits in job order (FISHEYEALBUM_CREDIT_ITEMS), each job's people in credit order.
+$creditGroups = [];
+foreach( FISHEYEALBUM_CREDIT_ITEMS as $role ) {
+	if( !empty( $credits[$role] ) ) {
+		usort( $credits[$role], fn( $a, $b ) => $a['xorder'] <=> $b['xorder'] );
+		$creditGroups[] = [ 'role' => $role, 'people' => $credits[$role] ];
+	}
+}
 
 // Grouped by disc here, not detected via a boundary-change check in the template - a single-disc
 // album (the common case) just gets one group and no "Disc 1" heading at all.
@@ -101,7 +127,7 @@ foreach( $tracks as $track ) {
 $gBitSmarty->assign( 'discs', $discs );
 $gBitSmarty->assign( 'discSubtitles', $discSubtitles );
 $gBitSmarty->assign( 'multiDisc', count( $discs ) > 1 );
-$gBitSmarty->assign( 'artist', $artist );
+$gBitSmarty->assign( 'creditGroups', $creditGroups );
 $gBitSmarty->assign( 'externalLinks', $externalLinks );
 $gBitSmarty->assign( 'gContent', $gContent );
 

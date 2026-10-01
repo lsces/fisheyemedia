@@ -917,11 +917,41 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
+	 * The content (in practice a contactwiki individual/group, but nothing here depends on that)
+	 * holding a given MusicBrainz artist id in its own 'musicbrainz' xref, plus its 'wikidata' qid if
+	 * it has one - what an album's credit/track rows link to. Cached per request: an album repeats
+	 * the same few ids on every track.
+	 *
+	 * @return array{content_id:int, qid:?string}|null
+	 */
+	private static function contactForMusicBrainzId( string $pMbid ): ?array {
+		static $cache = [];
+		$mbid = strtolower( trim( $pMbid ) );
+		if( !array_key_exists( $mbid, $cache ) ) {
+			global $gBitDb;
+			$contentId = $gBitDb->getOne(
+				"SELECT x.`content_id` FROM `".BIT_DB_PREFIX."liberty_xref` x
+				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+				 WHERE x.`item` = 'musicbrainz' AND x.`xkey_ext` = ? AND x.`end_date` IS NULL",
+				[ $mbid ]
+			);
+			$cache[$mbid] = $contentId ? [
+				'content_id' => (int)$contentId,
+				'qid'        => $gBitDb->getOne(
+					"SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'wikidata' AND `end_date` IS NULL",
+					[ $contentId ]
+				) ?: null,
+			] : null;
+		}
+		return $cache[$mbid];
+	}
+
+	/**
 	 * This album's own credits, one entry per person, each with the job it goes under - built from
 	 * the tags every track shares: the album-artist credit (ids + names), the shared track artist,
 	 * and COMPOSER/CONDUCTOR where the files carry them. A credited person named in COMPOSER or
-	 * CONDUCTOR gets that job; everyone else is 'artist' for now (a MusicBrainz lookup of the
-	 * release can refine that - composer vs orchestra vs soloist - without the files saying so).
+	 * CONDUCTOR gets that job; anyone else with a contact gets one from the contact's own type tags
+	 * (see the refinement step below); everyone left over stays 'artist'.
 	 * Never a raw credit string: no ids at all is the one case a whole album-artist string is kept,
 	 * as a single unpaired credit, since there's nothing to split it by safely.
 	 *
@@ -989,7 +1019,65 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				}
 			}
 		}
+
+		// Anyone the tags left as plain 'artist' gets a job from their contact's own type tags, once
+		// they're a contact (see creditRolesForContact()). Classical files tagged by Picard carry the
+		// composer as each track's own artist, while conductors/orchestras/soloists only appear in the
+		// album-artist credit - so 'composer' only counts for someone who is a track artist somewhere
+		// on this album (a conductor who also composes, credited here as conductor, stays conductor).
+		$trackArtistIds = [];
+		foreach( $pTrackFiles as $track ) {
+			foreach( (array)( $track['tags']['MUSICBRAINZARTISTID'] ?? [] ) as $id ) {
+				$trackArtistIds[strtolower( trim( $id ) )] = true;
+			}
+		}
+		foreach( $credits as &$credit ) {
+			if( $credit['role'] !== 'artist' || empty( $credit['mbid'] ) ) {
+				continue;
+			}
+			$roles = self::creditRolesForContact( $credit['mbid'] );
+			if( isset( $trackArtistIds[strtolower( $credit['mbid'] )] ) && in_array( 'composer', $roles, true ) ) {
+				$credit['role'] = 'composer';
+				continue;
+			}
+			foreach( [ 'conductor', 'orchestra', 'performer', 'composer' ] as $role ) {
+				if( in_array( $role, $roles, true ) ) {
+					$credit['role'] = $role;
+					break;
+				}
+			}
+		}
+		unset( $credit );
 		return array_values( $credits );
+	}
+
+	/**
+	 * The credit jobs (composer/conductor/orchestra/performer) a person's contact says they do, from
+	 * its own type-tag xrefs mapped through whatever 'credit_role_map' services are registered
+	 * (contactwiki contributes its WPxx/WBxx codes) - fisheyemedia knows no contact vocabulary
+	 * itself. Empty when the id has no contact yet, or no map is registered.
+	 *
+	 * @return list<string>
+	 */
+	private static function creditRolesForContact( string $pMbid ): array {
+		global $gLibertySystem, $gBitDb;
+		static $map = null;
+		if( $map === null ) {
+			$map = [];
+			foreach( (array)$gLibertySystem->getServiceValues( 'credit_role_map' ) as $serviceMap ) {
+				$map += (array)$serviceMap;
+			}
+		}
+		$contact = self::contactForMusicBrainzId( $pMbid );
+		if( !$contact || !$map ) {
+			return [];
+		}
+		$placeholders = implode( ',', array_fill( 0, count( $map ), '?' ) );
+		$items = $gBitDb->getCol(
+			"SELECT `item` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `end_date` IS NULL AND `item` IN ( $placeholders )",
+			array_merge( [ $contact['content_id'] ], array_keys( $map ) )
+		);
+		return array_values( array_unique( array_map( fn( $item ) => $map[$item], $items ) ) );
 	}
 
 	/**
@@ -1019,7 +1107,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * (losing the old value) and numbers the continuation xorder+1 (colliding with the next track).
 	 *
 	 * @param string $pItem
-	 * @param list<array{key:string, xorder:int, xkey_ext?:string, xkey?:string, data?:array}> $pWanted
+	 * @param list<array{key:string, xorder:int, xref?:int, xkey_ext?:string, xkey?:string, data?:array}> $pWanted
 	 * @param string|callable|null $pKey  how a live row's key is read: a column name ('xkey_ext'
 	 *                                    for a track's path), a callable taking the row, or null
 	 *                                    for a single-valued item
@@ -1029,7 +1117,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	private function reconcileXrefItem( string $pItem, array $pWanted, string|callable|null $pKey, bool $pStrictOwnership = false ): array {
 		$counts = [ 'inserted' => 0, 'archived' => 0, 'unchanged' => 0, 'kept_local' => 0 ];
 		$live = $this->mDb->getAll(
-			"SELECT `xref_id`, `xorder`, `xkey`, `xkey_ext`, `data`, `entry_date`, `last_update_date`
+			"SELECT `xref_id`, `xorder`, `xref`, `xkey`, `xkey_ext`, `data`, `entry_date`, `last_update_date`
 			 FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL",
 			[ $this->mContentId, $pItem ]
 		);
@@ -1069,6 +1157,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			}
 			if( $current
 				&& (int)$current['xorder'] === (int)$want['xorder']
+				&& (int)$current['xref'] === (int)( $want['xref'] ?? 0 )
 				&& (string)$current['xkey_ext'] === (string)( $want['xkey_ext'] ?? '' )
 				&& (string)$current['xkey'] === (string)( $want['xkey'] ?? '' )
 				&& ( !empty( $current['data'] ) ? json_decode( $current['data'], true ) : null ) == ( $want['data'] ?? null ) ) {
@@ -1079,6 +1168,9 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				$archive( $current );
 			}
 			$xrefHash = [ 'content_id' => $this->mContentId, 'item' => $pItem, 'xorder' => (int)$want['xorder'] ];
+			if( !empty( $want['xref'] ) ) {
+				$xrefHash['xref'] = (int)$want['xref'];
+			}
 			foreach( [ 'xkey_ext', 'xkey' ] as $field ) {
 				if( isset( $want[$field] ) && $want[$field] !== '' ) {
 					$xrefHash[$field] = $want[$field];
@@ -1144,15 +1236,29 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				$trackData['disc'] = $track['disc'];
 			}
 			$trackData['duration'] = $track['duration_ms'];
-			$wantedTracks[] = [
+			$wantedTrack = [
 				// Bare (or "CDxx/filename" for an album keeping its own CD-subfolder layer) - see
 				// getImageStorageRoot()'s own docblock for why the album's folder itself is never
 				// baked into this. Also the track's natural key for reconciling.
 				'key'      => $track['relative'],
 				'xkey_ext' => $track['relative'],
 				'xorder'   => count( $wantedTracks ) + 1,
-				'data'     => array_merge( $trackData, $trackTagsForData ),
 			];
+			// The track's own artist(s) as contacts - read from the raw tags, since an id shared by
+			// every track has been promoted out of the track data. One artist (the common case): the
+			// row's own xref/xkey. Several: a 'contacts' list in the data, index for index with the
+			// ids (null where no contact holds that id yet).
+			$artistIds = array_values( array_filter( (array)( $track['tags']['MUSICBRAINZARTISTID'] ?? [] ) ) );
+			if( count( $artistIds ) === 1 ) {
+				if( $contact = self::contactForMusicBrainzId( $artistIds[0] ) ) {
+					$wantedTrack['xref'] = $contact['content_id'];
+					$wantedTrack['xkey'] = (string)$contact['qid'];
+				}
+			} elseif( count( $artistIds ) > 1 ) {
+				$trackData['contacts'] = array_map( fn( $id ) => self::contactForMusicBrainzId( $id )['content_id'] ?? null, $artistIds );
+			}
+			$wantedTrack['data'] = array_merge( $trackData, $trackTagsForData );
+			$wantedTracks[] = $wantedTrack;
 		}
 		$tally( $this->reconcileXrefItem( 'track', $wantedTracks, 'xkey_ext' ) );
 
@@ -1171,12 +1277,20 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		// credit with no id).
 		$wantedByRole = array_fill_keys( FISHEYEALBUM_CREDIT_ITEMS, [] );
 		foreach( self::buildCredits( $pTrackFiles ) as $credit ) {
-			$wantedByRole[$credit['role']][] = [
+			$wanted = [
 				'key'      => $credit['mbid'] ?: 'name:'.mb_strtolower( (string)$credit['name'] ),
 				'xkey_ext' => $credit['name'] ?? $credit['mbid'],
 				'xorder'   => count( $wantedByRole[$credit['role']] ) + 1,
 				'data'     => array_filter( [ 'mbid' => $credit['mbid'], 'source' => 'tags' ] ),
 			];
+			// Linked to the person's contact once one exists (contactwiki's people pass creates them
+			// ahead of import): xref = its content_id, xkey = its Wikidata qid when it has one. The
+			// name stays in xkey_ext as display text / fallback for anyone not yet a contact.
+			if( $credit['mbid'] && ( $contact = self::contactForMusicBrainzId( $credit['mbid'] ) ) ) {
+				$wanted['xref'] = $contact['content_id'];
+				$wanted['xkey'] = (string)$contact['qid'];
+			}
+			$wantedByRole[$credit['role']][] = $wanted;
 		}
 		$creditKey = function( array $row ): string {
 			$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : null;

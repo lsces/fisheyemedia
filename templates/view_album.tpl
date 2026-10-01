@@ -26,10 +26,16 @@
 				<img class="thumb img-responsive" src="{$gContent->getThumbnailUrl('medium')|escape}" alt="{$gContent->getTitle()|escape}" />
 			</div>
 			<div class="col-md-9">
-				{if $artist}<p><strong>{tr}Artist{/tr}:</strong> {$artist|escape}</p>{/if}
+				{foreach from=$creditGroups item=group}
+					<p><strong>{tr}{$group.role|capitalize}{/tr}:</strong>
+						{foreach from=$group.people item=person name=people}
+							{if $person.url}<a href="{$person.url|escape}"{if !$person.local} target="_blank" rel="noopener"{/if}>{$person.name|escape}</a>{else}{$person.name|escape}{/if}{if !$smarty.foreach.people.last}, {/if}
+						{/foreach}
+					</p>
+				{/foreach}
 				{if $gContent->mInfo.data}<p>{$gContent->mInfo.data|escape}</p>{/if}
 				{if $externalLinks|@count}
-					<p class="album-external-links">
+					<p class="album-external-links"><strong>{tr}Links{/tr}:</strong>
 						{foreach from=$externalLinks item=link name=externalLinks}
 							<a href="{$link.url|escape}" target="_blank" rel="noopener">{$link.title|escape}</a>{if !$smarty.foreach.externalLinks.last} &middot; {/if}
 						{/foreach}
@@ -57,7 +63,7 @@
 										<tr class="fisheye-track-row" data-xref-id="{$track.xref_id}">
 											<td>{$track.trackNum|default:$smarty.foreach.trackRow.iteration}</td>
 											<td>{$track.title|escape}</td>
-											<td>{if $track.artist}{$track.artist|escape}{/if}</td>
+											<td>{if $track.artist}{if $track.artistUrl}<a href="{$track.artistUrl|escape}">{$track.artist|escape}</a>{else}{$track.artist|escape}{/if}{/if}</td>
 											<td>{if $track.durationMs}{($track.durationMs/1000)|display_duration}{/if}</td>
 											<td><button type="button" class="btn btn-default btn-sm track-play-btn" onclick="return fisheyeToggleTrack(this);">▶ {tr}Play{/tr}</button></td>
 										</tr>
