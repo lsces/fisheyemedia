@@ -40,6 +40,11 @@ define( 'FISHEYEALBUM_CONTENT_TYPE_GUID', 'fisheyealbum' );
 
 const FISHEYEALBUM_TRACK_EXTENSIONS = [ 'mp3', 'flac', 'm4a', 'ogg', 'wav' ];
 const FISHEYEALBUM_COVER_NAMES = [ 'cover.jpg', 'folder.jpg', 'front.jpg', 'cover.png', 'folder.png' ];
+// Image files an album's own folder and Artwork/ can hold - reloadAlbumImages() turns each into an
+// 'image' xref; tif/bmp/webp are converted to JPEG on the way (browsers can't show TIFF/BMP).
+const FISHEYEALBUM_ARTWORK_EXTENSIONS = [ 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tif', 'tiff', 'webp' ];
+// Longest side kept for local scans and Cover Art Archive images - large enough to read a booklet.
+const FISHEYEALBUM_ARTWORK_MAX = 1600;
 // A box set's own per-release subfolder naming - CDxx for a set of otherwise-anonymous discs
 // (Stravinsky's "Works of Igor Stravinsky", CD01..CD22), or Volume/Vol. N when each one already
 // has a real distinguishing name of its own (Pachelbel's "Joseph Payne - 10 CD" - despite the
@@ -510,6 +515,236 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		}
 		@unlink( $embeddedCover );
 		return $coverAttached;
+	}
+
+	/**
+	 * Reload Images: the album's own artwork first, then the Cover Art Archive, then Plex.
+	 *
+	 * 1. Local - every image in the album folder and its Artwork/ folder (FISHEYEALBUM_ARTWORK_
+	 *    EXTENSIONS) becomes an 'image' xref, copied into this album's storage branch at up to
+	 *    FISHEYEALBUM_ARTWORK_MAX px (storeArtworkImage()). Each row records its source path in
+	 *    data.source, so a repeat reload only adds what's new. A front/cover/folder-named file
+	 *    (any case) in the album folder becomes the album's thumbnail.
+	 * 2. Only when the folder has no images at all - the Cover Art Archive images for the album's
+	 *    MusicBrainz release (fetchCoverArtArchive()), the front one as thumbnail.
+	 * 3. Neither - Plex (reloadPlexImages()).
+	 *
+	 * @return array{source:?string, matched:bool, items:list<string>}
+	 */
+	public function reloadAlbumImages(): array {
+		$folder = $this->getImageStorageRoot();
+		$local = [];
+		if( is_dir( $folder ) ) {
+			$isImage = fn( string $pName ) => in_array( strtolower( pathinfo( $pName, PATHINFO_EXTENSION ) ), FISHEYEALBUM_ARTWORK_EXTENSIONS, true );
+			$entries = scandir( $folder ) ?: [];
+			natcasesort( $entries );
+			foreach( $entries as $entry ) {
+				if( is_file( $folder.$entry ) && $isImage( $entry ) ) {
+					$local[$entry] = $folder.$entry;
+				}
+			}
+			if( is_dir( $folder.'Artwork/' ) ) {
+				$artwork = [];
+				foreach( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $folder.'Artwork/', \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+					if( $file->isFile() && $isImage( $file->getFilename() ) ) {
+						$artwork[substr( $file->getPathname(), strlen( $folder ) )] = $file->getPathname();
+					}
+				}
+				uksort( $artwork, 'strnatcasecmp' );
+				$local += $artwork;
+			}
+		}
+
+		if( $local ) {
+			$summary = [ 'source' => 'local', 'matched' => true, 'items' => [] ];
+			$existing = $this->imageSources();
+			$added = $kept = $failed = 0;
+			foreach( $local as $relative => $absolute ) {
+				if( isset( $existing[$relative] ) ) {
+					$kept++;
+					continue;
+				}
+				$this->storeArtworkXref( $absolute, 'local-'.$relative, $relative ) ? $added++ : $failed++;
+			}
+			$summary['items'][] = "$added local image(s) added".( $kept ? ", $kept already there" : '' ).( $failed ? ", $failed could not be read" : '' );
+			foreach( array_keys( $local ) as $relative ) {
+				if( !str_contains( $relative, '/' ) && preg_match( '/^(front|cover|folder)\b/i', pathinfo( $relative, PATHINFO_FILENAME ) ) ) {
+					if( $this->attachThumbnail( $local[$relative] ) ) {
+						$summary['items'][] = "thumbnail: $relative";
+					}
+					break;
+				}
+			}
+			return $summary;
+		}
+
+		$caa = $this->fetchCoverArtArchive();
+		if( $caa['items'] || $caa['matched'] ) {
+			return $caa;
+		}
+		return [ 'source' => 'plex' ] + $this->reloadPlexImages();
+	}
+
+	/**
+	 * The source path each of this album's live 'image' rows was made from (data.source), keyed
+	 * by source - so reloadAlbumImages() doesn't add the same scan twice.
+	 *
+	 * @return array<string, int>  source => xref_id
+	 */
+	private function imageSources(): array {
+		$ret = [];
+		$rows = $this->mDb->getAll(
+			"SELECT `xref_id`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL",
+			[ $this->mContentId ]
+		);
+		foreach( $rows as $row ) {
+			$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : null;
+			if( !empty( $data['source'] ) ) {
+				$ret[$data['source']] = (int)$row['xref_id'];
+			}
+		}
+		return $ret;
+	}
+
+	/**
+	 * Copy one artwork file into this album's storage branch (storeArtworkImage()) and add it as a
+	 * new 'image' row after the existing ones, remembering where it came from.
+	 *
+	 * @param string $pSourceFile  absolute path of the image to store
+	 * @param string $pNameHint    basis for the stored file name (a relative path is flattened)
+	 * @param string $pSource      what data.source records ('Artwork/Book 01.jpg', 'caa:12345')
+	 * @param array  $pExtraData   anything else worth keeping in data (Cover Art Archive types)
+	 * @return string|null  the stored file name, or null if the image couldn't be read
+	 */
+	private function storeArtworkXref( string $pSourceFile, string $pNameHint, string $pSource, array $pExtraData = [] ): ?string {
+		$ext = strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) );
+		$base = trim( preg_replace( '/[^A-Za-z0-9._-]+/', '-', str_replace( '/', ' - ', pathinfo( $pNameHint, PATHINFO_DIRNAME ) !== '.' ? pathinfo( $pNameHint, PATHINFO_DIRNAME ).'/'.pathinfo( $pNameHint, PATHINFO_FILENAME ) : pathinfo( $pNameHint, PATHINFO_FILENAME ) ) ), '-' );
+		$fileName = $base.'.'.( in_array( $ext, [ 'png', 'gif' ], true ) ? $ext : 'jpg' );
+		$branch = $this->getImageStorageBranchPath();
+		\Bitweaver\KernelTools::mkdir_p( $branch );
+		if( !self::storeArtworkImage( $pSourceFile, $branch.$fileName, FISHEYEALBUM_ARTWORK_MAX ) ) {
+			return null;
+		}
+		$nextOrder = (int)$this->mDb->getOne( "SELECT MAX(`xorder`) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) + 1;
+		$xrefHash = [ 'content_id' => $this->mContentId, 'item' => 'image', 'xkey_ext' => $fileName, 'xorder' => $nextOrder,
+			'edit' => json_encode( [ 'source' => $pSource ] + $pExtraData ) ];
+		$this->storeXref( $xrefHash );
+		return $fileName;
+	}
+
+	/**
+	 * Write an image at no more than $pMax px on its longest side - first frame only (a multi-page
+	 * TIFF scan), PNG/GIF kept as they are, anything else (TIFF, BMP, WebP, JPEG) saved as JPEG,
+	 * metadata stripped. Imagick directly rather than liberty's resize function, which keeps the
+	 * source format and copies small images untouched - a TIFF would come out as an unviewable
+	 * .jpg-named TIFF.
+	 *
+	 * @return bool
+	 */
+	private static function storeArtworkImage( string $pSourceFile, string $pDestFile, int $pMax ): bool {
+		if( !extension_loaded( 'imagick' ) ) {
+			return in_array( strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) ), [ 'jpg', 'jpeg', 'png', 'gif' ], true )
+				&& self::resizeImageFile( $pSourceFile, $pDestFile, $pMax );
+		}
+		try {
+			$im = new \Imagick();
+			$im->readImage( $pSourceFile.'[0]' );
+			if( $im->getImageWidth() > $pMax || $im->getImageHeight() > $pMax ) {
+				$im->thumbnailImage( $pMax, $pMax, true );
+			}
+			$destExt = strtolower( pathinfo( $pDestFile, PATHINFO_EXTENSION ) );
+			if( $destExt === 'jpg' ) {
+				$im->setImageBackgroundColor( 'white' );
+				$im = $im->mergeImageLayers( \Imagick::LAYERMETHOD_FLATTEN );
+				$im->setImageFormat( 'jpeg' );
+				$im->setImageCompressionQuality( 88 );
+			} else {
+				$im->setImageFormat( $destExt );
+			}
+			$im->stripImage();
+			$ok = $im->writeImage( $pDestFile );
+			$im->clear();
+			if( $ok ) {
+				@chmod( $pDestFile, 0644 );
+			}
+			return (bool)$ok;
+		} catch( \Exception $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * The Cover Art Archive images for this album's MusicBrainz release (coverartarchive.org - the
+	 * images on MusicBrainz's own cover-art page), each stored as an 'image' row (data.source =
+	 * 'caa:<image id>', plus its types: Front, Back, Booklet...), the front one also as the album's
+	 * thumbnail. Uses the same MusicBrainz contact (User-Agent) as fetchDiscogsLink().
+	 *
+	 * @return array{source:string, matched:bool, items:list<string>}
+	 */
+	public function fetchCoverArtArchive(): array {
+		global $gBitSystem;
+		$summary = [ 'source' => 'caa', 'matched' => false, 'items' => [] ];
+		$mbid = $this->getReleaseMbid();
+		if( !$mbid ) {
+			return $summary;
+		}
+		$contact = $gBitSystem->getConfig( 'fisheye_musicbrainz_contact', '' );
+		$context = stream_context_create( [ 'http' => [
+			'header'        => 'User-Agent: bitweaver-fisheyemedia/1.0'.( $contact ? " ( $contact )" : '' )."\r\nAccept: application/json\r\n",
+			'timeout'       => 20,
+			'ignore_errors' => true,
+		] ] );
+		$json = @file_get_contents( 'https://coverartarchive.org/release/'.rawurlencode( $mbid ), false, $context );
+		$images = $json ? ( json_decode( $json, true )['images'] ?? [] ) : [];
+		if( !$images ) {
+			return $summary;
+		}
+		$summary['matched'] = true;
+		$existing = $this->imageSources();
+		$added = 0;
+		foreach( array_slice( $images, 0, 12 ) as $image ) {
+			$source = 'caa:'.( $image['id'] ?? md5( $image['image'] ?? '' ) );
+			if( isset( $existing[$source] ) ) {
+				continue;
+			}
+			// 1200px where the archive has it, else the full original (scaled to FISHEYEALBUM_ARTWORK_MAX
+			// on storing) - older releases only offer 250/500px thumbnails, too small to read a booklet.
+			$body = false;
+			foreach( array_filter( [ $image['thumbnails']['1200'] ?? null, $image['image'] ?? null, $image['thumbnails']['large'] ?? null ] ) as $url ) {
+				if( $body = @file_get_contents( $url, false, $context ) ) {
+					break;
+				}
+			}
+			if( !$body ) {
+				continue;
+			}
+			$tmp = tempnam( sys_get_temp_dir(), 'caa_' );
+			file_put_contents( $tmp, $body );
+			$types = (array)( $image['types'] ?? [] );
+			$fileName = $this->storeArtworkXref( $tmp, 'caa-'.implode( '-', $types ?: [ 'image' ] ).'-'.( $image['id'] ?? $added ), $source, [ 'types' => $types ] );
+			if( $fileName ) {
+				$added++;
+				if( !empty( $image['front'] ) && $this->attachThumbnail( $tmp ) ) {
+					$summary['items'][] = 'thumbnail: Cover Art Archive front';
+				}
+			}
+			@unlink( $tmp );
+		}
+		array_unshift( $summary['items'], "$added image(s) from the Cover Art Archive" );
+		return $summary;
+	}
+
+	/**
+	 * This album's MusicBrainz release id (its 'mbid' xref), or null.
+	 *
+	 * @return string|null
+	 */
+	public function getReleaseMbid(): ?string {
+		$mbid = $this->mDb->getOne(
+			"SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'mbid' AND `end_date` IS NULL",
+			[ $this->mContentId ]
+		);
+		return $mbid ? trim( $mbid ) : null;
 	}
 
 	/**

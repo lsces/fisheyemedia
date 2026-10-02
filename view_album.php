@@ -117,6 +117,11 @@ if( $gContent->mXrefInfo ) {
 	}
 }
 usort( $tracks, fn( $a, $b ) => $a['xorder'] <=> $b['xorder'] );
+// The release's own cover-art page on MusicBrainz (the Cover Art Archive images Reload Images can
+// fetch), next to the album's other external links.
+if( $releaseMbid = $gContent->getReleaseMbid() ) {
+	$externalLinks[] = [ 'title' => KernelTools::tra( 'MusicBrainz cover art' ), 'url' => 'https://musicbrainz.org/release/'.rawurlencode( $releaseMbid ).'/cover-art' ];
+}
 // A several-artist track: each artist named and linked separately - the first from the track row
 // itself (its own contact link), the rest from their track_artist rows.
 foreach( $tracks as &$track ) {

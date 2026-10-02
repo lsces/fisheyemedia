@@ -43,17 +43,14 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	}
 	$gContent->load();
 } elseif( !empty( $_REQUEST['fReloadImages'] ) ) {
-	$plexResult = $gContent->reloadPlexImages();
-	// reloadPlexImages() falls back to the album's own disk/embedded cover when Plex has no match
-	// at all (see its own docblock) - label/empty-message reflect whichever actually happened,
-	// rather than always crediting (or blaming) Plex for a result that may not involve it.
-	if( $plexResult['matched'] ) {
-		$plexResultLabel = KernelTools::tra( 'Images reloaded from Plex' );
-	} elseif( !empty( $plexResult['items'] ) ) {
-		$plexResultLabel = KernelTools::tra( 'Cover reloaded from disk' );
+	// Local artwork first, then the Cover Art Archive, then Plex - see reloadAlbumImages().
+	$plexResult = $gContent->reloadAlbumImages();
+	$sourceLabels = [ 'local' => 'Images reloaded from the album folder', 'caa' => 'Images from the Cover Art Archive', 'plex' => 'Images reloaded from Plex' ];
+	if( !empty( $plexResult['items'] ) ) {
+		$plexResultLabel = KernelTools::tra( $sourceLabels[$plexResult['source']] ?? 'Reload Images' );
 	} else {
 		$plexResultLabel = KernelTools::tra( 'Reload Images' );
-		$plexResultEmptyLabel = KernelTools::tra( 'No matching Plex entry, and no cover.jpg/embedded cover art found on disk either.' );
+		$plexResultEmptyLabel = KernelTools::tra( 'No artwork in the album folder, nothing on the Cover Art Archive, and no Plex match.' );
 	}
 } elseif( !empty( $_REQUEST['fFetchDiscogs'] ) ) {
 	// Was its own separate batch page (fetch_discogs.php) scanning a whole gallery at once -
