@@ -4,7 +4,7 @@
  * (e.g. Music/André Rieu/Videos/) - a concert DVD or music video sitting alongside that artist's
  * albums, registered as a real FisheyeFilm (same content type normal Films use) but linked into a
  * small "Videos" gallery nested under the artist's own, rather than the top-level Films gallery -
- * the plain "Videos" gallery flagged as a known limitation in MANUAL.md ("a one-off single-video
+ * the plain "Videos" gallery flagged as a known limitation in DEVELOPER.md ("a one-off single-video
  * show... faking an S01E01-style episode number just to fit the model - a plain Videos gallery...
  * would fit these better").
  *

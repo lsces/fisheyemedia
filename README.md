@@ -47,21 +47,19 @@ once real local metadata/artwork exists for everything it's fed.
 - **Direct playback links** for episode video files with real HTTP Range support, rather than
   requiring a separate media player for the underlying files
 
-See [`MANUAL.md`](MANUAL.md) for the full current architecture — the content-type hierarchy, how
-storage roots and Plex matching work, and the complete list of what isn't built yet.
+See [`MANUAL.md`](MANUAL.md) for how to use it - setting up, laying out the library on disk,
+loading films, TV shows and music - and [`DEVELOPER.md`](DEVELOPER.md) for how it works inside
+(content types, storage roots, Plex matching, data shapes) and what isn't built yet.
 
 ## What's planned
 
-- Music/album/track cataloguing, mirroring the film/TV build-out (the content type is registered
-  but has no view/edit pages or Plex integration yet)
-- A "Show"/"Artist" browsing level that isn't itself a stored record — computed live from its
-  seasons/albums, rather than the real gallery object a show currently has to be
-- A fully-unattended "scan the whole library and register anything new" importer — today's
-  discover-and-import pages are pick-a-batch, capped, not a walk-the-whole-library tool
-- Managing the metadata vocabulary (which fields exist per content type) through a bitweaver admin
-  UI, rather than a hand-authored scheme file applied once
-- A plain "Videos" gallery for one-off single-episode shows, and a combined show/season page for
-  the common case of a show with only one season
+- A "Show"/"Artist" browsing level that isn't itself a stored record - computed live from its
+  seasons/albums
+- A fully-unattended "scan the whole library and register anything new" importer - today's
+  loaders are pick-a-batch
+- Deleting a music gallery together with its albums (today the albums are left unlinked)
+- An album's video disc linked to the album as a film gallery
+- Film/TV cast and crew linked to contacts, the way music credits already are
 
 ## Requirements
 
@@ -76,5 +74,5 @@ storage roots and Plex matching work, and the complete list of what isn't built 
   until a library's been backfilled; not needed at all once metadata/artwork already exists
   locally for everything you care about
 
-Since this package isn't through a stable install/upgrade cycle yet, see `MANUAL.md` in this repo
-for the current schema-deployment approach if you're installing it fresh.
+Since this package isn't through a stable install/upgrade cycle yet, see `DEVELOPER.md` in this
+repo for the current schema-deployment approach if you're installing it fresh.

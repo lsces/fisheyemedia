@@ -2,7 +2,7 @@
 /**
  * One-off library tidy: find video files still encoded as mpeg2video (old broadcast/DVD-era
  * rips - bulky and, along with everything else that doesn't play inline, browsers reject even a
- * remux of .mkv itself, not just the codec inside - see MANUAL.md's Video playback section) and
+ * remux of .mkv itself, not just the codec inside - see DEVELOPER.md's Video playback section) and
  * re-encode them to h264/aac in an .mp4 container, in place, ahead of ever loading them into
  * fisheye at all. Deliberately NOT a live/runtime transcode-on-demand feature - a real transcode is
  * genuinely slow (minutes per file), and every file only needs doing once, so a batch pass ahead
@@ -21,7 +21,7 @@
  *
  * Skips any file already referenced by a real 'episode' xref or a FisheyeFilm's own attachment -
  * this tool is scoped to pre-load tidying, not touching something already live (that's a
- * separate, not-yet-built concern - see MANUAL.md).
+ * separate, not-yet-built concern - see DEVELOPER.md).
  *
  * Not invoked directly - like fisheye-thumbnailer.php (/etc/webstack/site-config/common/), this
  * package file's own __FILE__/dirname(__FILE__) resolves through the _bw5 symlink chain back to
