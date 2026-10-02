@@ -1390,7 +1390,8 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				}
 				if( self::folderHasTracks( $pDir.$entry.'/' ) ) {
 					$albumFolders[] = $pDir.$entry.'/';
-				} elseif( $pDepth < 1 ) {
+				} elseif( $pDepth < 2 ) {
+					// group folder, and a collection inside one (Bach 2000/Vol 1/<disc albums>)
 					$collect( $pDir.$entry.'/', $pDepth + 1 );
 				}
 			}
@@ -1536,22 +1537,10 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * @return bool
 	 */
 	public static function folderHasTracks( string $pAbsoluteFolder ): bool {
+		// Tracks directly in the folder only - an album holds its tracks itself (a multi-disc one
+		// uses d-tt numbering), never CD1/CD2 subfolders.
 		foreach( scandir( $pAbsoluteFolder ) ?: [] as $entry ) {
-			if( $entry === '.' || $entry === '..' ) {
-				continue;
-			}
-			$entryPath = $pAbsoluteFolder.$entry;
-			if( is_dir( $entryPath ) ) {
-				if( !preg_match( FISHEYEALBUM_DISC_FOLDER_PATTERN, $entry ) ) {
-					continue;
-				}
-				foreach( scandir( $entryPath ) ?: [] as $subEntry ) {
-					if( is_file( $entryPath.'/'.$subEntry )
-						&& in_array( strtolower( pathinfo( $subEntry, PATHINFO_EXTENSION ) ), FISHEYEALBUM_TRACK_EXTENSIONS, true ) ) {
-						return true;
-					}
-				}
-			} elseif( is_file( $entryPath )
+			if( is_file( $pAbsoluteFolder.$entry )
 				&& in_array( strtolower( pathinfo( $entry, PATHINFO_EXTENSION ) ), FISHEYEALBUM_TRACK_EXTENSIONS, true ) ) {
 				return true;
 			}
@@ -1560,19 +1549,27 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
-	 * Whether a folder is really a box set of distinct recordings rather than one multi-disc
-	 * release - a real CDxx/Discxx subfolder still sitting directly inside it. Deliberately not a
-	 * count threshold (">1 disc") - every genuine single-work multi-disc release already got its
-	 * CD1/CD2 layer flattened away by hand this same session (tracks carrying their own real DISC
-	 * tag need no folder-level grouping at all), so any CDxx folder still surviving now means it
-	 * was kept on purpose, however many there are.
+	 * Whether a folder is a container - no tracks of its own, but holding at least one album (a
+	 * folder with tracks directly in it) or another container. Shape only, no names: what it is
+	 * depends on where it sits. At the top of an artist/composer folder it's a group - one strip of
+	 * the artist page (isGroupFolder()); inside a group it's a collection - a box set or a volume of
+	 * one (Bach 2000 Vol 1...), one tile with its own nested gallery whose albums load from its own
+	 * page (createSubGallery()).
 	 *
-	 * @param string $pAbsoluteFolder
+	 * @param string $pAbsoluteFolder  trailing slash optional
+	 * @param int    $pDepth           internal - how many container levels may still be looked through
 	 * @return bool
 	 */
-	public static function isBoxSetFolder( string $pAbsoluteFolder ): bool {
-		foreach( scandir( $pAbsoluteFolder ) ?: [] as $entry ) {
-			if( preg_match( FISHEYEALBUM_DISC_FOLDER_PATTERN, $entry ) && is_dir( $pAbsoluteFolder.$entry ) ) {
+	public static function isBoxSetFolder( string $pAbsoluteFolder, int $pDepth = 2 ): bool {
+		$folder = rtrim( $pAbsoluteFolder, '/' ).'/';
+		if( !is_dir( $folder ) || self::folderHasTracks( $folder ) ) {
+			return false;
+		}
+		foreach( scandir( $folder ) ?: [] as $entry ) {
+			if( str_starts_with( $entry, '.' ) || $entry === FISHEYEMEDIA_VIDEOS_GALLERY_TITLE || !is_dir( $folder.$entry ) ) {
+				continue;
+			}
+			if( self::folderHasTracks( $folder.$entry.'/' ) || ( $pDepth > 1 && self::isBoxSetFolder( $folder.$entry.'/', $pDepth - 1 ) ) ) {
 				return true;
 			}
 		}
@@ -1582,11 +1579,10 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	/**
 	 * Whether a folder directly inside an artist/composer folder is a group folder - one strip of
 	 * the artist page, titled with the folder's own name (Compilation, Studio, Baroque, Modern...).
-	 * Recognised by shape, not name: no tracks of its own, not a box set (its subfolders aren't
-	 * CDxx/Vol-numbered discs), and holding at least one real album or box set. Artwork/Scans-style
-	 * extras and the Videos folder hold no albums, so never qualify. Each album or box set inside
-	 * one is a tile in that strip; anything sitting directly in the artist folder goes in the first,
-	 * unlabelled strip (FisheyeMediaGallery::getCategorizedItems()).
+	 * Recognised by shape, not name: a container (isBoxSetFolder()) at the top of the artist folder.
+	 * Artwork/Scans-style extras and the Videos folder hold no albums, so never qualify. Each album
+	 * or collection inside one is a tile in that strip; anything sitting directly in the artist
+	 * folder goes in the first, unlabelled strip (FisheyeMediaGallery::getCategorizedItems()).
 	 *
 	 * @param string $pAbsoluteFolder  the folder, trailing slash optional
 	 * @return bool
@@ -1597,16 +1593,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		if( str_starts_with( $name, '.' ) || $name === FISHEYEMEDIA_VIDEOS_GALLERY_TITLE || !is_dir( $folder ) ) {
 			return false;
 		}
-		if( self::folderHasTracks( $folder ) || self::isBoxSetFolder( $folder ) ) {
-			return false;
-		}
-		foreach( scandir( $folder ) ?: [] as $entry ) {
-			if( !str_starts_with( $entry, '.' ) && is_dir( $folder.$entry )
-				&& ( self::folderHasTracks( $folder.$entry.'/' ) || self::isBoxSetFolder( $folder.$entry.'/' ) ) ) {
-				return true;
-			}
-		}
-		return false;
+		return self::isBoxSetFolder( $folder );
 	}
 
 	/**

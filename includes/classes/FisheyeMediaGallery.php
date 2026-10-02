@@ -187,7 +187,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 		}
 
 		$checkFolder = function( string $pFolder, string $pTitle ): bool {
-			if( str_starts_with( basename( $pFolder ), '.' ) || !FisheyeAlbum::folderHasTracks( $pFolder ) ) {
+			if( str_starts_with( basename( $pFolder ), '.' ) || ( !FisheyeAlbum::folderHasTracks( $pFolder ) && !FisheyeAlbum::isBoxSetFolder( $pFolder ) ) ) {
 				return false;
 			}
 			return !self::isFolderLoaded( $pFolder, $pTitle, (int)$this->mContentId );

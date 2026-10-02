@@ -154,8 +154,8 @@ if( !empty( $_REQUEST['fImportAlbums'] ) ) {
 // LOAD_ALBUM_LIMIT not yet loaded, and summarises the whole folder in counts.
 $scan = [];
 $scanFolder = function( string $pAbsolute, string $pEntry, string $pRelative, string $pGroup ) use ( &$scan, $gallery ) {
-	if( !FisheyeAlbum::folderHasTracks( $pAbsolute ) ) {
-		return; // an Artwork/Videos/scans-style extras folder, not a real album
+	if( !FisheyeAlbum::folderHasTracks( $pAbsolute ) && !FisheyeAlbum::isBoxSetFolder( $pAbsolute ) ) {
+		return; // an Artwork/Videos/scans-style extras folder - neither an album nor a collection
 	}
 	$scan[] = [
 		'relative' => $pRelative,
