@@ -28,11 +28,14 @@
 
 		{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='body' serviceHash=$gContent->mInfo}
 
+		<style>
+			.music-name-tile { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; padding: 8px; background: rgba(128,128,128,.25); border: 1px solid rgba(128,128,128,.4); font-weight: bold; text-align: center; overflow: hidden; }
+		</style>
 		{if $gContent->getTitle() eq 'Music'}
 			{* Top-level pool: a plain grid of artist/composer galleries, same rendering as
 			   fixed_grid's own template - see that file for the shared shape. *}
 			{assign var="cols" value=$gContent->mInfo.cols_per_page|default:4}
-			{assign var="tdWidth" value="`100/$cols`"}
+			{assign var="tdWidth" value=100/$cols}
 			<table class="thumbnailblock" style="width:100%">
 			{counter assign="imageCount" start="0" print=false}
 			{foreach from=$gContent->mItems item=galItem key=itemContentId}
@@ -42,8 +45,14 @@
 
 				<td style="width:{$tdWidth}%; vertical-align:top; text-align:center;"><!-- Begin Image Cell -->
 					{box class="box `$galItem->mInfo.content_type_guid`" style="margin-left:0;"}
+						{assign var="tileThumb" value=$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}
 						<a href="{$galItem->getDisplayUrl()|escape}">
-							<img class="thumb img-responsive center-block" src="{$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
+							{if $tileThumb && $tileThumb neq $smarty.const.BIT_ROOT_URI}
+								<img class="thumb img-responsive center-block" src="{$tileThumb}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
+							{else}
+								{* No artwork anywhere in it - a name tile the size of a cover rather than a broken image *}
+								<div class="music-name-tile"><span>{$galItem->mInfo.title|escape}</span></div>
+							{/if}
 						</a>
 						{if $gBitSystem->isFeatureActive('fisheye_gallery_list_image_titles')}
 							<h4>{$galItem->mInfo.title|escape}</h4>
@@ -85,8 +94,14 @@
 				{foreach from=$stripItems item=galItem key=itemContentId}
 					<div class="music-grid-item">
 						{box class="box `$galItem->mInfo.content_type_guid`" style="margin-left:0;"}
+							{assign var="tileThumb" value=$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}
 							<a href="{$galItem->getDisplayUrl()|escape}">
-								<img class="thumb img-responsive center-block" src="{$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
+								{if $tileThumb && $tileThumb neq $smarty.const.BIT_ROOT_URI}
+									<img class="thumb img-responsive center-block" src="{$tileThumb}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
+								{else}
+									{* No artwork anywhere in it - a name tile the size of a cover rather than a broken image *}
+									<div class="music-name-tile"><span>{$galItem->mInfo.title|escape}</span></div>
+								{/if}
 							</a>
 							{if $gBitSystem->isFeatureActive('fisheye_gallery_list_image_titles')}
 								<h4>{$galItem->mInfo.title|escape}</h4>
