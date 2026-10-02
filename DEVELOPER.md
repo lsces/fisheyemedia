@@ -220,22 +220,37 @@ filename, resolved via the owning content object's own `getExtraImagePath()` —
 overrides this to resolve against its own `storage/attachments/<branch>/` (the same home every
 other attachment/derived file already uses, always web-writable by construction, unlike the
 external media library tree `getImageStorageRoot()` points at); `xorder` gives display order.
-Rendered via the shared, collapsible `images_strip_inc.tpl` (starts closed) — a stopgap
+Rendered on the view pages via the shared, collapsible `images_grid_inc.tpl` (starts closed) — a stopgap
 presentation layer, expected to eventually be replaced by real cast/crew imagery once that data
 exists.
 
-**The Images tab has its own group-tab override**, `templates/xref/view_images_group.tpl` (Film/
-Season/Program all share the one file — identical to liberty's generic `list_xref.tpl` except the
-Add link), which replaces the generic add-a-bare-row-then-edit-it flow with a real one-step upload
-(`add_image_xref.php` + `FisheyeMediaTrait::addImageXrefFile()`) and, where supported, a "Grab
-Thumbnail from Video" action (see below). **This only fires when `liberty_xref_group.template =
-'images'` for the `images` x_group row on each of the three content types** — that's a per-site DB
-config value (same table the Xref Groups admin page itself writes to directly, no history/schema-
-file tracking), not something schema/install files set, so a fresh install or another server needs
-it applied by hand:
+**Extra images are this package's feature, end to end** - fisheye itself has none of it:
+
+- **Methods** on `FisheyeMediaTrait` (so every media class has them): `getExtraImagePath()` (where
+  a content object's extra images live - each type overrides it), `supportsAddImage()` (true when
+  that path resolves), `getAddImageUrl()`, `addImageXrefFile()` (store an upload as a new `image`
+  row) and `canGrabVideoFrame()` (false by default; Season/Program switch it on).
+- **Pages**: `view_extra_image.php` streams one `image` row's file, or an `episode`/`featurette`
+  row's thumbnail, by `xref_id` only, behind the owning content's own view permission;
+  `add_image_xref.php` is the upload page the view pages' own **Add Image** links use.
+- **Templates** in `templates/xref/`: `view_images_group.tpl` (the Images tab - liberty's generic
+  table plus a **Grab Thumbnail from Video** action), `add_images_group.tpl` (the tab's **Add**
+  goes through liberty's `add_xref.php`, which picks this one-step upload form up),
+  `view_image_item.tpl`/`edit_image_item.tpl` (the picture itself, **Replace Image**, **Set as
+  Thumbnail** - handled by liberty's `edit_xref.php` calling the content type's
+  `promoteImageToThumbnail()`), and `add_image_item.tpl` (used by `add_image_xref.php`).
+
+**They have to live here.** Liberty resolves a content type's xref group/item templates only in its
+own package (`handler_package` - `fisheyemedia` for every media type), so templates left in fisheye
+are silently skipped and the tab falls back to the plain generic table.
+
+**The group override only fires when `liberty_xref_group.template = 'images'` for the `images`
+x_group row on each media content type** - a per-site DB value (the same table the Xref Groups
+admin page writes directly), not something schema/install files set, so a fresh install or another
+server needs it applied by hand:
 ```sql
 UPDATE liberty_xref_group SET template='images'
-WHERE x_group='images' AND content_type_guid IN ('fisheyefilm','fisheyeseason','fisheyeprogram');
+WHERE x_group='images' AND content_type_guid IN ('fisheyefilm','fisheyeseason','fisheyeprogram','fisheyealbum');
 ```
 **Templates here can't call a bare PHP function inside `{if}`** (`{if method_exists(...)}` fails as
 "unknown modifier" on this Smarty setup) — only a real method call on an object works. Capability
@@ -487,10 +502,11 @@ generically if they exist.
 
 **`FisheyeMediaTrait::addImageXrefFile( $pTmpPath, $pOriginalName )` is a related but separate
 mechanism** — not one of `edit_xref.php`'s three hooks (it *creates* a new row rather than acting
-on an existing one), called instead from the dedicated `add_image_xref.php` page the Images tab's
-own group-tab override links to. Resolves its destination via `getExtraImagePath('')` (returns
-empty for a content type with no image storage location), and by `$gContent->supportsAddImage()`
-for the template-visible check (see above).
+on an existing one), called instead from this package's `add_image_xref.php`, the page the
+view pages' own Add Image links go to (the Images tab's own Add uses the same method through liberty's
+`add_xref.php`). Resolves its destination via `getExtraImagePath('')` (returns empty for a content
+type with no image storage location), and by `$gContent->supportsAddImage()` for the
+template-visible check (see above).
 
 ## Video playback
 
