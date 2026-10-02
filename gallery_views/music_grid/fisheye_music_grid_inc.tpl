@@ -29,6 +29,8 @@
 		{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='body' serviceHash=$gContent->mInfo}
 
 		<style>
+			/* every tile the same square, so names line up along a row; non-square art shown whole */
+			.music-cover { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; }
 			.music-name-tile { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; padding: 8px; background: rgba(128,128,128,.25); border: 1px solid rgba(128,128,128,.4); font-weight: bold; text-align: center; overflow: hidden; }
 		</style>
 		{if $gContent->getTitle() eq 'Music'}
@@ -43,12 +45,12 @@
 					<tr><!-- Begin Image Row -->
 				{/if}
 
-				<td style="width:{$tdWidth}%; vertical-align:top; text-align:center;"><!-- Begin Image Cell -->
+				<td style="width:{$tdWidth}%; vertical-align:top; text-align:center; padding:6px;"><!-- Begin Image Cell -->
 					{box class="box `$galItem->mInfo.content_type_guid`" style="margin-left:0;"}
 						{assign var="tileThumb" value=$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}
 						<a href="{$galItem->getDisplayUrl()|escape}">
 							{if $tileThumb && $tileThumb neq $smarty.const.BIT_ROOT_URI}
-								<img class="thumb img-responsive center-block" src="{$tileThumb}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
+								<img class="thumb img-responsive center-block music-cover" src="{$tileThumb}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
 							{else}
 								{* No artwork anywhere in it - a name tile the size of a cover rather than a broken image *}
 								<div class="music-name-tile"><span>{$galItem->mInfo.title|escape}</span></div>
@@ -97,7 +99,7 @@
 							{assign var="tileThumb" value=$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}
 							<a href="{$galItem->getDisplayUrl()|escape}">
 								{if $tileThumb && $tileThumb neq $smarty.const.BIT_ROOT_URI}
-									<img class="thumb img-responsive center-block" src="{$tileThumb}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
+									<img class="thumb img-responsive center-block music-cover" src="{$tileThumb}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
 								{else}
 									{* No artwork anywhere in it - a name tile the size of a cover rather than a broken image *}
 									<div class="music-name-tile"><span>{$galItem->mInfo.title|escape}</span></div>
