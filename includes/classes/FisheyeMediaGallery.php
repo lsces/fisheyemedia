@@ -99,6 +99,35 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * Whether one candidate folder inside an artist/composer gallery's own folder is already loaded:
+	 * an album registered under that title, or - for a box set folder (FisheyeAlbum::isBoxSetFolder())
+	 * - its own nested gallery already existing inside this parent. A box set never becomes an album
+	 * itself, so the album test alone kept offering it again; its discs are loaded from its own page.
+	 * Shared by load_album.php's candidate list and hasUnloadedAlbumCandidates().
+	 *
+	 * @param string $pAbsoluteFolder  the candidate folder, trailing slash
+	 * @param string $pTitle           its folder name (= album or box set gallery title)
+	 * @param int    $pParentContentId content_id of the artist/composer gallery being loaded
+	 * @return bool
+	 */
+	public static function isFolderLoaded( string $pAbsoluteFolder, string $pTitle, int $pParentContentId ): bool {
+		global $gBitDb;
+		if( FisheyeAlbum::isBoxSetFolder( $pAbsoluteFolder ) ) {
+			return (bool)$gBitDb->getOne(
+				"SELECT lc.content_id FROM `".BIT_DB_PREFIX."liberty_content` lc
+				 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery` fg ON fg.content_id = lc.content_id
+				 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` map ON map.item_content_id = lc.content_id
+				 WHERE lc.title = ? AND map.gallery_content_id = ?",
+				[ $pTitle, $pParentContentId ]
+			);
+		}
+		return (bool)$gBitDb->getOne(
+			"SELECT content_id FROM `".BIT_DB_PREFIX."liberty_content` WHERE content_type_guid = 'fisheyealbum' AND title = ?",
+			[ $pTitle ]
+		);
+	}
+
+	/**
 	 * A music gallery's own folder, relative to the storage root ('Music/.../', trailing slash), or
 	 * null if none is found. Shared by load_album.php, load_video.php and the hasUnloaded*()
 	 * checks below. Tried in order: Music/<title>/ (an artist/composer gallery); Music/<parent>/
@@ -157,14 +186,11 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			return false;
 		}
 
-		$checkFolder = function( string $pFolder, string $pTitle ) use ( $gBitDb ): bool {
+		$checkFolder = function( string $pFolder, string $pTitle ): bool {
 			if( str_starts_with( basename( $pFolder ), '.' ) || !FisheyeAlbum::folderHasTracks( $pFolder ) ) {
 				return false;
 			}
-			return !$gBitDb->getOne(
-				"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyealbum' AND title = ?",
-				[ $pTitle ]
-			);
+			return !self::isFolderLoaded( $pFolder, $pTitle, (int)$this->mContentId );
 		};
 		foreach( scandir( $artistDir ) ?: [] as $entry ) {
 			if( str_starts_with( $entry, '.' ) || !is_dir( $artistDir.$entry ) ) {
