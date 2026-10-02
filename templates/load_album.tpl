@@ -50,6 +50,9 @@
 			{/if}
 		{/if}
 
+		{if $backUrl}
+			<p><a class="btn btn-default btn-sm" href="{$backUrl|escape}">&laquo; {tr}Back to{/tr} {$backTitle|escape}</a></p>
+		{/if}
 		{if $groups}
 			<p>{tr}Process{/tr}:&nbsp;
 				{if $groupParam eq ''}<strong>{tr}Everything{/tr}</strong>{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php?gallery_id={$galleryIdParam}">{tr}Everything{/tr}</a>{/if}
@@ -61,7 +64,7 @@
 			</p>
 		{/if}
 		{if $artistDir}
-			<p>{$scanCounts.album} {tr}album folders{/tr} ({$scanCounts.album_loaded} {tr}loaded{/tr}, {$scanCounts.album-$scanCounts.album_loaded} {tr}still to load{/tr}){if $scanCounts.collection}, {$scanCounts.collection} {tr}collections{/tr} ({$scanCounts.collection_loaded} {tr}created{/tr}, {$scanCounts.collection-$scanCounts.collection_loaded} {tr}still to create{/tr}){/if}.</p>
+			<p>{$scanCounts.album} {tr}album folders{/tr} ({$scanCounts.album_loaded} {tr}loaded{/tr}, {$scanCounts.album-$scanCounts.album_loaded} {tr}still to load{/tr}){if $scanCounts.collection}, {$scanCounts.collection} {tr}collections{/tr} ({$scanCounts.collection_loaded} {tr}done{/tr}, {$scanCounts.collection-$scanCounts.collection_loaded} {tr}still to do{/tr}){/if}.</p>
 		{/if}
 		{if $candidates}
 			{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php"}
@@ -71,19 +74,35 @@
 				<div class="form-group">
 					<label><input type="checkbox" name="fetch_discogs" value="1" checked="checked" /> {tr}Also fetch a linked Discogs release per album, if one exists on MusicBrainz (slower){/tr}</label>
 				</div>
-				<p><label><input type="checkbox" id="loadAlbumToggleAll" checked="checked" /> <strong>{tr}Select All{/tr}</strong></label></p>
-				<input type="submit" class="btn btn-primary" name="fImportAlbums" value="{tr}Load Selected Albums{/tr}" />
-				<ul>
-					{foreach from=$candidates item=album}
-						<li>
-							<label>
-								<input type="checkbox" class="loadAlbumCheckbox" name="selected[]" value="{$album|escape}" checked="checked" />
-								{$album|escape}
-							</label>
-						</li>
+				<ul class="list-unstyled">
+					{foreach from=$candidates item=candidate}
+						{if $candidate.kind eq 'collection'}
+							<li style="margin-bottom:4px;">
+								<button type="submit" class="btn btn-default btn-xs" name="process_collection" value="{$candidate.relative|escape}">{tr}Process{/tr}</button>
+								&nbsp;{$candidate.relative|escape} <span class="text-muted">({tr}collection{/tr})</span>
+							</li>
+						{/if}
 					{/foreach}
 				</ul>
-				<input type="submit" class="btn btn-primary" name="fImportAlbums" value="{tr}Load Selected Albums{/tr}" />
+				{assign var="albumCandidates" value=0}
+				{foreach from=$candidates item=candidate}{if $candidate.kind eq 'album'}{assign var="albumCandidates" value=$albumCandidates+1}{/if}{/foreach}
+				{if $albumCandidates}
+					<p><label><input type="checkbox" id="loadAlbumToggleAll" checked="checked" /> <strong>{tr}Select All{/tr}</strong></label></p>
+					<input type="submit" class="btn btn-primary" name="fImportAlbums" value="{tr}Load Selected Albums{/tr}" />
+					<ul>
+						{foreach from=$candidates item=candidate}
+							{if $candidate.kind eq 'album'}
+								<li>
+									<label>
+										<input type="checkbox" class="loadAlbumCheckbox" name="selected[]" value="{$candidate.relative|escape}" checked="checked" />
+										{$candidate.relative|escape}
+									</label>
+								</li>
+							{/if}
+						{/foreach}
+					</ul>
+					<input type="submit" class="btn btn-primary" name="fImportAlbums" value="{tr}Load Selected Albums{/tr}" />
+				{/if}
 				<script>
 					$('#loadAlbumToggleAll').on('change', function() {
 						$('.loadAlbumCheckbox').prop('checked', $(this).is(':checked'));

@@ -85,7 +85,33 @@ if( $artistRelative = FisheyeMediaGallery::resolveMusicFolder( $gallery ) ) {
 	$artistDir = $root.$artistRelative;
 }
 
-$importResult = null;
+// A collection's own page (Music/<artist>/[<group>/]<collection>/) leads back up to its artist's
+// load_album, with the strip it sits in already picked - the one-at-a-time Process flow returns
+// there once the collection is done.
+$backUrl = null;
+$backTitle = null;
+$folderSegments = $artistRelative ? explode( '/', trim( $artistRelative, '/' ) ) : [];
+if( count( $folderSegments ) >= 3 && ( $parentGalleries = $gallery->getParentGalleries() ) ) {
+	$backGroup = count( $folderSegments ) >= 4 ? $folderSegments[count( $folderSegments ) - 2] : '';
+	$backUrl = FISHEYEMEDIA_PKG_URL.'load_album.php?gallery_id='.(int)key( $parentGalleries )
+		.( $backGroup !== '' ? '&group='.urlencode( $backGroup ) : '' );
+	$backTitle = current( $parentGalleries )['title'].( $backGroup !== '' ? ' › '.$backGroup : '' );
+}
+
+// Process one collection: create (or reuse) its nested gallery and go straight to its own
+// load_album - one level down - to load its albums.
+if( !empty( $_REQUEST['process_collection'] ) && $artistDir ) {
+	$collectionFolder = htmlspecialchars_decode( trim( (string)$_REQUEST['process_collection'] ), ENT_NOQUOTES );
+	if( FisheyeAlbum::isBoxSetFolder( $artistDir.$collectionFolder.'/' ) ) {
+		$row = FisheyeAlbum::createSubGallery( $artistRelative.$collectionFolder, (int)$gallery->mContentId );
+		if( !empty( $row['gallery_id'] ) ) {
+			KernelTools::bit_redirect( FISHEYEMEDIA_PKG_URL.'load_album.php?gallery_id='.(int)$row['gallery_id'] );
+		}
+		$importResult = [ 'created' => [], 'subgalleries' => [], 'errors' => [ [ 'folder' => $collectionFolder, 'error' => $row['error'] ?? 'could not create its gallery' ] ] ];
+	}
+}
+
+$importResult = $importResult ?? null;
 if( !empty( $_REQUEST['fImportAlbums'] ) ) {
 	$fetchDiscogs = !empty( $_REQUEST['fetch_discogs'] );
 	$importResult = [ 'created' => [], 'subgalleries' => [], 'errors' => [] ];
@@ -210,9 +236,17 @@ foreach( $scan as $row ) {
 	if( $row['loaded'] ) {
 		$scanCounts[$row['kind'].'_loaded']++;
 	} elseif( count( $candidates ) < LOAD_ALBUM_LIMIT ) {
-		$candidates[] = $row['relative'];
+		$candidates[] = [ 'relative' => $row['relative'], 'kind' => $row['kind'] ];
 	}
 }
+// Inside a collection: a batch that leaves nothing more to load (and nothing failed) returns
+// straight to the level above, ready to Process the next collection.
+if( $backUrl && !empty( $importResult['created'] ) && empty( $importResult['errors'] )
+	&& $scanCounts['album'] === $scanCounts['album_loaded'] && $scanCounts['collection'] === $scanCounts['collection_loaded'] ) {
+	KernelTools::bit_redirect( $backUrl );
+}
+$gBitSmarty->assign( 'backUrl', $backUrl );
+$gBitSmarty->assign( 'backTitle', $backTitle );
 // Only worth offering when there's more than one strip to choose between.
 $gBitSmarty->assign( 'groups', count( $groups ) > 1 ? $groups : [] );
 $gBitSmarty->assign( 'groupParam', $groupParam );
