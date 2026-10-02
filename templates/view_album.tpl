@@ -63,7 +63,7 @@
 										<tr class="fisheye-track-row" data-xref-id="{$track.xref_id}">
 											<td>{$track.trackNum|default:$smarty.foreach.trackRow.iteration}</td>
 											<td>{$track.title|escape}</td>
-											<td>{if $track.artist}{if $track.artistUrl}<a href="{$track.artistUrl|escape}">{$track.artist|escape}</a>{else}{$track.artist|escape}{/if}{/if}</td>
+											<td>{if $track.artists}{foreach from=$track.artists item=ta name=tas}{if !$smarty.foreach.tas.first}, {/if}{if $ta.url}<a href="{$ta.url|escape}">{$ta.name|escape}</a>{else}{$ta.name|escape}{/if}{/foreach}{elseif $track.artist}{if $track.artistUrl}<a href="{$track.artistUrl|escape}">{$track.artist|escape}</a>{else}{$track.artist|escape}{/if}{/if}</td>
 											<td>{if $track.durationMs}{($track.durationMs/1000)|display_duration}{/if}</td>
 											<td><button type="button" class="btn btn-default btn-sm track-play-btn" onclick="return fisheyeToggleTrack(this);">▶ {tr}Play{/tr}</button></td>
 										</tr>

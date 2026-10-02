@@ -1238,6 +1238,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		// only worth including once there's genuinely more than one disc to distinguish.
 		$isMultiDisc = count( array_unique( array_column( $pTrackFiles, 'disc' ) ) ) > 1;
 		$wantedTracks = [];
+		$wantedTrackArtists = [];
 		foreach( $pTrackFiles as $track ) {
 			// Flattened alongside title/disc rather than nested under its own 'tags' key - the
 			// generic json-list xref template (view_json-list_item.tpl) just dumps every top-level
@@ -1265,21 +1266,35 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			];
 			// The track's own artist(s) as contacts - read from the raw tags, since an id shared by
 			// every track has been promoted out of the track data. The row's own xref/xkey take the
-			// first credited artist (MusicBrainz orders the primary credit first) - the one plain SQL
-			// can reach. Several artists: the full list is also kept as 'contacts' in the data, index
-			// for index with the ids (null where no contact holds that id yet).
+			// first credited artist (MusicBrainz orders the primary credit first); each further one
+			// gets its own 'track_artist' row - same xorder and file, so it sits beside the track in
+			// the Tracks grid and a contact's own xref search finds every track it's credited on.
+			// Names come from ARTISTS, which Picard writes in the same order as the ids.
 			$artistIds = array_values( array_filter( (array)( $track['tags']['MUSICBRAINZARTISTID'] ?? [] ) ) );
 			if( $artistIds && ( $contact = self::contactForMusicBrainzId( $artistIds[0] ) ) ) {
 				$wantedTrack['xref'] = $contact['content_id'];
 				$wantedTrack['xkey'] = (string)$contact['external_id'];
 			}
-			if( count( $artistIds ) > 1 ) {
-				$trackData['contacts'] = array_map( fn( $id ) => self::contactForMusicBrainzId( $id )['content_id'] ?? null, $artistIds );
+			$artistNames = array_values( (array)( $track['tags']['ARTISTS'] ?? [] ) );
+			foreach( array_slice( $artistIds, 1, null, true ) as $i => $mbid ) {
+				$wantedArtist = [
+					'key'      => $track['relative'].'|'.$mbid,
+					'xkey_ext' => $track['relative'],
+					'xorder'   => $wantedTrack['xorder'],
+					'data'     => [ 'mbid' => $mbid, 'name' => (string)( $artistNames[$i] ?? '' ) ],
+				];
+				if( $contact = self::contactForMusicBrainzId( $mbid ) ) {
+					$wantedArtist['xref'] = $contact['content_id'];
+					$wantedArtist['xkey'] = (string)$contact['external_id'];
+				}
+				$wantedTrackArtists[] = $wantedArtist;
 			}
 			$wantedTrack['data'] = array_merge( $trackData, $trackTagsForData );
 			$wantedTracks[] = $wantedTrack;
 		}
 		$tally( $this->reconcileXrefItem( 'track', $wantedTracks, 'xkey_ext' ) );
+		$tally( $this->reconcileXrefItem( 'track_artist', $wantedTrackArtists,
+			fn( array $pRow ) => $pRow['xkey_ext'].'|'.( json_decode( (string)$pRow['data'], true )['mbid'] ?? '' ) ) );
 
 		// Plain single-valued common tags - one the files no longer carry reconciles to an empty
 		// wanted list, archiving its old row. The credit-source items are handled below instead.

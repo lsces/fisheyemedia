@@ -32,6 +32,7 @@ $gContent->addHit();
 $gContent->loadXrefInfo();
 $tracks = [];
 $credits = [];
+$trackArtists = [];
 $externalLinks = [];
 if( $gContent->mXrefInfo ) {
 	foreach( $gContent->liveXrefs() as $xref ) {
@@ -82,7 +83,19 @@ if( $gContent->mXrefInfo ) {
 					// the root index.php?content_id= dispatcher routes to whatever the contact's own
 					// display page is, so nothing here needs to know which package it belongs to.
 					'artistUrl'  => !empty( $xref['xref'] ) ? BIT_ROOT_URL.'index.php?content_id='.(int)$xref['xref'] : null,
+					// First name of a several-artist ARTISTS list - its own link above; the rest
+					// come from track_artist rows.
+					'firstArtist' => is_array( $data['ARTISTS'] ?? null ) ? ( $data['ARTISTS'][0] ?? null ) : null,
 					'xorder'     => (int)$xref['xorder'],
+				];
+				break;
+			case 'track_artist':
+				// A further credited artist of a several-artist track (see
+				// FisheyeAlbum::reconcileAlbumXrefs()) - added to that track's line below by xorder.
+				$data = !empty( $xref['data'] ) ? json_decode( $xref['data'], true ) : [];
+				$trackArtists[(int)$xref['xorder']][] = [
+					'name' => $data['name'] ?? '',
+					'url'  => !empty( $xref['xref'] ) ? BIT_ROOT_URL.'index.php?content_id='.(int)$xref['xref'] : null,
 				];
 				break;
 			default:
@@ -104,6 +117,17 @@ if( $gContent->mXrefInfo ) {
 	}
 }
 usort( $tracks, fn( $a, $b ) => $a['xorder'] <=> $b['xorder'] );
+// A several-artist track: each artist named and linked separately - the first from the track row
+// itself (its own contact link), the rest from their track_artist rows.
+foreach( $tracks as &$track ) {
+	if( !empty( $trackArtists[$track['xorder']] ) ) {
+		$track['artists'] = array_merge(
+			[ [ 'name' => $track['firstArtist'] ?? $track['artist'], 'url' => $track['artistUrl'] ] ],
+			$trackArtists[$track['xorder']]
+		);
+	}
+}
+unset( $track );
 // Credits in job order (FISHEYEALBUM_CREDIT_ITEMS), each job's people in credit order.
 $creditGroups = [];
 foreach( FISHEYEALBUM_CREDIT_ITEMS as $role ) {
