@@ -6,7 +6,7 @@
 		{foreach from=$images item=stripImage name=stripImages}
 			<div class="col-md-1 col-sm-4 col-xs-6">
 				<div class="gallery-box">
-					<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$stripImage.xref_id}" target="_blank" rel="noopener">
+					<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$stripImage.xref_id}&amp;name=image.jpg" target="_blank" rel="noopener">{* name= only so FancyZoom picks the link up *}
 						<div class="gallery-img">
 							<img class="img-responsive thumb" src="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$stripImage.xref_id}" alt="{$imagesAltText|default:"Images"|escape}" />
 						</div>

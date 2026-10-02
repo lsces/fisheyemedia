@@ -23,7 +23,8 @@
 	<div class="body">
 		<div class="row">
 			<div class="col-md-3">
-				<img class="thumb img-responsive" src="{$gContent->getThumbnailUrl('medium')|escape}" alt="{$gContent->getTitle()|escape}" />
+				{* Linked to the large size so the site's image zoom (FancyZoom) can open it *}
+				<a href="{$gContent->getThumbnailUrl('large')|escape}" target="_blank" rel="noopener"><img class="thumb img-responsive" src="{$gContent->getThumbnailUrl('medium')|escape}" alt="{$gContent->getTitle()|escape}" /></a>
 			</div>
 			<div class="col-md-9">
 				{foreach from=$creditGroups item=group}

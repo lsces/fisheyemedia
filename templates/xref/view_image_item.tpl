@@ -1,7 +1,8 @@
 {strip}
 <td>{$xrefInfo.xref_title|escape}</td>
 <td>
-	<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$xrefInfo.xref_id}" target="_blank" rel="noopener">
+	{* &name= carries the file name only so FancyZoom (which zooms links ending in an image extension) picks the link up *}
+	<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$xrefInfo.xref_id}&amp;name={$xrefInfo.xkey_ext|escape:'url'}" target="_blank" rel="noopener">
 		<img src="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$xrefInfo.xref_id}" alt="{$xrefInfo.xkey_ext|escape}" style="max-height:90px; max-width:140px;" />
 	</a>
 </td>
