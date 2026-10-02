@@ -153,12 +153,13 @@ if( !empty( $_REQUEST['fImportAlbums'] ) ) {
 // (display grouping via a plain 'category' xref, not a nested gallery). The page lists the first
 // LOAD_ALBUM_LIMIT not yet loaded, and summarises the whole folder in counts.
 $scan = [];
-$scanFolder = function( string $pAbsolute, string $pEntry, string $pRelative ) use ( &$scan, $gallery ) {
+$scanFolder = function( string $pAbsolute, string $pEntry, string $pRelative, string $pGroup ) use ( &$scan, $gallery ) {
 	if( !FisheyeAlbum::folderHasTracks( $pAbsolute ) ) {
 		return; // an Artwork/Videos/scans-style extras folder, not a real album
 	}
 	$scan[] = [
 		'relative' => $pRelative,
+		'group'    => $pGroup,
 		'kind'     => FisheyeAlbum::isBoxSetFolder( $pAbsolute ) ? 'collection' : 'album',
 		'loaded'   => FisheyeMediaGallery::isFolderLoaded( $pAbsolute, $pEntry, (int)$gallery->mContentId ),
 	];
@@ -176,17 +177,35 @@ if( $artistDir ) {
 			natsort( $categoryEntries );
 			foreach( $categoryEntries as $categoryEntry ) {
 				if( !str_starts_with( $categoryEntry, '.' ) && is_dir( $categoryDir.$categoryEntry ) ) {
-					$scanFolder( $categoryDir.$categoryEntry.'/', $categoryEntry, $entry.'/'.$categoryEntry );
+					$scanFolder( $categoryDir.$categoryEntry.'/', $categoryEntry, $entry.'/'.$categoryEntry, $entry );
 				}
 			}
 			continue;
 		}
-		$scanFolder( $artistDir.$entry.'/', $entry, $entry );
+		$scanFolder( $artistDir.$entry.'/', $entry, $entry, '' );
 	}
+}
+// Strip picker: ?group=<group folder> (or '.' for the albums sitting directly in the artist
+// folder) narrows the list and the counts to that one strip; no group = everything, flattened.
+$groupParam = htmlspecialchars_decode( trim( (string)( $_REQUEST['group'] ?? '' ) ), ENT_NOQUOTES );
+$groups = [];
+foreach( $scan as $row ) {
+	$key = $row['group'] === '' ? '.' : $row['group'];
+	$groups[$key] = $groups[$key] ?? [ 'title' => $row['group'] === '' ? KernelTools::tra( 'Top level' ) : $row['group'], 'to_load' => 0 ];
+	if( !$row['loaded'] ) {
+		$groups[$key]['to_load']++;
+	}
+}
+// The top level first, then the group folders in folder order.
+if( isset( $groups['.'] ) ) {
+	$groups = [ '.' => $groups['.'] ] + $groups;
 }
 $candidates = [];
 $scanCounts = [ 'album' => 0, 'album_loaded' => 0, 'collection' => 0, 'collection_loaded' => 0 ];
 foreach( $scan as $row ) {
+	if( $groupParam !== '' && ( $row['group'] === '' ? '.' : $row['group'] ) !== $groupParam ) {
+		continue;
+	}
 	$scanCounts[$row['kind']]++;
 	if( $row['loaded'] ) {
 		$scanCounts[$row['kind'].'_loaded']++;
@@ -194,6 +213,9 @@ foreach( $scan as $row ) {
 		$candidates[] = $row['relative'];
 	}
 }
+// Only worth offering when there's more than one strip to choose between.
+$gBitSmarty->assign( 'groups', count( $groups ) > 1 ? $groups : [] );
+$gBitSmarty->assign( 'groupParam', $groupParam );
 $gBitSmarty->assign( 'scanCounts', $scanCounts );
 
 $gBitSmarty->assign( 'galleryTitle', $galleryTitle );

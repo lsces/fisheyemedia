@@ -50,12 +50,23 @@
 			{/if}
 		{/if}
 
+		{if $groups}
+			<p>{tr}Process{/tr}:&nbsp;
+				{if $groupParam eq ''}<strong>{tr}Everything{/tr}</strong>{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php?gallery_id={$galleryIdParam}">{tr}Everything{/tr}</a>{/if}
+				{foreach from=$groups key=groupKey item=group}
+					{if $group.to_load || $groupKey eq $groupParam}
+						&nbsp;&middot;&nbsp;{if $groupKey eq $groupParam}<strong>{$group.title|escape} ({$group.to_load})</strong>{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php?gallery_id={$galleryIdParam}&amp;group={$groupKey|escape:'url'}">{$group.title|escape} ({$group.to_load})</a>{/if}
+					{/if}
+				{/foreach}
+			</p>
+		{/if}
 		{if $artistDir}
 			<p>{$scanCounts.album} {tr}album folders{/tr} ({$scanCounts.album_loaded} {tr}loaded{/tr}, {$scanCounts.album-$scanCounts.album_loaded} {tr}still to load{/tr}){if $scanCounts.collection}, {$scanCounts.collection} {tr}collections{/tr} ({$scanCounts.collection_loaded} {tr}created{/tr}, {$scanCounts.collection-$scanCounts.collection_loaded} {tr}still to create{/tr}){/if}.</p>
 		{/if}
 		{if $candidates}
 			{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php"}
 				<input type="hidden" name="gallery_id" value="{$galleryIdParam}" />
+				<input type="hidden" name="group" value="{$groupParam|escape}" />
 				<p>{tr}Showing up to{/tr} {$candidateLimit} {tr}not-yet-loaded albums for{/tr} "{$galleryTitle|escape}":</p>
 				<div class="form-group">
 					<label><input type="checkbox" name="fetch_discogs" value="1" checked="checked" /> {tr}Also fetch a linked Discogs release per album, if one exists on MusicBrainz (slower){/tr}</label>
