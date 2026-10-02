@@ -85,7 +85,7 @@
 		{if $filmImages|@count}
 			<div class="fisheye-tab-panel" id="fisheye-tab-images"{if $firstFilmTab != 'images'} style="display:none;"{/if}>
 				{if $gContent->hasUpdatePermission()}
-					<div class="fisheye-tab-header"><a title="{tr}Add Image{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}add_image_xref.php?content_id={$gContent->mContentId}">{biticon ipackage="icons" iname="go-up" iexplain="Add Image"}</a></div>
+					<div class="fisheye-tab-header"><a title="{tr}Add Image{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_image_xref.php?content_id={$gContent->mContentId}">{biticon ipackage="icons" iname="go-up" iexplain="Add Image"}</a></div>
 				{/if}
 				{include file="bitpackage:fisheyemedia/images_grid_inc.tpl" images=$filmImages imagesAltText="Images"}
 			</div>

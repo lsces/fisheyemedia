@@ -15,7 +15,7 @@
 			<div class="form-group">
 				{formlabel label="Current Image"}
 				{forminput}
-					<img src="{$smarty.const.FISHEYE_PKG_URL}view_extra_image.php?xref_id={$xrefInfo.xref_id}" alt="{$xrefInfo.xkey_ext|escape}" class="img-responsive" style="max-width:300px;" />
+					<img src="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$xrefInfo.xref_id}" alt="{$xrefInfo.xkey_ext|escape}" class="img-responsive" style="max-width:300px;" />
 				{/forminput}
 			</div>
 

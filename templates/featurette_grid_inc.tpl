@@ -9,7 +9,7 @@
 				<div class="gallery-box featurette-item{if $smarty.foreach.featurettes.first} active{/if}" onclick="fisheyeShowGridItem('featurette', {$smarty.foreach.featurettes.index})" style="cursor:pointer;">
 					<div class="gallery-img">
 						{if $featurette.thumb}
-							<img class="img-responsive thumb" src="{$smarty.const.FISHEYE_PKG_URL}view_extra_image.php?xref_id={$featurette.xref_id}" alt="{$featurette.title|escape}" />
+							<img class="img-responsive thumb" src="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$featurette.xref_id}" alt="{$featurette.title|escape}" />
 						{/if}
 					</div>
 					<div class="gallery-img-title center">

@@ -11,7 +11,7 @@
 					<div class="gallery-box episode-item{if $smarty.foreach.episodes.first} active{/if}" onclick="fisheyeShowGridItem('episode', {$smarty.foreach.episodes.index})" style="cursor:pointer;">
 						<div class="gallery-img">
 							{if $episode.thumb}
-								<img class="img-responsive thumb" src="{$smarty.const.FISHEYE_PKG_URL}view_extra_image.php?xref_id={$episode.xref_id}" alt="{$episode.title|escape}" />
+								<img class="img-responsive thumb" src="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_image.php?xref_id={$episode.xref_id}" alt="{$episode.title|escape}" />
 							{/if}
 						</div>
 						<div class="gallery-img-title center">

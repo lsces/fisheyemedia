@@ -180,4 +180,103 @@ trait FisheyeMediaTrait {
 
 		return $summary;
 	}
+
+	// Extra images (the 'image' xref item, Images tab) - media types only, so here rather than on
+	// fisheye's FisheyeBase.
+
+	/**
+	 * Whether addImageXrefFile() below actually does anything for this content type - a real
+	 * method call, callable from a template (`{if $gContent->supportsAddImage()}`, templates/
+	 * xref/view_images_group.tpl), unlike a bare `method_exists(...)` call, which Smarty here
+	 * rejects as an unknown modifier (found live - "unknown modifier 'method_exists'").
+	 *
+	 * @return bool
+	 */
+	public function supportsAddImage(): bool {
+		return method_exists( $this, 'getImageStorageRoot' );
+	}
+
+	/**
+	 * Generic hook liberty/add_xref.php calls (via method_exists()) when the only addable item
+	 * in a group is 'image' - redirects straight to the real upload flow instead of rendering
+	 * add_xref.tpl's generic form, which has no file upload at all and would otherwise create a
+	 * dead xref row with an empty xkey_ext and no file behind it.
+	 *
+	 * @return string|null
+	 */
+	public function getAddImageUrl(): ?string {
+		return $this->supportsAddImage() ? FISHEYEMEDIA_PKG_URL.'add_image_xref.php?content_id='.$this->mContentId : null;
+	}
+
+	/**
+	 * Resolve an 'image'/'episode' xref row's own relative path (xkey_ext, or an episode's
+	 * 'thumb' data key) to a real filesystem path - view_extra_image.php's own generic serving
+	 * hook. Default here: getImageStorageRoot()-relative - only still relevant to a future
+	 * content type that doesn't override this. Film, Album, Season and Program all now override
+	 * it with their own storage/attachments/<branch>/ resolution instead - see each class's own
+	 * getImageStorageBranchPath() docblock for why: the external library tree's ownership/
+	 * permissions aren't guaranteed to be web-writable, where storage/attachments/ always is.
+	 *
+	 * @param string $pRelativePath
+	 * @return string  empty string if this content type has no image storage root
+	 */
+	public function getExtraImagePath( string $pRelativePath ): string {
+		if( !method_exists( $this, 'getImageStorageRoot' ) ) {
+			return '';
+		}
+		$root = $this->getImageStorageRoot();
+		return $root ? $root.$pRelativePath : '';
+	}
+
+	/**
+	 * Whether grabVideoFrameImage() exists and does anything for this content type - default
+	 * false here, overridden true on FisheyeSeason (the only type with an episode video to grab
+	 * a frame from). Same "real method call, not a bare function" reasoning as
+	 * supportsAddImage() above.
+	 *
+	 * @return bool
+	 */
+	public function canGrabVideoFrame(): bool {
+		return false;
+	}
+
+	/**
+	 * Move an uploaded file into this content's own images/ folder as a brand new, uniquely-named
+	 * image - the "create" counterpart to replaceXrefFile()'s "overwrite an existing row's file
+	 * in place" (edit_image_item.tpl/edit_xref.php). Built for add_image_xref.php, the dedicated
+	 * upload page the Images tab's own group-tab override (templates/xref/view_images_group.tpl)
+	 * links to instead of the generic add_xref.php/add_xref.tpl, which has no file upload at all -
+	 * that flow required creating an empty xref row first, then editing it separately to attach
+	 * a file, an awkward two-step process this page collapses into one.
+	 *
+	 * Lives here on FisheyeBase rather than duplicated on FisheyeFilm/Season/Program separately -
+	 * same reasoning as resizeImageFile() above, and routed through getExtraImagePath() the same
+	 * way grabVideoFrameIntoImageXref() is, so it automatically lands in whichever storage/
+	 * attachments/<branch>/ location the calling subclass actually overrides it with.
+	 *
+	 * @param string $pTmpPath       the uploaded file's own tmp_name
+	 * @param string $pOriginalName  the uploaded file's own original name, for its extension
+	 * @return string|null  the new file's path, relative to getExtraImagePath() (an 'image'
+	 *                       xref row's own xkey_ext shape) - null if this content type has no
+	 *                       image storage location, or the move itself failed
+	 */
+	public function addImageXrefFile( string $pTmpPath, string $pOriginalName ): ?string {
+		$imagesDir = $this->getExtraImagePath( '' );
+		if( empty( $imagesDir ) ) {
+			return null;
+		}
+		\Bitweaver\KernelTools::mkdir_p( $imagesDir );
+		$baseName = preg_replace( '/[^A-Za-z0-9]+/', '_', $this->getTitle() ) ?: 'image';
+		$ext = strtolower( pathinfo( $pOriginalName, PATHINFO_EXTENSION ) ) ?: 'jpg';
+		$n = 1;
+		do {
+			$fileName = "$baseName-manual-$n.$ext";
+			$n++;
+		} while( is_file( $imagesDir.$fileName ) );
+		if( !move_uploaded_file( $pTmpPath, $imagesDir.$fileName ) ) {
+			return null;
+		}
+		return $fileName;
+	}
+
 }
