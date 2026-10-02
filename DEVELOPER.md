@@ -313,9 +313,10 @@ The top-level `Music` pool itself stays a plain paginated grid of artist galleri
    **Process: Everything · Top level · Studio (n) · …** row: picking one narrows the list and the
    counts to that strip (kept across submits; finished strips drop out). Albums are ticked and
    loaded 10 per submit. A collection instead gets its own **Process** button, which creates its
-   gallery and opens that collection's own `load_album.php` one level down; there a **Back to
-   …** link returns to the parent with the strip already picked, and a batch that finishes the
-   collection returns there automatically. `FisheyeMediaGallery::isFolderLoaded()` decides what
+   gallery and opens that collection's own `load_album.php` one level down, and a batch that
+   finishes the collection returns to the parent with the strip already picked. The page title is
+   a breadcrumb trail: **Music** (back to `load_music.php`, for the next folder) › the parent
+   artist's `load_album.php` with the strip picked (a collection's page only) › the gallery itself. `FisheyeMediaGallery::isFolderLoaded()` decides what
    still counts as to do: an album once an album of that title exists, a collection only once its
    gallery exists *and* every album inside it is loaded.
 

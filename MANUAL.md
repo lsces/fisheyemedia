@@ -98,7 +98,10 @@ year as the season (`S2003E05`).
    Tick albums and **Load Selected Albums**, 10 at a time.
 4. A **collection** has its own **Process** button: it opens the collection's page to load its
    albums. When the last batch there is done you're taken back up to the same strip, ready for the
-   next one; **« Back to …** gets you there any time.
+   next one.
+5. The page title is a trail of links: **Music** › *the artist* › *the collection* - Load Albums.
+   **Music** takes you back to Add Music Collection to Process the next folder, the artist link
+   back up from a collection, and the last name opens that gallery to see what's been built.
 
 The artist page's **Load Album** / **Load Videos** icons only appear while there's something left
 to load.

@@ -5,7 +5,10 @@
 
 <div class="admin liberty">
 	<div class="header">
-		<h1><a href="{$galleryUrl|escape}">{$galleryTitle|escape}</a> - {tr}Load Albums{/tr}</h1>
+		{* Breadcrumbs: Music (back to load_music, to pick the next folder) > the parent artist's own
+		   load_album with this collection's strip picked (a collection's page only) > this gallery
+		   itself (to look at what's been built) *}
+		<h1><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_music.php">{tr}Music{/tr}</a> &rsaquo; {if $backUrl}<a href="{$backUrl|escape}">{$backTitle|escape}</a> &rsaquo; {/if}<a href="{$galleryUrl|escape}">{$galleryTitle|escape}</a> - {tr}Load Albums{/tr}</h1>
 	</div>
 
 	<div class="body">
@@ -50,9 +53,6 @@
 			{/if}
 		{/if}
 
-		{if $backUrl}
-			<p><a class="btn btn-default btn-sm" href="{$backUrl|escape}">&laquo; {tr}Back to{/tr} {$backTitle|escape}</a></p>
-		{/if}
 		{if $groups}
 			<p>{tr}Process{/tr}:&nbsp;
 				{if $groupParam eq ''}<strong>{tr}Everything{/tr}</strong>{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php?gallery_id={$galleryIdParam}">{tr}Everything{/tr}</a>{/if}
