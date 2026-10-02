@@ -81,6 +81,8 @@ const FISHEYEALBUM_IGNORED_TAG_KEYS = [
 	'ID3V2_PRIV_PEAKVALUE', 'ID3V2_PRIV_AVERAGELEVEL', 'TLEN', 'SCRIPT', 'ALBUM', 'TSO2', 'ALBUMARTISTSORT',
 	'TRACKTOTAL', 'TOTALTRACKS', 'DISCTOTAL', 'TOTALDISCS', 'COMMENT', 'ID3V1COMMENT',
 	'REPLAYGAINALBUMGAIN', 'REPLAYGAINTRACKGAIN', 'REPLAYGAINALBUMPEAK', 'REPLAYGAINTRACKPEAK',
+	// ripper/encoder bookkeeping - when, with what, from what - not about the music
+	'RIPDATE', 'RIPPINGTOOL', 'ENCODER', 'ENCODEDBY', 'SOURCE',
 ];
 
 // Embedded tag name -> xref item, for tags that only ever make sense at album/disc level, not
