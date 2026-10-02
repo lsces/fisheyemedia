@@ -91,7 +91,7 @@ function load_music_unit_count( string $pDir ): int {
 		if( !is_dir( $fullPath ) ) {
 			continue;
 		}
-		if( FisheyeAlbum::isCategoryFolder( $entry ) ) {
+		if( FisheyeAlbum::isGroupFolder( $fullPath ) ) {
 			foreach( scandir( $fullPath ) ?: [] as $albumEntry ) {
 				if( load_music_has_track_folder( $fullPath.$albumEntry.'/', $albumEntry ) ) {
 					$units++;

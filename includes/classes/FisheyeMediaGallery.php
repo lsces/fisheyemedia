@@ -129,7 +129,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			return 'Music/'.$parentTitle.'/'.$galleryTitle.'/';
 		}
 		foreach( scandir( $musicDir.$parentTitle.'/' ) ?: [] as $entry ) {
-			if( FisheyeAlbum::isCategoryFolder( $entry ) && is_dir( $musicDir.$parentTitle.'/'.$entry.'/'.$galleryTitle.'/' ) ) {
+			if( is_dir( $musicDir.$parentTitle.'/'.$entry.'/'.$galleryTitle.'/' ) && FisheyeAlbum::isGroupFolder( $musicDir.$parentTitle.'/'.$entry.'/' ) ) {
 				return 'Music/'.$parentTitle.'/'.$entry.'/'.$galleryTitle.'/';
 			}
 		}
@@ -170,7 +170,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			if( str_starts_with( $entry, '.' ) || !is_dir( $artistDir.$entry ) ) {
 				continue;
 			}
-			if( FisheyeAlbum::isCategoryFolder( $entry ) ) {
+			if( FisheyeAlbum::isGroupFolder( $artistDir.$entry.'/' ) ) {
 				foreach( scandir( $artistDir.$entry.'/' ) ?: [] as $categoryEntry ) {
 					if( str_starts_with( $categoryEntry, '.' ) || !is_dir( $artistDir.$entry.'/'.$categoryEntry ) ) {
 						continue;
@@ -250,35 +250,34 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
-	 * Groups this gallery's own items for the artist-page "strip" layout (Plex-style, one row
-	 * per discography category) that fisheye_music_grid_inc.tpl renders instead of a single
-	 * paginated grid. Loads every item in one call (see the large max_records below) since
-	 * strips flow down the page rather than paging, then buckets each FisheyeAlbum item by its
-	 * own 'category' xref (FISHEYEALBUM_CATEGORY_FOLDER_NAMES order) - a single bulk query, not
-	 * one per item. A nested FisheyeGallery item (a box set or the "Videos" subgallery - see
-	 * FisheyeAlbum::createSubGallery()/findOrCreateNestedGallery(), both addItem() straight into
-	 * this gallery the same as a plain album) carries no category of its own, so those land in a
-	 * trailing 'collections' bucket instead - except the Videos subgallery, whose own videos are
-	 * listed directly in a final 'videos' bucket so they show on the artist page itself. The 'other' bucket (last of
-	 * FISHEYEALBUM_CATEGORY_FOLDER_NAMES) also catches any album whose category doesn't match a
-	 * known name - every album registered through the current flow always gets a real category, so
-	 * in practice this should stay empty.
+	 * Groups this gallery's own items into the artist page's strips (fisheye_music_grid_inc.tpl),
+	 * mirroring the artist folder on disk: everything sitting directly in it first, as an unlabelled
+	 * strip (key ''); then one strip per group folder (FisheyeAlbum::isGroupFolder()), titled with
+	 * the folder's own name - familiar names (Studio, Live, Compilation...) in
+	 * FISHEYEALBUM_CATEGORY_FOLDER_NAMES order, any others (Baroque, Modern...) in natural name
+	 * order after them; then the Videos subgallery's own videos last. An album's group comes from
+	 * its own 'category' xref (the folder name it was loaded from - one bulk query); a nested
+	 * gallery (a box set) has none, so its group is read off its folder path instead. Loads every
+	 * item in one call since strips flow down the page rather than paging.
 	 *
-	 * @return array<string, LibertyContent[]> keyed by category, empty groups dropped, fixed
-	 *         FISHEYEALBUM_CATEGORY_FOLDER_NAMES order, then 'collections', then 'videos'
+	 * @return array<string, LibertyContent[]> keyed by strip title ('' = unlabelled, then group
+	 *         folder names, then 'Videos'), empty strips dropped
 	 */
 	public function getCategorizedItems(): array {
 		// loadImages() takes its param by reference - can't pass the array literal directly. A
-		// no-op when the gallery page already loaded every item (prepDisplayList() below).
+		// no-op when the gallery page already loaded every item (prepDisplayList() above).
 		$listHash = [ 'page' => -1, 'offset' => 0, 'max_records' => -1 ];
 		$this->loadImages( $listHash );
 
-		$groups = [];
-		foreach( FISHEYEALBUM_CATEGORY_FOLDER_NAMES as $category ) {
-			$groups[$category] = [];
-		}
-		$collections = [];
+		$ungrouped = [];
+		$groups = [];      // lower-cased group name => items
+		$groupTitles = []; // lower-cased group name => folder name as written
 		$videos = [];
+		$addToGroup = function( string $pGroup, $pContentId, $pItem ) use ( &$groups, &$groupTitles ) {
+			$key = strtolower( $pGroup );
+			$groupTitles[$key] = $groupTitles[$key] ?? $pGroup;
+			$groups[$key][$pContentId] = $pItem;
+		};
 
 		if( $this->mItems ) {
 			$albumContentIds = [];
@@ -287,16 +286,17 @@ class FisheyeMediaGallery extends FisheyeGallery {
 					$albumContentIds[] = $contentId;
 				}
 			}
-
 			$categoryMap = [];
 			if( $albumContentIds ) {
 				$placeholders = implode( ',', array_fill( 0, count( $albumContentIds ), '?' ) );
 				$rows = $this->mDb->getAll(
-					"SELECT content_id, xkey_ext FROM `".BIT_DB_PREFIX."liberty_xref` WHERE item = 'category' AND content_id IN ( $placeholders )",
+					"SELECT content_id, xkey_ext FROM `".BIT_DB_PREFIX."liberty_xref` WHERE item = 'category' AND end_date IS NULL AND content_id IN ( $placeholders )",
 					$albumContentIds
 				);
 				foreach( $rows as $row ) {
-					$categoryMap[$row['content_id']] = strtolower( $row['xkey_ext'] );
+					if( trim( (string)$row['xkey_ext'] ) !== '' ) {
+						$categoryMap[$row['content_id']] = trim( $row['xkey_ext'] );
+					}
 				}
 			}
 
@@ -305,31 +305,50 @@ class FisheyeMediaGallery extends FisheyeGallery {
 				// are created as FisheyeMediaGallery (findOrCreateNestedGallery() above).
 				if( $item instanceof FisheyeGallery ) {
 					if( $item->getTitle() === FISHEYEMEDIA_VIDEOS_GALLERY_TITLE ) {
-						// load_video.php's own Videos gallery - its videos are shown directly in a
-						// trailing strip rather than as one more collection tile to click into.
-						$videosHash = [ 'page' => -1, 'offset' => 0, 'max_records' => 1000 ];
+						// load_video.php's own Videos gallery - its videos are shown directly in the
+						// last strip rather than as one more tile to click into.
+						$videosHash = [ 'page' => -1, 'offset' => 0, 'max_records' => -1 ];
 						$item->loadImages( $videosHash );
 						$videos += (array)$item->mItems;
 						continue;
 					}
-					$collections[$contentId] = $item;
+					// A box set inside a group folder (Music/<artist>/<group>/<box set>/).
+					$folder = self::resolveMusicFolder( $item );
+					$segments = $folder ? explode( '/', trim( $folder, '/' ) ) : [];
+					if( count( $segments ) >= 4 ) {
+						$addToGroup( $segments[count( $segments ) - 2], $contentId, $item );
+					} else {
+						$ungrouped[$contentId] = $item;
+					}
 					continue;
 				}
-				$category = $categoryMap[$contentId] ?? 'other';
-				if( !isset( $groups[$category] ) ) {
-					$category = 'other';
+				if( isset( $categoryMap[$contentId] ) ) {
+					$addToGroup( $categoryMap[$contentId], $contentId, $item );
+				} else {
+					$ungrouped[$contentId] = $item;
 				}
-				$groups[$category][$contentId] = $item;
 			}
 		}
 
-		$groups = array_filter( $groups );
-		if( $collections ) {
-			$groups['collections'] = $collections;
+		// Familiar names first in their usual order, then the rest by natural name order.
+		$order = array_flip( FISHEYEALBUM_CATEGORY_FOLDER_NAMES );
+		$keys = array_keys( $groups );
+		usort( $keys, function( $a, $b ) use ( $order ) {
+			$oa = $order[$a] ?? PHP_INT_MAX;
+			$ob = $order[$b] ?? PHP_INT_MAX;
+			return $oa !== $ob ? $oa <=> $ob : strnatcasecmp( $a, $b );
+		} );
+
+		$ret = [];
+		if( $ungrouped ) {
+			$ret[''] = $ungrouped;
+		}
+		foreach( $keys as $key ) {
+			$ret[$groupTitles[$key]] = $groups[$key];
 		}
 		if( $videos ) {
-			$groups['videos'] = $videos;
+			$ret[FISHEYEMEDIA_VIDEOS_GALLERY_TITLE] = $videos;
 		}
-		return $groups;
+		return $ret;
 	}
 }

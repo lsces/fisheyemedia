@@ -1563,15 +1563,33 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
-	 * Whether a folder name is one of the fixed discography-category names (Studio/Live/
-	 * Compilations/Remasters/Singles/...) - see FISHEYEALBUM_CATEGORY_FOLDER_NAMES's own docblock
-	 * for why this is a fixed list rather than shape-detected the way isBoxSetFolder() is.
+	 * Whether a folder directly inside an artist/composer folder is a group folder - one strip of
+	 * the artist page, titled with the folder's own name (Compilation, Studio, Baroque, Modern...).
+	 * Recognised by shape, not name: no tracks of its own, not a box set (its subfolders aren't
+	 * CDxx/Vol-numbered discs), and holding at least one real album or box set. Artwork/Scans-style
+	 * extras and the Videos folder hold no albums, so never qualify. Each album or box set inside
+	 * one is a tile in that strip; anything sitting directly in the artist folder goes in the first,
+	 * unlabelled strip (FisheyeMediaGallery::getCategorizedItems()).
 	 *
-	 * @param string $pFolderName  bare folder name, not a path
+	 * @param string $pAbsoluteFolder  the folder, trailing slash optional
 	 * @return bool
 	 */
-	public static function isCategoryFolder( string $pFolderName ): bool {
-		return in_array( strtolower( $pFolderName ), FISHEYEALBUM_CATEGORY_FOLDER_NAMES, true );
+	public static function isGroupFolder( string $pAbsoluteFolder ): bool {
+		$folder = rtrim( $pAbsoluteFolder, '/' ).'/';
+		$name = basename( $folder );
+		if( str_starts_with( $name, '.' ) || $name === FISHEYEMEDIA_VIDEOS_GALLERY_TITLE || !is_dir( $folder ) ) {
+			return false;
+		}
+		if( self::folderHasTracks( $folder ) || self::isBoxSetFolder( $folder ) ) {
+			return false;
+		}
+		foreach( scandir( $folder ) ?: [] as $entry ) {
+			if( !str_starts_with( $entry, '.' ) && is_dir( $folder.$entry )
+				&& ( self::folderHasTracks( $folder.$entry.'/' ) || self::isBoxSetFolder( $folder.$entry.'/' ) ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

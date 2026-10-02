@@ -104,7 +104,7 @@ if( !empty( $_REQUEST['fImportAlbums'] ) ) {
 		$relativeAlbumPath = $albumFolder;
 		if( str_contains( $albumFolder, '/' ) ) {
 			[ $possibleCategory, $rest ] = explode( '/', $albumFolder, 2 );
-			if( FisheyeAlbum::isCategoryFolder( $possibleCategory ) ) {
+			if( FisheyeAlbum::isGroupFolder( $artistDir.$possibleCategory.'/' ) ) {
 				$category = $possibleCategory;
 			}
 		}

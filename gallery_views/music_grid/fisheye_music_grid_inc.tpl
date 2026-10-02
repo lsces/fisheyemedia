@@ -79,7 +79,8 @@
 			</style>
 
 			{foreach from=$gContent->getCategorizedItems() item=stripItems key=stripKey}
-				<h3 class="music-strip-title">{$stripKey|capitalize}</h3>
+				{* '' = the artist folder's own albums (unlabelled); otherwise the group folder's name as written *}
+				{if $stripKey neq ''}<h3 class="music-strip-title">{$stripKey|escape}</h3>{/if}
 				<div class="music-strip">
 				{foreach from=$stripItems item=galItem key=itemContentId}
 					<div class="music-grid-item">
