@@ -148,58 +148,53 @@ if( !empty( $_REQUEST['fImportAlbums'] ) ) {
 	}
 }
 
-$candidates = [];
+// Every album/collection folder under this gallery's own folder, in one pass: a discography
+// group's own folders are flattened in as "Group/Album" entries, never the bare group name itself
+// (display grouping via a plain 'category' xref, not a nested gallery). The page lists the first
+// LOAD_ALBUM_LIMIT not yet loaded, and summarises the whole folder in counts.
+$scan = [];
+$scanFolder = function( string $pAbsolute, string $pEntry, string $pRelative ) use ( &$scan, $gallery ) {
+	if( !FisheyeAlbum::folderHasTracks( $pAbsolute ) ) {
+		return; // an Artwork/Videos/scans-style extras folder, not a real album
+	}
+	$scan[] = [
+		'relative' => $pRelative,
+		'kind'     => FisheyeAlbum::isBoxSetFolder( $pAbsolute ) ? 'collection' : 'album',
+		'loaded'   => FisheyeMediaGallery::isFolderLoaded( $pAbsolute, $pEntry, (int)$gallery->mContentId ),
+	];
+};
 if( $artistDir ) {
 	$entries = scandir( $artistDir );
 	natsort( $entries );
 	foreach( $entries as $entry ) {
-		if( count( $candidates ) >= LOAD_ALBUM_LIMIT ) {
-			break;
-		}
 		if( str_starts_with( $entry, '.' ) || !is_dir( $artistDir.$entry ) ) {
 			continue;
 		}
-		// A discography category is transparently flattened - its own real album folders show up
-		// directly here as "Category/Album" entries, never the bare category name itself (see this
-		// file's own docblock for why - display grouping via a plain xref, not a nested gallery).
-		if( FisheyeAlbum::isCategoryFolder( $entry ) ) {
+		if( FisheyeAlbum::isGroupFolder( $artistDir.$entry.'/' ) ) {
 			$categoryDir = $artistDir.$entry.'/';
 			$categoryEntries = scandir( $categoryDir ) ?: [];
 			natsort( $categoryEntries );
 			foreach( $categoryEntries as $categoryEntry ) {
-				if( count( $candidates ) >= LOAD_ALBUM_LIMIT ) {
-					break 2;
+				if( !str_starts_with( $categoryEntry, '.' ) && is_dir( $categoryDir.$categoryEntry ) ) {
+					$scanFolder( $categoryDir.$categoryEntry.'/', $categoryEntry, $entry.'/'.$categoryEntry );
 				}
-				if( str_starts_with( $categoryEntry, '.' ) || !is_dir( $categoryDir.$categoryEntry ) ) {
-					continue;
-				}
-				if( !FisheyeAlbum::folderHasTracks( $categoryDir.$categoryEntry.'/' ) ) {
-					continue; // an Artwork/scans-style extras folder, not a real album
-				}
-				$existingContentId = $gBitDb->getOne(
-					"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyealbum' AND title = ?",
-					[ $categoryEntry ]
-				);
-				if( $existingContentId ) {
-					continue;
-				}
-				$candidates[] = $entry.'/'.$categoryEntry;
 			}
 			continue;
 		}
-		if( !FisheyeAlbum::folderHasTracks( $artistDir.$entry.'/' ) ) {
-			continue; // an Artwork/Videos/scans-style extras folder, not a real album
-		}
-		$existingContentId = $gBitDb->getOne(
-			"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyealbum' AND title = ?",
-			[ $entry ]
-		);
-		if( $existingContentId ) {
-			continue;
-		}
-		$candidates[] = $entry;
+		$scanFolder( $artistDir.$entry.'/', $entry, $entry );
 	}
 }
+$candidates = [];
+$scanCounts = [ 'album' => 0, 'album_loaded' => 0, 'collection' => 0, 'collection_loaded' => 0 ];
+foreach( $scan as $row ) {
+	$scanCounts[$row['kind']]++;
+	if( $row['loaded'] ) {
+		$scanCounts[$row['kind'].'_loaded']++;
+	} elseif( count( $candidates ) < LOAD_ALBUM_LIMIT ) {
+		$candidates[] = $row['relative'];
+	}
+}
+$gBitSmarty->assign( 'scanCounts', $scanCounts );
 
 $gBitSmarty->assign( 'galleryTitle', $galleryTitle );
 $gBitSmarty->assign( 'galleryUrl', $gallery->getDisplayUrl() );

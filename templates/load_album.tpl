@@ -50,6 +50,9 @@
 			{/if}
 		{/if}
 
+		{if $artistDir}
+			<p>{$scanCounts.album} {tr}album folders{/tr} ({$scanCounts.album_loaded} {tr}loaded{/tr}, {$scanCounts.album-$scanCounts.album_loaded} {tr}still to load{/tr}){if $scanCounts.collection}, {$scanCounts.collection} {tr}collections{/tr} ({$scanCounts.collection_loaded} {tr}created{/tr}, {$scanCounts.collection-$scanCounts.collection_loaded} {tr}still to create{/tr}){/if}.</p>
+		{/if}
 		{if $candidates}
 			{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php"}
 				<input type="hidden" name="gallery_id" value="{$galleryIdParam}" />
