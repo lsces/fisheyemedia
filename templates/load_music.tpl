@@ -11,16 +11,6 @@
 	<div class="body">
 
 		{if $result}
-			{if $result.created}
-				<div class="alert alert-success">
-					<p>{tr}Collections created{/tr}:</p>
-					<ul>
-						{foreach from=$result.created item=row}
-							<li>{$row.folder|escape} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_album.php?gallery_id={$row.gallery_id}">{tr}Load its albums now{/tr}</a></li>
-						{/foreach}
-					</ul>
-				</div>
-			{/if}
 			{if $result.errors}
 				<div class="alert alert-danger">
 					<p>{tr}Failed{/tr}:</p>
@@ -31,18 +21,15 @@
 
 		{if $candidates}
 			{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_music.php"}
-				<p>{tr}Showing up to{/tr} {$candidateLimit} {tr}artist/composer folders under Music/ with no gallery yet{/tr}:</p>
-				<ul>
+				<p>{tr}Showing up to{/tr} {$candidateLimit} {tr}artist/composer folders under Music/ with no gallery yet. Process one at a time - it creates the gallery, then takes you through that artist's next steps and on to loading its albums.{/tr}</p>
+				<ul class="list-unstyled">
 					{foreach from=$candidates item=candidate}
-						<li>
-							<label>
-								<input type="checkbox" name="selected[]" value="{$candidate.folder|escape}" />
-								{$candidate.folder|escape}
-							</label>
+						<li style="margin-bottom:4px;">
+							<button type="submit" class="btn btn-default btn-xs" name="process_folder" value="{$candidate.folder|escape}">{tr}Process{/tr}</button>
+							&nbsp;{$candidate.folder|escape}
 						</li>
 					{/foreach}
 				</ul>
-				<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create Selected Galleries{/tr}" />
 			{/form}
 		{else}
 			<p>{tr}Nothing to load - every real collection folder here already has a gallery.{/tr}</p>

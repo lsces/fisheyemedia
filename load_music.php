@@ -32,7 +32,7 @@ require_once dirname( __DIR__ ).'/liberty/plugins/mime.film.php';
 // alone doesn't trigger the autoloader the way instantiating FisheyeAlbum would.
 require_once __DIR__.'/includes/classes/FisheyeAlbum.php';
 
-global $gBitSystem, $gBitSmarty, $gBitDb;
+global $gBitSystem, $gBitSmarty, $gBitDb, $gBitUser, $gLibertySystem;
 
 $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 
@@ -111,29 +111,44 @@ $root = \Bitweaver\Liberty\mime_film_get_storage_root();
 $musicDir = $root.'Music/';
 
 $result = null;
-if( !empty( $_REQUEST['fCreate'] ) ) {
-	$result = [ 'created' => [], 'errors' => [] ];
-	foreach( (array)( $_REQUEST['selected'] ?? [] ) as $folderName ) {
-		// See load_film.php's own comment on this same decode - detoxify() HTML-escapes every
-		// $_REQUEST value, which breaks a raw filesystem lookup like this one for any collection
-		// name containing &, <, or >.
-		$folderName = htmlspecialchars_decode( trim( (string)$folderName ), ENT_NOQUOTES );
-		if( empty( $folderName ) || !is_dir( $musicDir.$folderName ) ) {
-			continue;
-		}
-		if( load_music_gallery_id_for_title( $folderName ) ) {
-			continue;
-		}
-		$gallery = new FisheyeMediaGallery();
-		$storeHash = [ 'title' => $folderName, 'gallery_pagination' => FISHEYE_PAGINATION_MUSIC_GRID ];
-		if( $gallery->store( $storeHash ) ) {
-			$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_MUSIC_GRID );
-			if( $topGalleryId ) {
-				$gallery->addToGalleries( [ $topGalleryId ] );
+// One folder at a time, start to finish: Process creates (or reuses) that folder's gallery and
+// goes straight to its next step - the first per-artist tool another package registered through
+// the 'music_artist_tools' service (contactwiki's people pass, which belongs before the albums),
+// or load_album.php when there is none. That step hands on to load_album.php itself once done.
+if( !empty( $_REQUEST['process_folder'] ) ) {
+	$result = [ 'errors' => [] ];
+	// See load_film.php's own comment on this same decode - detoxify() HTML-escapes every
+	// $_REQUEST value, which breaks a raw filesystem lookup like this one for any collection
+	// name containing &, <, or >.
+	$folderName = htmlspecialchars_decode( trim( (string)$_REQUEST['process_folder'] ), ENT_NOQUOTES );
+	if( $folderName === '' || !is_dir( $musicDir.$folderName ) ) {
+		$result['errors'][] = [ 'folder' => $folderName, 'error' => KernelTools::tra( 'Folder not found under Music/' ) ];
+	} else {
+		$galleryId = load_music_gallery_id_for_title( $folderName );
+		if( !$galleryId ) {
+			$gallery = new FisheyeMediaGallery();
+			$storeHash = [ 'title' => $folderName, 'gallery_pagination' => FISHEYE_PAGINATION_MUSIC_GRID ];
+			if( $gallery->store( $storeHash ) ) {
+				$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_MUSIC_GRID );
+				if( $topGalleryId ) {
+					$gallery->addToGalleries( [ $topGalleryId ] );
+				}
+				$galleryId = $gallery->mGalleryId;
+			} else {
+				$result['errors'][] = [ 'folder' => $folderName, 'error' => implode( '; ', $gallery->mErrors ) ];
 			}
-			$result['created'][] = [ 'folder' => $folderName, 'gallery_id' => $gallery->mGalleryId ];
-		} else {
-			$result['errors'][] = [ 'folder' => $folderName, 'error' => implode( '; ', $gallery->mErrors ) ];
+		}
+		if( $galleryId ) {
+			$nextUrl = FISHEYEMEDIA_PKG_URL.'load_album.php?gallery_id=';
+			foreach( $gLibertySystem->getServiceValues( 'music_artist_tools' ) ?? [] as $artistTools ) {
+				foreach( $artistTools as $tool ) {
+					if( empty( $tool['perm'] ) || $gBitUser->hasPermission( $tool['perm'] ) ) {
+						$nextUrl = $tool['url'];
+						break 2;
+					}
+				}
+			}
+			KernelTools::bit_redirect( $nextUrl.$galleryId );
 		}
 	}
 }
