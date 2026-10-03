@@ -45,22 +45,43 @@ if( !$gLibertySystem->isPluginActive( 'mimefilm' ) ) {
 const LOAD_VIDEO_LIMIT = 20;
 const LOAD_VIDEO_EXTENSIONS = [ 'mkv', 'mp4', 'm4v', 'avi' ];
 
-$galleryIdParam = (int)( $_REQUEST['gallery_id'] ?? 0 );
-if( !$galleryIdParam ) {
-	$gBitSystem->fatalError( KernelTools::tra( 'No gallery specified.' ) );
-}
-$gallery = new FisheyeGallery( $galleryIdParam );
-$gallery->load();
-// isValid() alone doesn't prove load() found a real row - see load_album.php's own identical
-// check for why.
-if( !$gallery->isValid() || empty( $gallery->getTitle() ) ) {
-	$gBitSystem->fatalError( KernelTools::tra( 'No gallery exists with the given ID.' ) );
-}
-$galleryTitle = $gallery->getTitle();
-
-// Same folder resolution as load_album.php - see FisheyeMediaGallery::resolveMusicFolder().
+// Two owners can have a Videos/ folder: an artist/composer gallery (its videos go into a nested
+// "Videos" gallery, see below) or one album (its videos go into a gallery linked from the album by
+// a 'videos' xref - FisheyeAlbum::ensureVideosGallery()). Either way the folder is whichever the
+// owner already resolves on disk.
 $root = \Bitweaver\Liberty\mime_film_get_storage_root();
-$artistRelative = FisheyeMediaGallery::resolveMusicFolder( $gallery );
+$albumIdParam = (int)( $_REQUEST['album_id'] ?? 0 );
+$gallery = null;
+$album = null;
+if( $albumIdParam ) {
+	$album = new FisheyeAlbum( null, $albumIdParam );
+	$album->load();
+	if( !$album->isValid() || empty( $album->getTitle() ) ) {
+		$gBitSystem->fatalError( KernelTools::tra( 'No album exists with the given ID.' ) );
+	}
+	$galleryTitle = $album->getTitle();
+	$galleryUrl = $album->getDisplayUrl();
+	$albumFolder = $album->getImageStorageRoot();
+	$artistRelative = ( $albumFolder && $albumFolder !== $root && is_dir( $albumFolder ) ) ? substr( $albumFolder, strlen( $root ) ) : null;
+	$hiddenParam = [ 'name' => 'album_id', 'value' => $albumIdParam ];
+} else {
+	$galleryIdParam = (int)( $_REQUEST['gallery_id'] ?? 0 );
+	if( !$galleryIdParam ) {
+		$gBitSystem->fatalError( KernelTools::tra( 'No gallery specified.' ) );
+	}
+	$gallery = new FisheyeGallery( $galleryIdParam );
+	$gallery->load();
+	// isValid() alone doesn't prove load() found a real row - see load_album.php's own identical
+	// check for why.
+	if( !$gallery->isValid() || empty( $gallery->getTitle() ) ) {
+		$gBitSystem->fatalError( KernelTools::tra( 'No gallery exists with the given ID.' ) );
+	}
+	$galleryTitle = $gallery->getTitle();
+	$galleryUrl = $gallery->getDisplayUrl();
+	// Same folder resolution as load_album.php - see FisheyeMediaGallery::resolveMusicFolder().
+	$artistRelative = FisheyeMediaGallery::resolveMusicFolder( $gallery );
+	$hiddenParam = [ 'name' => 'gallery_id', 'value' => $galleryIdParam ];
+}
 $videosDir = $artistRelative ? $root.$artistRelative.'Videos/' : null;
 $videosRelativePrefix = $artistRelative ? $artistRelative.'Videos/' : null;
 
@@ -73,7 +94,9 @@ if( !empty( $_REQUEST['fImport'] ) ) {
 	// identical two-step pagination handling (see that method's own comment). Without this, a
 	// freshly-created "Videos" gallery fell back to the site's own default pagination style
 	// (Galleriffic) instead of the film grid its own content (FisheyeFilm rows) actually needs.
-	$videosGalleryResult = FisheyeMediaGallery::findOrCreateNestedGallery( FISHEYEMEDIA_VIDEOS_GALLERY_TITLE, (int)$gallery->mContentId, FISHEYE_PAGINATION_FILM_GRID );
+	$videosGalleryResult = $album
+		? $album->ensureVideosGallery()
+		: FisheyeMediaGallery::findOrCreateNestedGallery( FISHEYEMEDIA_VIDEOS_GALLERY_TITLE, (int)$gallery->mContentId, FISHEYE_PAGINATION_FILM_GRID );
 	if( !empty( $videosGalleryResult['error'] ) ) {
 		$result = [ 'error' => $videosGalleryResult['error'] ];
 	} else {
@@ -156,8 +179,8 @@ foreach( $scanTargets as $target ) {
 }
 
 $gBitSmarty->assign( 'galleryTitle', $galleryTitle );
-$gBitSmarty->assign( 'galleryUrl', $gallery->getDisplayUrl() );
-$gBitSmarty->assign( 'galleryIdParam', $galleryIdParam );
+$gBitSmarty->assign( 'galleryUrl', $galleryUrl );
+$gBitSmarty->assign( 'hiddenParam', $hiddenParam );
 $gBitSmarty->assign( 'videosDir', $videosDir );
 $gBitSmarty->assign( 'candidateLimit', LOAD_VIDEO_LIMIT );
 $gBitSmarty->assign( 'candidates', $candidates );

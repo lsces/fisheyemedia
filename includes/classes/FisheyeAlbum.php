@@ -219,6 +219,45 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
+	 * content_id of the film gallery holding this album's own Videos/ folder (its 'videos' xref),
+	 * or null if none has been loaded yet.
+	 *
+	 * @return int|null
+	 */
+	public function getVideosGalleryContentId(): ?int {
+		global $gBitDb;
+		$xrefContentId = $gBitDb->getOne(
+			"SELECT `xref` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'videos' AND `end_date` IS NULL",
+			[ $this->mContentId ]
+		);
+		return $xrefContentId ? (int)$xrefContentId : null;
+	}
+
+	/**
+	 * Find or create the film gallery for this album's Videos/ folder, linked from the album by a
+	 * 'videos' xref. Not nested under the album - an album is a track listing, not a gallery, so
+	 * nothing can hang off it the way a box set's own gallery hangs off its container - the xref is
+	 * the link. Created with the film grid layout (load_video.php's own gallery pagination).
+	 *
+	 * @return array 'content_id'=>int, plus 'already'=>true if it already existed, or 'error'=>string
+	 */
+	public function ensureVideosGallery(): array {
+		if( $existingContentId = $this->getVideosGalleryContentId() ) {
+			return [ 'content_id' => $existingContentId, 'already' => true ];
+		}
+		$gallery = new FisheyeMediaGallery();
+		$storeHash = [
+			'title'              => $this->getTitle().' - '.FISHEYEMEDIA_VIDEOS_GALLERY_TITLE,
+			'gallery_pagination' => FISHEYE_PAGINATION_FILM_GRID,
+		];
+		if( !$gallery->store( $storeHash ) ) {
+			return [ 'error' => implode( '; ', $gallery->mErrors ) ];
+		}
+		$this->upsertXref( $this->mContentId, 'videos', [ 'xref' => $gallery->mContentId ] );
+		return [ 'content_id' => $gallery->mContentId ];
+	}
+
+	/**
 	 * The root this album's own 'track' xref rows (xkey_ext) live relative to - play_track.php
 	 * calls this generically via method_exists(), same convention FisheyeSeason's own version
 	 * already established. Unlike a season (A-M/N-Z per-show split, but still one fixed root for
@@ -2015,10 +2054,17 @@ class FisheyeAlbum extends FisheyeMediaImage {
 
 		$title = trim( (string)$pTitle ) ?: basename( rtrim( $pRelativeFolderPath, '/' ) );
 
-		$existingContentId = $gBitDb->getOne(
-			"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyealbum' AND title = ?",
-			[ $title ]
-		);
+		// Only this gallery's own copy counts as already loaded - the same title under another artist
+		// is a different album (see FisheyeMediaGallery::albumIdInGallery()). With no gallery to link
+		// into, fall back to the bare title.
+		if( $pGalleryContentId ) {
+			$existingContentId = FisheyeMediaGallery::albumIdInGallery( $title, $pGalleryContentId );
+		} else {
+			$existingContentId = $gBitDb->getOne(
+				"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyealbum' AND title = ?",
+				[ $title ]
+			);
+		}
 		if( $existingContentId ) {
 			return [ 'already' => $existingContentId ];
 		}

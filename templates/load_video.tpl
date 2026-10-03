@@ -55,7 +55,7 @@
 
 		{if $candidates}
 			{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php"}
-				<input type="hidden" name="gallery_id" value="{$galleryIdParam}" />
+				<input type="hidden" name="{$hiddenParam.name}" value="{$hiddenParam.value}" />
 				<p>{tr}Showing up to{/tr} {$candidateLimit} {tr}not-yet-loaded videos under{/tr} <code>{$videosDir|escape}</code>:</p>
 				<div class="form-group">
 					<label><input type="checkbox" name="fetch_images" value="1" checked="checked" /> {tr}Also fetch Plex poster/backdrop images per video, if a Plex match exists (slower){/tr}</label>

@@ -158,6 +158,10 @@ $gBitSmarty->assign( 'discSubtitles', $discSubtitles );
 $gBitSmarty->assign( 'multiDisc', count( $discs ) > 1 );
 $gBitSmarty->assign( 'creditGroups', $creditGroups );
 $gBitSmarty->assign( 'externalLinks', $externalLinks );
+// The film gallery for this album's Videos/ folder, once load_video.php has created it (see
+// FisheyeAlbum::ensureVideosGallery()).
+$videosGalleryContentId = $gContent->getVideosGalleryContentId();
+$gBitSmarty->assign( 'videosGalleryUrl', $videosGalleryContentId ? BIT_ROOT_URL.'index.php?content_id='.$videosGalleryContentId : null );
 $gBitSmarty->assign( 'gContent', $gContent );
 
 $gBitSystem->setCanonicalLink( $gContent->getDisplayUrl() );

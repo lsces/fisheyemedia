@@ -15,6 +15,7 @@
 			{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
 			{if $gContent->hasUpdatePermission()}
 				<a title="{tr}Edit{/tr}" href="{$gContent->getEditUrl()|escape}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
+				<a title="{tr}Load Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php?album_id={$gContent->mContentId}">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Videos"}</a>
 			{/if}
 		</div>
 		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}</h1>
@@ -76,6 +77,12 @@
 				{/if}
 			</div>
 		</div>
+	{if $videosGalleryUrl}
+			<section class="album-videos">
+				<h2>{tr}Videos{/tr}</h2>
+				<p><a href="{$videosGalleryUrl|escape}">{tr}Watch the videos from this album{/tr}</a></p>
+			</section>
+		{/if}
 	</div><!-- end .body -->
 
 	{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='view' serviceHash=$gContent->mInfo}

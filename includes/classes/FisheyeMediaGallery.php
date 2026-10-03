@@ -115,29 +115,46 @@ class FisheyeMediaGallery extends FisheyeGallery {
 		if( FisheyeAlbum::isBoxSetFolder( $pAbsoluteFolder ) ) {
 			// A collection is done once its gallery exists AND every album inside it is loaded -
 			// a part-done one stays offered, one Process click from carrying on.
-			$exists = (bool)$gBitDb->getOne(
+			$boxSetContentId = $gBitDb->getOne(
 				"SELECT lc.content_id FROM `".BIT_DB_PREFIX."liberty_content` lc
 				 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery` fg ON fg.content_id = lc.content_id
 				 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` map ON map.item_content_id = lc.content_id
 				 WHERE lc.title = ? AND map.gallery_content_id = ?",
 				[ $pTitle, $pParentContentId ]
 			);
-			if( !$exists ) {
+			if( !$boxSetContentId ) {
 				return false;
 			}
 			$folder = rtrim( $pAbsoluteFolder, '/' ).'/';
 			foreach( scandir( $folder ) ?: [] as $entry ) {
 				if( !str_starts_with( $entry, '.' ) && is_dir( $folder.$entry ) && FisheyeAlbum::folderHasTracks( $folder.$entry.'/' )
-					&& !$gBitDb->getOne( "SELECT content_id FROM `".BIT_DB_PREFIX."liberty_content` WHERE content_type_guid = 'fisheyealbum' AND title = ?", [ $entry ] ) ) {
+					&& self::albumIdInGallery( $entry, (int)$boxSetContentId ) === null ) {
 					return false;
 				}
 			}
 			return true;
 		}
-		return (bool)$gBitDb->getOne(
-			"SELECT content_id FROM `".BIT_DB_PREFIX."liberty_content` WHERE content_type_guid = 'fisheyealbum' AND title = ?",
-			[ $pTitle ]
+		return self::albumIdInGallery( $pTitle, $pParentContentId ) !== null;
+	}
+
+	/**
+	 * content_id of the album with this title already linked into the given gallery, or null.
+	 * Scoped to that gallery because album titles aren't unique - "Time" under one artist says
+	 * nothing about "Time" under another, or about a box set's own discs.
+	 *
+	 * @param string $pTitle             album title (= its folder name)
+	 * @param int    $pGalleryContentId  the gallery it should be linked into
+	 * @return int|null
+	 */
+	public static function albumIdInGallery( string $pTitle, int $pGalleryContentId ): ?int {
+		global $gBitDb;
+		$contentId = $gBitDb->getOne(
+			"SELECT lc.content_id FROM `".BIT_DB_PREFIX."liberty_content` lc
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` map ON map.item_content_id = lc.content_id
+			 WHERE lc.content_type_guid = 'fisheyealbum' AND lc.title = ? AND map.gallery_content_id = ?",
+			[ $pTitle, $pGalleryContentId ]
 		);
+		return $contentId ? (int)$contentId : null;
 	}
 
 	/**
