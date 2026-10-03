@@ -187,7 +187,7 @@ $scanFolder = function( string $pAbsolute, string $pEntry, string $pRelative, st
 		'relative' => $pRelative,
 		'group'    => $pGroup,
 		'kind'     => FisheyeAlbum::isBoxSetFolder( $pAbsolute ) ? 'collection' : 'album',
-		'loaded'   => FisheyeMediaGallery::isFolderLoaded( $pAbsolute, $pEntry, (int)$gallery->mContentId ),
+		'loaded'   => FisheyeMediaGallery::isFolderLoaded( $pAbsolute, $pEntry, (int)$gallery->mContentId, $pGroup ),
 	];
 };
 if( $artistDir ) {

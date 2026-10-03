@@ -2058,7 +2058,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		// is a different album (see FisheyeMediaGallery::albumIdInGallery()). With no gallery to link
 		// into, fall back to the bare title.
 		if( $pGalleryContentId ) {
-			$existingContentId = FisheyeMediaGallery::albumIdInGallery( $title, $pGalleryContentId );
+			$existingContentId = FisheyeMediaGallery::albumIdInGallery( $title, $pGalleryContentId, (string)$pCategory );
 		} else {
 			$existingContentId = $gBitDb->getOne(
 				"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyealbum' AND title = ?",

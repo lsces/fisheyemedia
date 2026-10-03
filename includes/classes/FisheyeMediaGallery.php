@@ -110,7 +110,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	 * @param int    $pParentContentId content_id of the artist/composer gallery being loaded
 	 * @return bool
 	 */
-	public static function isFolderLoaded( string $pAbsoluteFolder, string $pTitle, int $pParentContentId ): bool {
+	public static function isFolderLoaded( string $pAbsoluteFolder, string $pTitle, int $pParentContentId, string $pCategory = '' ): bool {
 		global $gBitDb;
 		if( FisheyeAlbum::isBoxSetFolder( $pAbsoluteFolder ) ) {
 			// A collection is done once its gallery exists AND every album inside it is loaded -
@@ -134,7 +134,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			}
 			return true;
 		}
-		return self::albumIdInGallery( $pTitle, $pParentContentId ) !== null;
+		return self::albumIdInGallery( $pTitle, $pParentContentId, $pCategory ) !== null;
 	}
 
 	/**
@@ -142,17 +142,24 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	 * Scoped to that gallery because album titles aren't unique - "Time" under one artist says
 	 * nothing about "Time" under another, or about a box set's own discs.
 	 *
+	 * The same title can also legitimately appear twice under one artist, once per strip (Jethro
+	 * Tull's Studio and Remasters both have "Aqualung"), so the strip (the album's 'category' xref,
+	 * '' for an album outside any strip) is part of its identity too.
+	 *
 	 * @param string $pTitle             album title (= its folder name)
 	 * @param int    $pGalleryContentId  the gallery it should be linked into
+	 * @param string $pCategory          the strip folder name, or '' for none
 	 * @return int|null
 	 */
-	public static function albumIdInGallery( string $pTitle, int $pGalleryContentId ): ?int {
+	public static function albumIdInGallery( string $pTitle, int $pGalleryContentId, string $pCategory = '' ): ?int {
 		global $gBitDb;
 		$contentId = $gBitDb->getOne(
 			"SELECT lc.content_id FROM `".BIT_DB_PREFIX."liberty_content` lc
 			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` map ON map.item_content_id = lc.content_id
-			 WHERE lc.content_type_guid = 'fisheyealbum' AND lc.title = ? AND map.gallery_content_id = ?",
-			[ $pTitle, $pGalleryContentId ]
+			 WHERE lc.content_type_guid = 'fisheyealbum' AND lc.title = ? AND map.gallery_content_id = ?
+			   AND COALESCE((SELECT x.xkey_ext FROM `".BIT_DB_PREFIX."liberty_xref` x
+			                 WHERE x.content_id = lc.content_id AND x.item = 'category' AND x.end_date IS NULL), '') = ?",
+			[ $pTitle, $pGalleryContentId, $pCategory ]
 		);
 		return $contentId ? (int)$contentId : null;
 	}
@@ -216,11 +223,11 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			return false;
 		}
 
-		$checkFolder = function( string $pFolder, string $pTitle ): bool {
+		$checkFolder = function( string $pFolder, string $pTitle, string $pCategory ): bool {
 			if( str_starts_with( basename( $pFolder ), '.' ) || ( !FisheyeAlbum::folderHasTracks( $pFolder ) && !FisheyeAlbum::isBoxSetFolder( $pFolder ) ) ) {
 				return false;
 			}
-			return !self::isFolderLoaded( $pFolder, $pTitle, (int)$this->mContentId );
+			return !self::isFolderLoaded( $pFolder, $pTitle, (int)$this->mContentId, $pCategory );
 		};
 		foreach( scandir( $artistDir ) ?: [] as $entry ) {
 			if( str_starts_with( $entry, '.' ) || !is_dir( $artistDir.$entry ) ) {
@@ -231,13 +238,13 @@ class FisheyeMediaGallery extends FisheyeGallery {
 					if( str_starts_with( $categoryEntry, '.' ) || !is_dir( $artistDir.$entry.'/'.$categoryEntry ) ) {
 						continue;
 					}
-					if( $checkFolder( $artistDir.$entry.'/'.$categoryEntry.'/', $categoryEntry ) ) {
+					if( $checkFolder( $artistDir.$entry.'/'.$categoryEntry.'/', $categoryEntry, $entry ) ) {
 						return true;
 					}
 				}
 				continue;
 			}
-			if( $checkFolder( $artistDir.$entry.'/', $entry ) ) {
+			if( $checkFolder( $artistDir.$entry.'/', $entry, '' ) ) {
 				return true;
 			}
 		}
