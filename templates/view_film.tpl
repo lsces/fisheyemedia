@@ -29,7 +29,7 @@
 				{if $directors|@count || $stars|@count}
 					<p class="film-credits">
 						{if $directors|@count}<strong>{tr}Director{/tr}{if $directors|@count > 1}s{/if}:</strong> {$directors|@implode:", "|escape}<br />{/if}
-						{if $stars|@count}<strong>{tr}Starring{/tr}:</strong> {$stars|@implode:", "|escape}{/if}
+						{if $stars|@count}<strong>{tr}Starring{/tr}:</strong> {foreach from=$stars item=star name=cast}{if $smarty.foreach.cast.iteration <= 6}{if !$smarty.foreach.cast.first}, {/if}{$star|escape}{/if}{/foreach}{if $stars|@count > 6} <span class="film-more-cast">{tr}and{/tr} {$stars|@count - 6} {tr}more{/tr}</span>{/if}{/if}
 					</p>
 				{/if}
 				{if $genres|@count}

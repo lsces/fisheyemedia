@@ -501,14 +501,11 @@ class FisheyeFilm extends FisheyeMediaImage {
 		$this->load();
 		$sourceFile = $this->mStorage[$this->mContentId]['source_file'] ?? null;
 		if( !empty( $sourceFile ) && is_file( $sourceFile ) ) {
-			self::deleteXrefByItem( $this->mContentId, [ 'resolution', 'audio' ] );
 			$qualityInfo = \Bitweaver\Liberty\mime_film_get_quality_info( $sourceFile );
 			foreach( [ 'resolution', 'audio' ] as $item ) {
+				$wanted = $qualityInfo[$item] !== null ? [ [ 'key' => '', 'xkey_ext' => $qualityInfo[$item], 'xorder' => 0 ] ] : [];
+				$this->reconcileXrefItem( $item, $wanted, null );
 				if( $qualityInfo[$item] !== null ) {
-					// storeXref() takes its param by reference - a literal array expression
-					// fatals ("could not be passed by reference"), needs a named variable.
-					$xrefParamHash = [ 'content_id' => $this->mContentId, 'item' => $item, 'xkey_ext' => $qualityInfo[$item] ];
-					$this->storeXref( $xrefParamHash );
 					$summary['items'][] = "$item: {$qualityInfo[$item]}";
 				}
 			}
@@ -541,42 +538,38 @@ class FisheyeFilm extends FisheyeMediaImage {
 			$summary['items'][] = 'description updated';
 		}
 
-		self::deleteXrefByItem(
-			$this->mContentId,
-			[ 'genre', 'director', 'writer', 'star', 'content_rating', 'duration', 'imdb', 'tmdb' ]
-		);
+		// Reconciled, never wiped: a reload keeps every row's history (entry/last_update/end_date),
+		// leaves hand-edited rows alone, and keeps a credit's link to its contact (xref/xkey) - see
+		// FisheyeMediaTrait::reconcileXrefItem(). Same convention as FisheyeAlbum's music reloads.
+		$tally = function( string $pItem, array $pCounts ) use ( &$summary ) {
+			$summary['items'][] = $pItem.': '.implode( ', ', array_map( fn( $k, $n ) => "$n $k", array_keys( $pCounts ), $pCounts ) );
+		};
 
 		// tag_type: 1=genre, 4=director, 5=writer, 6=actor(star) - confirmed against real live
-		// data 2026-09-02, not documented anywhere by Plex itself.
+		// data 2026-09-02, not documented anywhere by Plex itself. The full cast is kept (no cap) -
+		// credits are keyed by name, so a person Plex lists twice is stored once.
 		$tagTypes = [ 'genre' => 1, 'director' => 4, 'writer' => 5, 'star' => 6 ];
 		foreach( $tagTypes as $item => $tagType ) {
 			$tagStmt = $plexDb->prepare(
 				"SELECT t.tag FROM taggings tg JOIN tags t ON t.id = tg.tag_id WHERE tg.metadata_item_id = ? AND t.tag_type = ? ORDER BY tg.\"index\""
 			);
 			$tagStmt->execute( [ $metadataItemId, $tagType ] );
-			$xorder = 1;
+			$wanted = [];
 			foreach( $tagStmt->fetchAll( \PDO::FETCH_COLUMN ) as $value ) {
-				// 'star' capped at 5 - a long cast list isn't useful on the film-facts summary
-				// this feeds (view_film.tpl), and Plex often lists dozens for a well-known film.
-				if( $item === 'star' && $xorder > 5 ) { break; }
-				$xrefParamHash = [ 'content_id' => $this->mContentId, 'item' => $item, 'xkey_ext' => $value, 'xorder' => $xorder ];
-				$this->storeXref( $xrefParamHash );
-				$summary['items'][] = "$item: $value";
-				$xorder++;
+				if( !isset( $wanted[$value] ) ) {
+					$wanted[$value] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
+				}
 			}
+			$tally( $item, $this->reconcileXrefItem( $item, array_values( $wanted ), 'xkey_ext', false, $item !== 'genre' ) );
 		}
 
 		if( !empty( $plexRow['content_rating'] ) ) {
 			// Plex stores e.g. 'gb/12A' - the region prefix isn't useful for display.
 			$rating = preg_replace( '#^[a-z]{2}/#i', '', $plexRow['content_rating'] );
-			$ratingParamHash = [ 'content_id' => $this->mContentId, 'item' => 'content_rating', 'xkey_ext' => $rating ];
-			$this->storeXref( $ratingParamHash );
-			$summary['items'][] = "content_rating: $rating";
+			$tally( 'content_rating', $this->reconcileXrefItem( 'content_rating', [ [ 'key' => '', 'xkey_ext' => $rating, 'xorder' => 0 ] ], null ) );
 		}
 		if( !empty( $plexRow['duration'] ) ) {
-			$durationParamHash = [ 'content_id' => $this->mContentId, 'item' => 'duration', 'xkey_ext' => (string)(int)$plexRow['duration'] ];
-			$this->storeXref( $durationParamHash );
-			$summary['items'][] = "duration: {$plexRow['duration']}ms";
+			$tally( 'duration', $this->reconcileXrefItem( 'duration', [ [ 'key' => '', 'xkey_ext' => (string)(int)$plexRow['duration'], 'xorder' => 0 ] ], null ) );
 		}
 
 		$plexToken = $gBitSystem->getConfig( 'fisheye_plex_token', '' );
@@ -585,9 +578,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 			$xml = @file_get_contents( $apiUrl );
 			if( $xml !== false && preg_match_all( '#<Guid id="(imdb|tmdb)://([^"]+)"#', $xml, $matches, PREG_SET_ORDER ) ) {
 				foreach( $matches as $match ) {
-					$linkParamHash = [ 'content_id' => $this->mContentId, 'item' => $match[1], 'xkey' => $match[2] ];
-					$this->storeXref( $linkParamHash );
-					$summary['items'][] = "{$match[1]}: {$match[2]}";
+					$tally( $match[1], $this->reconcileXrefItem( $match[1], [ [ 'key' => '', 'xkey' => $match[2], 'xorder' => 0 ] ], null ) );
 				}
 			}
 		}
@@ -625,7 +616,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 	 * first (1 = primary/poster - also the one mime_film_get_thumbnail_url() picks as the
 	 * default thumbnail source), then backdrops continuing on.
 	 *
-	 * Capped at 5 of each type - same reasoning as reloadPlexMetadata()'s 5-star cap, a well-known
+	 * Capped at 5 of each type - a well-known
 	 * film's poster/art set from Plex can run into dozens and most are near-duplicates.
 	 *
 	 * Fetches TMDB's own pre-resized w342 (poster)/w780 (art) sizes, not the 'original' full

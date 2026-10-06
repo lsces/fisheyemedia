@@ -203,8 +203,8 @@ includes it on purpose, for the generic grid's History tab, so media pages never
 row is matched by a natural key (a track's file path, a person's id, the item itself for a
 single-valued one): unchanged rows are left alone with their `entry_date`, a changed value archives
 the old row (into history) and inserts the new one, a row the files no longer mention is archived,
-and a hand-edited row (`last_update_date` later than `entry_date`) is never touched. Film/Season/
-Program/featurette reloads still delete-and-rebuild — the same fix is pending there.
+and a hand-edited row (`last_update_date` later than `entry_date`) is never touched. `reconcileXrefItem()` lives in `FisheyeMediaTrait`, shared by every media class. Film's Plex reload uses it
+(2026-10-06); Season/Program/featurette reloads still delete-and-rebuild — the same fix is pending there.
 
 **Episode** is a `liberty_xref` row under its season's own `content_id` (not a separate gallery
 level) — `xkey_ext` holds the video file path relative to the season's storage root, `data` holds
@@ -438,9 +438,11 @@ all; that data only exists one level down, per-episode.
 
 Three separate, idempotent reload actions per edit page (kept deliberately separate — different
 weight/frequency, not one action doing everything):
-- **Reload Metadata** — text fields + external-ID guids. Rebuild-not-diff: deletes every xref row
-  it's about to write before re-inserting, since a repeated run with no delete step just appends
-  duplicates (there's no natural per-value key to update in place).
+- **Reload Metadata** — text fields + external-ID guids. A **film** reconciles (see the reconcile
+  paragraph above): genre/director/writer/star are keyed by name, the whole cast is kept (no cap, a
+  person Plex lists twice is stored once), a credit's contact link (`xref`/`xkey`) survives a reload
+  or a reorder (`$pKeepLinks`), hand-edited rows are left alone. A **program** still deletes every xref
+  row it's about to write before re-inserting (rebuild-not-diff) and caps `star` at 5.
 - **Reload Images** — alternate poster/backdrop artwork from Plex's `/posters`/`/arts` local API
   endpoints (TMDB-backed, `w342`/`w780` presets re-resized down to a 400px bounding box via the
   shared resize helper below). Idempotent **per type** (poster vs. art) — a type only re-fetches
@@ -532,8 +534,8 @@ can, an external player or a download prompt otherwise).
   page instead (the strip layout above).
 - Whole-library unattended import - every loader is discover-and-pick, a batch at a time.
 - Season-level Plex metadata reload - deliberately not built; Plex has nothing at that level.
-- Film/Season/Program/featurette reloads still delete-and-rebuild their xrefs rather than
-  reconciling the way albums do.
+- Season/Program/featurette reloads still delete-and-rebuild their xrefs rather than reconciling the
+  way albums and films do.
 - **Deleting a music gallery doesn't delete its albums.** fisheye's `FisheyeGallery::expunge()`
   only expunges nested *galleries*; plain items (albums, videos) are just unlinked and left
   orphaned - and an orphaned album still blocks `load_album.php` from offering its folder again. A
@@ -542,4 +544,5 @@ can, an external player or a download prompt otherwise).
 - An album with a video disc - the videos would become a film gallery linked to the album, the way
   an artist's `Videos/` already works; not built.
 - Discogs as an image source - the `discogs` item is only an external link today.
-- Film/TV cast and crew are still text credits, not linked to contacts.
+- Film/TV cast and crew are still text credits, not linked to contacts (film reload now reconciles and
+  keeps the full cast, so links will survive - contactwiki `bitweaver/contactwiki.md` 2026-10-06).
