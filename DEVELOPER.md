@@ -562,6 +562,11 @@ can, an external player or a download prompt otherwise).
   promoted (each usually works one episode). A one-episode guest stays in that episode's own JSON/cast panel only. Both
   settings are on Media Library Settings. NCIS Season 1: 252 star rows -> 26; A Touch of Frost 995 rows -> ~344. Dropped rows
   are archived (history kept), restored by lowering a setting and Build/reload.
+- **Data-only episode reload** - `FisheyeSeason::reloadPlexEpisodes( true )` (what contactwiki's TV people page uses): refreshes
+  the Plex text/tags/rating of episodes already registered but keeps their stored thumbnail, resolution and audio, fetches nothing
+  from Plex over HTTP and runs no ffprobe/frame grab, so a thumbnail replaced by hand is never overwritten and a reload is a
+  database read (NCIS, 24 seasons / 548 episodes: 2.9 s). A new episode takes the full path. The plain `reloadPlexEpisodes()`
+  (season page "Reload Episodes") still re-downloads and overwrites every episode thumbnail.
 - **Credits directory** - `FisheyeSeason::deriveCreditDirectory()`, run at the end of both rebuilds (and from
   contactwiki's "Build credit directories"): episodes are xref rows, not content items, so the season is the lowest
   content that can carry a person's `xref`. One `director`/`writer`/`star` row per person per role: `xkey_ext` = the

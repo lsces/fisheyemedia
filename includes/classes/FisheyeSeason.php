@@ -668,7 +668,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 	 *
 	 * @return array Same shape as the Plex-match branch: matched=>bool, items=>episode titles.
 	 */
-	private function registerEpisodesFromFilesystem(): array {
+	private function registerEpisodesFromFilesystem( bool $pDataOnly = false ): array {
 		$summary = [ 'matched' => false, 'items' => [] ];
 
 		$dirInfo = $this->resolveSeasonDirectoryFromDisk();
@@ -694,8 +694,19 @@ class FisheyeSeason extends FisheyeMediaImage {
 		$imagesDir = $this->getImageStorageBranchPath();
 		KernelTools::mkdir_p( $imagesDir );
 
+		$existingEpisodes = $pDataOnly ? $this->liveEpisodeData() : [];
 		$xorder = 1;
 		foreach( $files as $file ) {
+			// Data-only: nothing here comes from Plex, so an episode already registered is left exactly as it is.
+			if( $pDataOnly && isset( $existingEpisodes[$relativeSeasonDir.'/'.$file] ) ) {
+				$wantedEpisodes[] = [
+					'key'      => $relativeSeasonDir.'/'.$file,
+					'xkey_ext' => $relativeSeasonDir.'/'.$file,
+					'xorder'   => $xorder++,
+					'data'     => $existingEpisodes[$relativeSeasonDir.'/'.$file],
+				];
+				continue;
+			}
 			$stem = pathinfo( $file, PATHINFO_FILENAME );
 			// "Show - SnnEnn - Episode Title" -> keep the title; "Show - SnnEnn" alone (no per-
 			// episode title, common for documentaries) -> keep the SnnEnn tag itself rather than
@@ -778,9 +789,13 @@ class FisheyeSeason extends FisheyeMediaImage {
 	 * is selected - no per-episode page/request needed, matching Plex's own smart-TV pattern of
 	 * a live highlight-swaps-the-detail-panel interaction rather than navigating away.
 	 *
+	 * @param bool $pDataOnly  a data reload of an already-loaded season (what the credits tool does): the Plex text and
+	 *                         tags are refreshed, but an episode already registered keeps its thumbnail, resolution and
+	 *                         audio untouched and nothing is fetched from Plex over HTTP - so a thumbnail replaced by hand
+	 *                         survives, and a reload is a database read, not a download.
 	 * @return array Summary of what was found/stored, for the calling page's result display.
 	 */
-	public function reloadPlexEpisodes(): array {
+	public function reloadPlexEpisodes( bool $pDataOnly = false ): array {
 		global $gBitSystem;
 		$summary = [ 'matched' => false, 'items' => [] ];
 
@@ -790,7 +805,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 			// to registering every real episode file already sitting in the season's own folder,
 			// rather than leaving the season stuck at the single seed episode registerFromDisk()
 			// planted. Without this, any non-catalogued show silently shows only its first episode.
-			return $this->registerEpisodesFromFilesystem();
+			return $this->registerEpisodesFromFilesystem( $pDataOnly );
 		}
 		$plexDb = $plexMatch['db'];
 		$seasonMetadataItemId = $plexMatch['id'];
@@ -829,6 +844,10 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// archived - see FisheyeMediaTrait/LibertyXref::reconcileItem(). Rows are collected, then
 		// reconciled once (keyed by the episode's own file path).
 		$wantedEpisodes = [];
+		// Data-only reload: what is already stored for an episode that Plex does not supply (its thumbnail, the
+		// ffprobe resolution/audio) is kept, and no thumbnail is fetched or overwritten - a thumbnail replaced by hand
+		// stays. Only a new episode takes the full path below.
+		$existingEpisodes = $pDataOnly ? $this->liveEpisodeData() : [];
 
 		$tagTypes = [ 'director' => 4, 'writer' => 5, 'star' => 6 ];
 		foreach( $episodeRows as $row ) {
@@ -854,6 +873,22 @@ class FisheyeSeason extends FisheyeMediaImage {
 			}
 			if( !empty( $row['content_rating'] ) ) {
 				$episodeData['content_rating'] = preg_replace( '#^[a-z]{2}/#i', '', $row['content_rating'] );
+			}
+			if( $pDataOnly && isset( $existingEpisodes[$relativePath] ) ) {
+				$kept = $existingEpisodes[$relativePath];
+				if( !empty( $row['duration'] ) ) {
+					$episodeData['duration'] = (int)$row['duration'];
+				} elseif( isset( $kept['duration'] ) ) {
+					$episodeData['duration'] = $kept['duration'];
+				}
+				foreach( [ 'resolution', 'audio', 'thumb' ] as $keptKey ) {
+					if( isset( $kept[$keptKey] ) ) {
+						$episodeData[$keptKey] = $kept[$keptKey];
+					}
+				}
+				$wantedEpisodes[] = [ 'key' => $relativePath, 'xkey_ext' => $relativePath, 'xorder' => (int)$row['index'], 'data' => $episodeData ];
+				$summary['items'][] = "S{$row['index']}: {$row['title']}";
+				continue;
 			}
 			if( !empty( $row['duration'] ) ) {
 				$episodeData['duration'] = (int)$row['duration'];
@@ -1022,6 +1057,24 @@ class FisheyeSeason extends FisheyeMediaImage {
 			$counts[$role] = $this->reconcileXrefItem( $role, $wanted, 'xkey_ext', false, true );
 		}
 		return $counts;
+	}
+
+	/**
+	 * This season's live episode rows' data packets, by episode file path - what a data-only reload keeps for an
+	 * episode that is already registered.
+	 *
+	 * @return array<string,array>
+	 */
+	private function liveEpisodeData(): array {
+		global $gBitDb;
+		$ret = [];
+		foreach( $gBitDb->getAll(
+			"SELECT `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'episode' AND `end_date` IS NULL",
+			[ $this->mContentId ]
+		) ?: [] as $row ) {
+			$ret[(string)$row['xkey_ext']] = !empty( $row['data'] ) ? ( json_decode( $row['data'], true ) ?: [] ) : [];
+		}
+		return $ret;
 	}
 
 	/** One summary line for a reconcile result, e.g. "episodes: 12 unchanged, 0 inserted, 0 archived". */

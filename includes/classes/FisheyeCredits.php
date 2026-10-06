@@ -189,26 +189,45 @@ class FisheyeCredits {
 	}
 
 	/**
-	 * Every program with how many seasons it has, how many of them already hold a credits directory,
-	 * and its credit rows still unlinked - what a show picker lists.
+	 * Programs with how many seasons they have, how many of those hold a credits directory, and their credit rows
+	 * (and how many are still unlinked) - what a show picker lists. Set-based: one grouped query per figure, not a
+	 * correlated subquery per program (that took 22s over the whole library). With a program id only that program.
 	 *
 	 * @return list<array{content_id:int, title:string, seasons:int, built:int, unlinked:int, credits:int}>
 	 */
-	public static function programOverview(): array {
+	public static function programOverview( ?int $pProgramId = null ): array {
 		global $gBitDb;
-		$programs = $gBitDb->getAll(
-			"SELECT p.`content_id`, p.`title`,
-			   ( SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` s ON s.`content_id` = m.`item_content_id`
-			     WHERE m.`gallery_content_id` = p.`content_id` AND s.`content_type_guid` = 'fisheyeseason' ) AS seasons,
-			   ( SELECT COUNT(DISTINCT x.`content_id`) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_xref` x ON x.`content_id` = m.`item_content_id`
-			     WHERE m.`gallery_content_id` = p.`content_id` AND x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star' ) ) AS built,
-			   ( SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_xref` x ON x.`content_id` = m.`item_content_id`
-			     WHERE m.`gallery_content_id` = p.`content_id` AND x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star' ) AND ( x.`xref` IS NULL OR x.`xref` = 0 ) ) AS unlinked,
-			   ( SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_xref` x ON x.`content_id` = m.`item_content_id`
-			     WHERE m.`gallery_content_id` = p.`content_id` AND x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star' ) ) AS credits
-			 FROM `".BIT_DB_PREFIX."liberty_content` p WHERE p.`content_type_guid` = 'fisheyeprogram' ORDER BY p.`title`"
+		$bind = [];
+		$programSql = "SELECT p.`content_id`, p.`title` FROM `".BIT_DB_PREFIX."liberty_content` p WHERE p.`content_type_guid` = 'fisheyeprogram'";
+		$mapWhere = '';
+		if( $pProgramId !== null ) {
+			$programSql .= " AND p.`content_id` = ?";
+			$mapWhere = " AND m.`gallery_content_id` = ?";
+			$bind = [ $pProgramId ];
+		}
+		$programs = $gBitDb->getAll( $programSql." ORDER BY p.`title`", $bind ) ?: [];
+		$seasons = $gBitDb->getAssoc(
+			"SELECT m.`gallery_content_id`, COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+			 JOIN `".BIT_DB_PREFIX."liberty_content` s ON s.`content_id` = m.`item_content_id`
+			 WHERE s.`content_type_guid` = 'fisheyeseason'".$mapWhere." GROUP BY m.`gallery_content_id`", $bind
 		) ?: [];
-		return array_map( fn( $r ) => [ 'content_id' => (int)$r['content_id'], 'title' => $r['title'], 'seasons' => (int)$r['seasons'],
-			'built' => (int)$r['built'], 'unlinked' => (int)$r['unlinked'], 'credits' => (int)$r['credits'] ], $programs );
+		$credits = [];
+		foreach( $gBitDb->getAll(
+			"SELECT m.`gallery_content_id` AS pid, COUNT(DISTINCT x.`content_id`) AS built, COUNT(*) AS credits,
+			        SUM( CASE WHEN x.`xref` IS NULL OR x.`xref` = 0 THEN 1 ELSE 0 END ) AS unlinked
+			 FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+			 JOIN `".BIT_DB_PREFIX."liberty_xref` x ON x.`content_id` = m.`item_content_id`
+			 WHERE x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star' )".$mapWhere."
+			 GROUP BY m.`gallery_content_id`", $bind
+		) ?: [] as $row ) {
+			$credits[(int)$row['pid']] = $row;
+		}
+		return array_map( fn( $r ) => [
+			'content_id' => (int)$r['content_id'], 'title' => $r['title'],
+			'seasons'  => (int)( $seasons[$r['content_id']] ?? 0 ),
+			'built'    => (int)( $credits[(int)$r['content_id']]['built'] ?? 0 ),
+			'unlinked' => (int)( $credits[(int)$r['content_id']]['unlinked'] ?? 0 ),
+			'credits'  => (int)( $credits[(int)$r['content_id']]['credits'] ?? 0 ),
+		], $programs );
 	}
 }
