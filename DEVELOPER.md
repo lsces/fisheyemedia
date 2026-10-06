@@ -555,6 +555,13 @@ can, an external player or a download prompt otherwise).
   (`reconcileXrefItem( 'episode', ..., 'xkey_ext' )`, keyed by the episode file path): unchanged rows keep their
   history, a changed packet archives the old row and inserts the new, a hand edit is kept, an episode that has gone
   is archived. The per-episode `star` list is no longer capped at 5.
+- **Which cast get a season row (rule B, 2026-10-06):** a person is promoted from the episode JSON to a season `star` row
+  only with a real presence in the season - in at least `fisheyemedia_credit_min_episodes` (default 2) of its episodes, or among
+  the first `fisheyemedia_credit_billed_top` (default 6) names of any episode's cast list (Plex lists the cast in billing order;
+  this keeps the leads of a one-episode season) - or if already linked to a contact. Directors and writers are always
+  promoted (each usually works one episode). A one-episode guest stays in that episode's own JSON/cast panel only. Both
+  settings are on Media Library Settings. NCIS Season 1: 252 star rows -> 26; A Touch of Frost 995 rows -> ~344. Dropped rows
+  are archived (history kept), restored by lowering a setting and Build/reload.
 - **Credits directory** - `FisheyeSeason::deriveCreditDirectory()`, run at the end of both rebuilds (and from
   contactwiki's "Build credit directories"): episodes are xref rows, not content items, so the season is the lowest
   content that can carry a person's `xref`. One `director`/`writer`/`star` row per person per role: `xkey_ext` = the

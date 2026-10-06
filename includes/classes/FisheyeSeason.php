@@ -942,7 +942,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 
 	/**
 	 * Rebuild this season's credits directory from its episodes: one row per person per role (director/
-	 * writer/star) - xkey_ext = the name, data = {"episodes":[the episode numbers they appear in]} - so a
+	 * writer/star; cast only when they have a real presence in the season - see below) - xkey_ext = the name, data = {"episodes":[the episode numbers they appear in]} - so a
 	 * person can be linked to a contact once per season, and a contact's own page can find every season
 	 * it is on. Episodes are xref rows, not content items, so the season is the lowest level that can carry
 	 * a person's xref. Derived from the live episode rows (the source of truth stays the episode JSON, as
@@ -969,14 +969,16 @@ class FisheyeSeason extends FisheyeMediaImage {
 				$numbers = array_map( 'intval', $nums[0] );
 			}
 			foreach( FisheyeCredits::ITEMS as $role ) {
-				foreach( (array)( $data[$role] ?? [] ) as $name ) {
+				foreach( array_values( (array)( $data[$role] ?? [] ) ) as $position => $name ) {
 					$name = trim( preg_replace( '/\s+/u', ' ', (string)$name ) );
 					if( $name === '' ) {
 						continue;
 					}
 					$entry = &$byRole[$role][$name];
-					$entry ??= [ 'first' => $seen++, 'episodes' => [] ];
+					$entry ??= [ 'first' => $seen++, 'episodes' => [], 'billed' => $position ];
 					$entry['episodes'] = array_merge( $entry['episodes'], $numbers );
+					// Plex lists the cast in billing order, so the position in an episode's list is the billing.
+					$entry['billed'] = min( $entry['billed'], $position );
 					unset( $entry );
 				}
 			}
@@ -986,9 +988,24 @@ class FisheyeSeason extends FisheyeMediaImage {
 			$allNames = array_merge( $allNames, array_keys( $rolePeople ) );
 		}
 		$known = $allNames ? FisheyeCredits::linkedContactsByName( $allNames ) : [];
+		// A season's cast directory keeps the people with a real presence in the season - in at least
+		// `min` of its episodes, or among the top `billed` names of an episode's cast list - and anyone
+		// already linked to a contact. A one-episode guest stays in the episode's own cast list (its JSON)
+		// but is not promoted to a season row. Directors and writers are always kept: each usually works
+		// a single episode. Both numbers are site settings (Media Library Settings).
+		global $gBitSystem;
+		$minEpisodes = max( 1, (int)( $gBitSystem->getConfig( 'fisheyemedia_credit_min_episodes', 2 ) ?: 2 ) );
+		$billedTop   = max( 0, (int)( $gBitSystem->getConfig( 'fisheyemedia_credit_billed_top', 6 ) ?: 6 ) );
 		$counts = [];
 		foreach( FisheyeCredits::ITEMS as $role ) {
 			$people = $byRole[$role] ?? [];
+			if( $role === 'star' ) {
+				$people = array_filter( $people, fn( $person, $name ) =>
+					count( array_unique( $person['episodes'] ) ) >= $minEpisodes
+					|| $person['billed'] < $billedTop
+					|| isset( $known[mb_strtolower( $name )] ),
+					ARRAY_FILTER_USE_BOTH );
+			}
 			// Most episodes first, then order of first appearance - the billing a cast list wants.
 			uasort( $people, fn( $a, $b ) => [ count( $b['episodes'] ), $a['first'] ] <=> [ count( $a['episodes'] ), $b['first'] ] );
 			$wanted = [];

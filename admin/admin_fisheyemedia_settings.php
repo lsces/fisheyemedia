@@ -41,6 +41,14 @@ $formFisheyeMediaGeneral = [
 		'label' => 'Plex API Token',
 		'note' => 'From Plex\'s own Preferences.xml (PlexOnlineToken) - only needed for external ID lookups (IMDB/TMDB/TheTVDB/MusicBrainz) via Plex\'s local API, since those aren\'t stored in the database itself. Leave blank to skip external-id lookup only (genre/director/etc still works without it).',
 	],
+	"fisheyemedia_credit_min_episodes" => [
+		'label' => 'Season cast: minimum episodes',
+		'note' => 'A season\'s cast list keeps a person who appears in at least this many of the season\'s episodes (or who is billed high enough, below). A one-episode guest stays in that episode\'s own cast list only. Directors and writers are always kept. Default 2.',
+	],
+	"fisheyemedia_credit_billed_top" => [
+		'label' => 'Season cast: billing depth',
+		'note' => 'A person among the first this-many names of any episode\'s cast list (Plex lists the cast in billing order) is kept in the season\'s cast even for a single episode - what keeps the leads of a one-episode season. Default 6.',
+	],
 	"fisheye_musicbrainz_contact" => [
 		'label' => 'MusicBrainz Contact (User-Agent)',
 		'note' => 'MusicBrainz\'s API etiquette policy asks every client to identify itself with real contact info in its User-Agent string - used by FisheyeAlbum\'s Discogs-link lookup. Leave blank to send the request with no contact info (MusicBrainz may rate-limit or block an unidentified client).',
