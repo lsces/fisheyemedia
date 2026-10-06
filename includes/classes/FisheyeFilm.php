@@ -507,6 +507,35 @@ class FisheyeFilm extends FisheyeMediaImage {
 		return $linked;
 	}
 
+	/**
+	 * The TMDb movie id held in each film's own `tmdb` xref (xkey) - lets a people-matching tool ask
+	 * TMDb who was credited on a film. Films without one are simply absent.
+	 *
+	 * @param int[] $pContentIds
+	 * @return array<int,int>  film content_id => TMDb movie id
+	 */
+	public static function tmdbIdsByFilm( array $pContentIds ): array {
+		global $gBitDb;
+		$pContentIds = array_values( array_unique( array_filter( array_map( 'intval', $pContentIds ) ) ) );
+		if( !$pContentIds ) {
+			return [];
+		}
+		$rows = $gBitDb->getAll(
+			"SELECT x.`content_id`, x.`xkey` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 WHERE lc.`content_type_guid` = 'fisheyefilm' AND x.`item` = 'tmdb' AND x.`end_date` IS NULL
+			 AND x.`content_id` IN ( ".implode( ',', array_fill( 0, count( $pContentIds ), '?' ) )." )",
+			$pContentIds
+		) ?: [];
+		$ret = [];
+		foreach( $rows as $row ) {
+			if( ctype_digit( (string)$row['xkey'] ) ) {
+				$ret[(int)$row['content_id']] = (int)$row['xkey'];
+			}
+		}
+		return $ret;
+	}
+
 	/** Adds a credit row's name => contact page url to $pUrls when the row is linked to a contact. */
 	private static function creditUrl( array $pUrls, \ArrayAccess|array $pXref ): array {
 		if( !empty( $pXref['xref'] ) && !empty( $pXref['xkey_ext'] ) ) {
