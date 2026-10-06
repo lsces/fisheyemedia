@@ -412,99 +412,31 @@ class FisheyeFilm extends FisheyeMediaImage {
 	}
 
 	/** The film xref items that credit a person. */
-	public const CREDIT_ITEMS = [ 'director', 'writer', 'star' ];
+	public const CREDIT_ITEMS = FisheyeCredits::ITEMS;
 
 	/**
-	 * Every person credited on a film, one entry per distinct name (case/spacing-insensitive), from
-	 * the live director/writer/star rows - what a people-matching tool (contactwiki's Film/TV people
-	 * pass) works from, the film-side counterpart of FisheyeAlbum::surveyArtistCredits(). Read
-	 * straight from liberty_xref, not through a film's role-filtered mXrefInfo, so it sees every row
-	 * whoever runs it.
+	 * Every person credited on a film, one entry per distinct name - FisheyeCredits::survey() for films,
+	 * with each person's films under 'films' (what the film people pass reads).
 	 *
-	 * @return array{films:int, credits:int, people:array<string,array{name:string, names:array<string,int>,
-	 *         roles:array<string,int>, films:array<int,string>, credits:int, xref_ids:int[],
-	 *         unlinked_ids:int[], contacts:int[]}>}  people keyed by lower-cased name, most-credited first
+	 * @return array{films:int, credits:int, people:array<string,array>}
 	 */
 	public static function surveyCredits(): array {
-		global $gBitDb;
-		$rows = $gBitDb->getAll(
-			"SELECT x.`xref_id`, x.`content_id`, x.`item`, x.`xref`, x.`xkey_ext`, lc.`title`
-			 FROM `".BIT_DB_PREFIX."liberty_xref` x
-			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
-			 WHERE lc.`content_type_guid` = 'fisheyefilm' AND x.`end_date` IS NULL
-			 AND x.`item` IN ( 'director', 'writer', 'star' ) AND x.`xkey_ext` IS NOT NULL"
-		) ?: [];
-		$people = [];
-		$films = [];
-		foreach( $rows as $row ) {
-			$name = trim( preg_replace( '/\s+/u', ' ', (string)$row['xkey_ext'] ) );
-			if( $name === '' ) {
-				continue;
-			}
-			$key = mb_strtolower( $name );
-			$p = &$people[$key];
-			$p ??= [ 'name' => $name, 'names' => [], 'roles' => [], 'films' => [], 'credits' => 0,
-				'xref_ids' => [], 'unlinked_ids' => [], 'contacts' => [] ];
-			$p['names'][$name] = ( $p['names'][$name] ?? 0 ) + 1;
-			$p['roles'][$row['item']] = ( $p['roles'][$row['item']] ?? 0 ) + 1;
-			$p['films'][(int)$row['content_id']] = $row['title'];
-			$p['credits']++;
-			$p['xref_ids'][] = (int)$row['xref_id'];
-			if( empty( $row['xref'] ) ) {
-				$p['unlinked_ids'][] = (int)$row['xref_id'];
-			} else {
-				$p['contacts'][(int)$row['xref']] = (int)$row['xref'];
-			}
-			$films[(int)$row['content_id']] = true;
-			unset( $p );
-		}
-		foreach( $people as &$person ) {
-			arsort( $person['names'] );
-			$person['name'] = (string)array_key_first( $person['names'] );
-			$person['contacts'] = array_values( $person['contacts'] );
+		$survey = FisheyeCredits::survey( [ 'fisheyefilm' ] );
+		foreach( $survey['people'] as &$person ) {
+			$person['films'] = $person['items'];
 		}
 		unset( $person );
-		uasort( $people, fn( $a, $b ) => [ $b['credits'], $a['name'] ] <=> [ $a['credits'], $b['name'] ] );
-		return [ 'films' => count( $films ), 'credits' => count( $rows ), 'people' => $people ];
+		return [ 'films' => $survey['items'], 'credits' => $survey['credits'], 'people' => $survey['people'] ];
 	}
 
 	/**
-	 * Link film credit rows to a contact: xref = the contact's content_id, xkey = its external id (a
-	 * Wikidata Q-id when it has one) - the same shape an album credit takes. Only live film credit
-	 * rows with no link yet are written, so a link made by hand is never overwritten. The row's own
-	 * xorder/xkey_ext are kept; the write is an in-place update, which marks the row as hand-owned
-	 * for reconcileItem() - a later Plex reload leaves a linked credit alone.
+	 * Link film credit rows to a contact - see FisheyeCredits::linkRows().
 	 *
-	 * @param int[]   $pXrefIds
-	 * @param int     $pContactId
-	 * @param ?string $pXkey
+	 * @param int[] $pXrefIds
 	 * @return int  rows linked
 	 */
 	public static function linkCreditRows( array $pXrefIds, int $pContactId, ?string $pXkey ): int {
-		global $gBitDb;
-		$pXrefIds = array_values( array_filter( array_map( 'intval', $pXrefIds ) ) );
-		if( !$pXrefIds || $pContactId <= 0 ) {
-			return 0;
-		}
-		$ids = $gBitDb->getCol(
-			"SELECT x.`xref_id` FROM `".BIT_DB_PREFIX."liberty_xref` x
-			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
-			 WHERE x.`xref_id` IN ( ".implode( ',', array_fill( 0, count( $pXrefIds ), '?' ) )." )
-			 AND lc.`content_type_guid` = 'fisheyefilm' AND x.`end_date` IS NULL
-			 AND x.`item` IN ( 'director', 'writer', 'star' ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
-			$pXrefIds
-		) ?: [];
-		$linked = 0;
-		foreach( $ids as $id ) {
-			$xref = new \Bitweaver\Liberty\LibertyXref();
-			$xref->mContentTypeGuid = 'fisheyefilm';
-			$xref->load( (int)$id );
-			$hash = [ 'xref_id' => (int)$id, 'xref' => $pContactId, 'xkey' => (string)$pXkey ];
-			if( $xref->store( $hash ) ) {
-				$linked++;
-			}
-		}
-		return $linked;
+		return FisheyeCredits::linkRows( $pXrefIds, $pContactId, $pXkey );
 	}
 
 	/**

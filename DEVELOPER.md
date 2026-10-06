@@ -547,3 +547,22 @@ can, an external player or a download prompt otherwise).
 - Film/TV cast and crew are text credits unless linked: `FisheyeFilm::surveyCredits()`/`linkCreditRows()` back
   contactwiki's film people pass (xref=contact, xkey=Q-id); the film page links a linked name. Programs/episodes
   are not linked yet (program reload still delete-and-rebuild).
+
+## Credits: season directories and the shared survey/link class (2026-10-06)
+
+- **Season reload never wipes.** `FisheyeSeason::reloadPlexEpisodes()` (Plex) and
+  `registerEpisodesFromFilesystem()` (no Plex match) collect the wanted episode rows and reconcile them once
+  (`reconcileXrefItem( 'episode', ..., 'xkey_ext' )`, keyed by the episode file path): unchanged rows keep their
+  history, a changed packet archives the old row and inserts the new, a hand edit is kept, an episode that has gone
+  is archived. The per-episode `star` list is no longer capped at 5.
+- **Credits directory** - `FisheyeSeason::deriveCreditDirectory()`, run at the end of both rebuilds (and from
+  contactwiki's "Build credit directories"): episodes are xref rows, not content items, so the season is the lowest
+  content that can carry a person's `xref`. One `director`/`writer`/`star` row per person per role: `xkey_ext` = the
+  name, `data` = `{"episodes":[1,2,5]}` (numbers from the `SnnEnn` in the episode path, every number of a double
+  episode, else the position). Derived from the live episode rows (the episode JSON stays the source), reconciled with
+  keep-links, ordered by episodes then first appearance. A name already linked to a contact anywhere (film, program,
+  season) has that link carried onto the new row (`FisheyeCredits::linkedContactsByName()`).
+- **`FisheyeCredits`** - `survey()` (distinct people across film/program/season credit rows, optionally limited to given
+  content ids), `linkRows()` (xref = contact, xkey = Q-id, only unlinked live rows; **keeps the row's
+  `last_update_date`**, so linking is not a hand edit and a later reload still updates episode lists), `seasonIdsForProgram()`,
+  `tmdbIdFor()`, `programOverview()`. `FisheyeFilm::surveyCredits()/linkCreditRows()` are thin wrappers.

@@ -664,8 +664,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 	 * reconstructing it from the season title, since a flat (no-subfolder) season's title
 	 * ("Show - Season 1") doesn't correspond to a real "Season 1" folder on disk.
 	 *
-	 * Rebuild-not-diff, same as the Plex-match branch above (every 'episode' xref row for this
-	 * content_id is deleted before re-inserting).
+	 * Reconciled like the Plex-match branch (never wiped - history and hand edits kept).
 	 *
 	 * @return array Same shape as the Plex-match branch: matched=>bool, items=>episode titles.
 	 */
@@ -684,7 +683,8 @@ class FisheyeSeason extends FisheyeMediaImage {
 			return $summary;
 		}
 
-		self::deleteXrefByItem( $this->mContentId, [ 'episode' ] );
+		// Reconciled, never wiped - see reloadPlexEpisodes(). Rows are collected, then reconciled once.
+		$wantedEpisodes = [];
 
 		// Same per-episode thumbnail this season's Plex-match branch above stores (its own
 		// 'thumb' key, resolved later by view_extra_image.php) - just sourced from a local
@@ -735,17 +735,19 @@ class FisheyeSeason extends FisheyeMediaImage {
 				}
 				@unlink( $tmpFile );
 			}
-			$xrefHash = [
-				'content_id' => $this->mContentId,
-				'item'       => 'episode',
-				'xkey_ext'   => $relativeSeasonDir.'/'.$file,
-				'edit'       => json_encode( $episodeData ),
-				'xorder'     => $xorder++,
+			$wantedEpisodes[] = [
+				'key'      => $relativeSeasonDir.'/'.$file,
+				'xkey_ext' => $relativeSeasonDir.'/'.$file,
+				'xorder'   => $xorder++,
+				'data'     => $episodeData,
 			];
-			$this->storeXref( $xrefHash );
 			$summary['items'][] = $episodeTitle;
 		}
 		$summary['matched'] = true;
+		$summary['items'][] = self::describeCounts( 'episodes', $this->reconcileXrefItem( 'episode', $wantedEpisodes, 'xkey_ext' ) );
+		foreach( $this->deriveCreditDirectory() as $role => $roleCounts ) {
+			$summary['items'][] = self::describeCounts( "credits ($role)", $roleCounts );
+		}
 
 		return $summary;
 	}
@@ -753,17 +755,17 @@ class FisheyeSeason extends FisheyeMediaImage {
 	/**
 	 * Fetch this season's full episode list from Plex - the "Load Episodes" action,
 	 * superseding an earlier one-off smoke test that had
-	 * registered only the one episode it was hand-fed. Rebuild-not-diff, same as every other
-	 * reload* method here: every 'episode' xref row for this content_id is deleted before
-	 * re-inserting, since 'episode' is multiple=1 and storeXref() has no natural key to update
-	 * in place.
+	 * registered only the one episode it was hand-fed. Reconciled, never wiped: rows are
+	 * matched by the episode's own file path (its natural key), so an unchanged episode is left alone
+	 * with its history, a changed packet archives the old row and inserts the new, a hand-edited row is
+	 * kept, and an episode Plex no longer lists is archived.
 	 *
 	 * There is no season-level facts panel to populate - Plex doesn't put anything up on a season
 	 * page itself, it's the TV that toggles to display a selected episode's metadata as you
 	 * select each; confirmed directly against the local Plex db: the season's
 	 * own metadata_item has empty content_rating/duration and no genre/director/writer/star
-	 * taggings at all. Real per-episode facts - director(tag_type 4)/writer(5)/star(6, capped at
-	 * 5 same reasoning as every other star cap here)/content_rating/duration - DO exist one level
+	 * taggings at all. Real per-episode facts - director(tag_type 4)/writer(5)/star(6, the full
+	 * list - no cap)/content_rating/duration - DO exist one level
 	 * down, on each episode's own metadata_item (metadata_type=4). Genre never exists below show level in Plex's own model, so it's not attempted here -
 	 * that's what view_program.php's own facts panel already covers, one level up.
 	 *
@@ -822,7 +824,11 @@ class FisheyeSeason extends FisheyeMediaImage {
 		}
 		$summary['matched'] = true;
 
-		self::deleteXrefByItem( $this->mContentId, [ 'episode' ] );
+		// Reconciled, never wiped: an episode row keeps its history (entry/last_update/end_date), a hand
+		// edit is left alone, a changed packet archives the old row, an episode Plex no longer lists is
+		// archived - see FisheyeMediaTrait/LibertyXref::reconcileItem(). Rows are collected, then
+		// reconciled once (keyed by the episode's own file path).
+		$wantedEpisodes = [];
 
 		$tagTypes = [ 'director' => 4, 'writer' => 5, 'star' => 6 ];
 		foreach( $episodeRows as $row ) {
@@ -842,9 +848,6 @@ class FisheyeSeason extends FisheyeMediaImage {
 				);
 				$tagStmt->execute( [ $row['id'], $tagType ] );
 				$values = $tagStmt->fetchAll( \PDO::FETCH_COLUMN );
-				if( $tagItem === 'star' ) {
-					$values = array_slice( $values, 0, 5 );
-				}
 				if( $values ) {
 					$episodeData[$tagItem] = $values;
 				}
@@ -921,18 +924,92 @@ class FisheyeSeason extends FisheyeMediaImage {
 				}
 			}
 
-			$xrefParamHash = [
-				'content_id' => $this->mContentId,
-				'item'       => 'episode',
-				'xkey_ext'   => $relativePath,
-				'edit'       => json_encode( $episodeData ),
-				'xorder'     => (int)$row['index'],
+			$wantedEpisodes[] = [
+				'key'      => $relativePath,
+				'xkey_ext' => $relativePath,
+				'xorder'   => (int)$row['index'],
+				'data'     => $episodeData,
 			];
-			$this->storeXref( $xrefParamHash );
 			$summary['items'][] = "S{$row['index']}: {$row['title']}";
+		}
+		$summary['items'][] = self::describeCounts( 'episodes', $this->reconcileXrefItem( 'episode', $wantedEpisodes, 'xkey_ext' ) );
+		foreach( $this->deriveCreditDirectory() as $role => $roleCounts ) {
+			$summary['items'][] = self::describeCounts( "credits ($role)", $roleCounts );
 		}
 
 		return $summary;
+	}
+
+	/**
+	 * Rebuild this season's credits directory from its episodes: one row per person per role (director/
+	 * writer/star) - xkey_ext = the name, data = {"episodes":[the episode numbers they appear in]} - so a
+	 * person can be linked to a contact once per season, and a contact's own page can find every season
+	 * it is on. Episodes are xref rows, not content items, so the season is the lowest level that can carry
+	 * a person's xref. Derived from the live episode rows (the source of truth stays the episode JSON, as
+	 * Plex wrote it), reconciled never wiped (history kept, a hand edit left alone), and a person already
+	 * linked to a contact on any film/program/season has that link carried onto the new row, so a name is
+	 * resolved once everywhere. Episode numbers come from the SnnEnn in the episode's file path (every
+	 * number of a double episode), falling back to its position.
+	 *
+	 * @return array<string,array<string,int>>  role => reconcile counts
+	 */
+	public function deriveCreditDirectory(): array {
+		global $gBitDb;
+		$episodes = $gBitDb->getAll(
+			"SELECT `xkey_ext`, `xorder`, `data` FROM `".BIT_DB_PREFIX."liberty_xref`
+			 WHERE `content_id` = ? AND `item` = 'episode' AND `end_date` IS NULL ORDER BY `xorder`",
+			[ $this->mContentId ]
+		) ?: [];
+		$byRole = [];
+		$seen = 0;
+		foreach( $episodes as $episode ) {
+			$data = !empty( $episode['data'] ) ? json_decode( $episode['data'], true ) : [];
+			$numbers = [ (int)$episode['xorder'] ];
+			if( preg_match( '/S\d+E([\dE&-]+)/i', (string)$episode['xkey_ext'], $m ) && preg_match_all( '/\d+/', $m[1], $nums ) ) {
+				$numbers = array_map( 'intval', $nums[0] );
+			}
+			foreach( FisheyeCredits::ITEMS as $role ) {
+				foreach( (array)( $data[$role] ?? [] ) as $name ) {
+					$name = trim( preg_replace( '/\s+/u', ' ', (string)$name ) );
+					if( $name === '' ) {
+						continue;
+					}
+					$entry = &$byRole[$role][$name];
+					$entry ??= [ 'first' => $seen++, 'episodes' => [] ];
+					$entry['episodes'] = array_merge( $entry['episodes'], $numbers );
+					unset( $entry );
+				}
+			}
+		}
+		$allNames = [];
+		foreach( $byRole as $rolePeople ) {
+			$allNames = array_merge( $allNames, array_keys( $rolePeople ) );
+		}
+		$known = $allNames ? FisheyeCredits::linkedContactsByName( $allNames ) : [];
+		$counts = [];
+		foreach( FisheyeCredits::ITEMS as $role ) {
+			$people = $byRole[$role] ?? [];
+			// Most episodes first, then order of first appearance - the billing a cast list wants.
+			uasort( $people, fn( $a, $b ) => [ count( $b['episodes'] ), $a['first'] ] <=> [ count( $a['episodes'] ), $b['first'] ] );
+			$wanted = [];
+			foreach( $people as $name => $person ) {
+				$episodeList = array_values( array_unique( $person['episodes'] ) );
+				sort( $episodeList );
+				$row = [ 'key' => $name, 'xkey_ext' => $name, 'xorder' => count( $wanted ) + 1, 'data' => [ 'episodes' => $episodeList ] ];
+				if( $link = ( $known[mb_strtolower( $name )] ?? null ) ) {
+					$row['xref'] = $link['xref'];
+					$row['xkey'] = $link['xkey'];
+				}
+				$wanted[] = $row;
+			}
+			$counts[$role] = $this->reconcileXrefItem( $role, $wanted, 'xkey_ext', false, true );
+		}
+		return $counts;
+	}
+
+	/** One summary line for a reconcile result, e.g. "episodes: 12 unchanged, 0 inserted, 0 archived". */
+	private static function describeCounts( string $pLabel, array $pCounts ): string {
+		return $pLabel.': '.implode( ', ', array_map( fn( $k, $n ) => "$n $k", array_keys( $pCounts ), $pCounts ) );
 	}
 
 	/**
