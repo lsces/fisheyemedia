@@ -57,8 +57,10 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	$plexResult = $gContent->reloadPlexImages();
 	$plexResultLabel = KernelTools::tra( 'Images reloaded from Plex' );
 } elseif( !empty( $_REQUEST['fReloadEpisodes'] ) ) {
-	$plexResult = $gContent->reloadPlexEpisodes();
-	$plexResultLabel = KernelTools::tra( 'Episodes loaded from Plex' );
+	// Data only: an episode already registered keeps its thumbnail (Reload Images is the tool for images); a new episode gets
+	// the full load, thumbnail included.
+	$plexResult = $gContent->reloadPlexEpisodes( true );
+	$plexResultLabel = KernelTools::tra( 'Episodes loaded from Plex (existing thumbnails kept)' );
 	// Episode titles only become searchable via this season's own getExtraIndexWords() hook
 	// (LibertyContent::verify()/setIndexData()) - but that only fires on this season's own
 	// store(), which a plain episode xref reload never calls. Refresh explicitly here instead of

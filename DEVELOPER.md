@@ -565,8 +565,9 @@ can, an external player or a download prompt otherwise).
 - **Data-only episode reload** - `FisheyeSeason::reloadPlexEpisodes( true )` (what contactwiki's TV people page uses): refreshes
   the Plex text/tags/rating of episodes already registered but keeps their stored thumbnail, resolution and audio, fetches nothing
   from Plex over HTTP and runs no ffprobe/frame grab, so a thumbnail replaced by hand is never overwritten and a reload is a
-  database read (NCIS, 24 seasons / 548 episodes: 2.9 s). A new episode takes the full path. The plain `reloadPlexEpisodes()`
-  (season page "Reload Episodes") still re-downloads and overwrites every episode thumbnail.
+  database read (NCIS, 24 seasons / 548 episodes: 2.9 s). A new episode takes the full path. The season page's "Load Episodes"
+  and load_program.php's season reload both use it now; only `registerFromDisk()` (a brand-new season) calls the plain
+  `reloadPlexEpisodes()`, which downloads every thumbnail. Artwork is Reload Images' job.
 - **Credits directory** - `FisheyeSeason::deriveCreditDirectory()`, run at the end of both rebuilds (and from
   contactwiki's "Build credit directories"): episodes are xref rows, not content items, so the season is the lowest
   content that can carry a person's `xref`. One `director`/`writer`/`star` row per person per role: `xkey_ext` = the

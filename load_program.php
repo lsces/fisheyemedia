@@ -158,7 +158,7 @@ if( $scopeShow === null ) {
 			$reloadSeason = new FisheyeSeason( null, $reloadSeasonId );
 			$reloadSeason->load();
 			if( $reloadSeason->isValid() ) {
-				$episodeReloadResult = [ 'title' => $reloadSeason->getTitle(), 'episodes' => $reloadSeason->reloadPlexEpisodes() ];
+				$episodeReloadResult = [ 'title' => $reloadSeason->getTitle(), 'episodes' => $reloadSeason->reloadPlexEpisodes( true ) ];
 			}
 		}
 	}

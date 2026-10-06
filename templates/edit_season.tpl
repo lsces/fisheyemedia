@@ -63,7 +63,7 @@
 				<input type="submit" class="btn btn-default" name="fCancel" value="{tr}Cancel{/tr}" />
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadImages" value="{tr}Reload Images{/tr}" />
-				<input type="submit" class="btn btn-secondary" name="fReloadEpisodes" value="{tr}Load Episodes{/tr}" />
+				<input type="submit" class="btn btn-secondary" name="fReloadEpisodes" value="{tr}Load Episodes{/tr}" title="{tr}Refreshes the episode details and cast from Plex. Thumbnails already loaded are kept; use Reload Images for artwork.{/tr}" />
 			</div>
 		{/form}
 	</div><!-- end .body -->
