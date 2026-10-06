@@ -28,8 +28,8 @@
 				{/if}
 				{if $directors|@count || $stars|@count}
 					<p class="film-credits">
-						{if $directors|@count}<strong>{tr}Director{/tr}{if $directors|@count > 1}s{/if}:</strong> {$directors|@implode:", "|escape}<br />{/if}
-						{if $stars|@count}<strong>{tr}Starring{/tr}:</strong> {foreach from=$stars item=star name=cast}{if $smarty.foreach.cast.iteration <= 6}{if !$smarty.foreach.cast.first}, {/if}{$star|escape}{/if}{/foreach}{if $stars|@count > 6} <span class="film-more-cast">{tr}and{/tr} {$stars|@count - 6} {tr}more{/tr}</span>{/if}{/if}
+						{if $directors|@count}<strong>{tr}Director{/tr}{if $directors|@count > 1}s{/if}:</strong> {foreach from=$directors item=person name=dir}{if $creditUrls.$person}<a href="{$creditUrls.$person|escape}">{$person|escape}</a>{else}{$person|escape}{/if}{if !$smarty.foreach.dir.last}, {/if}{/foreach}<br />{/if}
+						{if $stars|@count}<strong>{tr}Starring{/tr}:</strong> {foreach from=$stars item=star name=cast}{if $smarty.foreach.cast.iteration <= 6}{if !$smarty.foreach.cast.first}, {/if}{if $creditUrls.$star}<a href="{$creditUrls.$star|escape}">{$star|escape}</a>{else}{$star|escape}{/if}{/if}{/foreach}{if $stars|@count > 6} <span class="film-more-cast">{tr}and{/tr} {$stars|@count - 6} {tr}more{/tr}</span>{/if}{/if}
 					</p>
 				{/if}
 				{if $genres|@count}
@@ -42,7 +42,7 @@
 					{if $durationMs}<dt>{tr}Duration{/tr}</dt><dd>{($durationMs/1000)|display_duration}</dd>{/if}
 					{if $resolution}<dt>{tr}Video{/tr}</dt><dd>{$resolution|escape}</dd>{/if}
 					{if $audio}<dt>{tr}Audio{/tr}</dt><dd>{$audio|escape}</dd>{/if}
-					{if $writers|@count}<dt>{tr}Writer{/tr}{if $writers|@count > 1}s{/if}</dt><dd>{$writers|@implode:", "|escape}</dd>{/if}
+					{if $writers|@count}<dt>{tr}Writer{/tr}{if $writers|@count > 1}s{/if}</dt><dd>{foreach from=$writers item=person name=wri}{if $creditUrls.$person}<a href="{$creditUrls.$person|escape}">{$person|escape}</a>{else}{$person|escape}{/if}{if !$smarty.foreach.wri.last}, {/if}{/foreach}</dd>{/if}
 				</dl>
 				{if $externalLinks|@count}
 					<p class="film-external-links">

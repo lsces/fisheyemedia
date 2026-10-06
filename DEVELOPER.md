@@ -544,5 +544,6 @@ can, an external player or a download prompt otherwise).
 - An album with a video disc - the videos would become a film gallery linked to the album, the way
   an artist's `Videos/` already works; not built.
 - Discogs as an image source - the `discogs` item is only an external link today.
-- Film/TV cast and crew are still text credits, not linked to contacts (film reload now reconciles and
-  keeps the full cast, so links will survive - contactwiki `bitweaver/contactwiki.md` 2026-10-06).
+- Film/TV cast and crew are text credits unless linked: `FisheyeFilm::surveyCredits()`/`linkCreditRows()` back
+  contactwiki's film people pass (xref=contact, xkey=Q-id); the film page links a linked name. Programs/episodes
+  are not linked yet (program reload still delete-and-rebuild).
