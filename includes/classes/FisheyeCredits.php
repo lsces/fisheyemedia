@@ -35,19 +35,20 @@ class FisheyeCredits {
 	 *
 	 * @param string[]   $pTypeGuids   content types (subset of TYPES)
 	 * @param int[]|null $pContentIds  restrict to these content items, or null for all of the types
+	 * @param int|null   $pStarDepth   a star billed lower than this on every row the person has (and no other role) makes them 'minor' - credited, but not worth a contact of their own; null = nobody is minor
 	 * @return array{items:int, credits:int, people:array<string,array>}  people keyed by lower-cased name,
 	 *         most-credited first; each: name, names, roles (item=>rows), items (content_id=>title),
 	 *         credits (rows), xref_ids, unlinked_ids, contacts, episodes (total episodes named on
 	 *         season rows)
 	 */
-	public static function survey( array $pTypeGuids, ?array $pContentIds = null ): array {
+	public static function survey( array $pTypeGuids, ?array $pContentIds = null, ?int $pStarDepth = null ): array {
 		global $gBitDb;
 		$pTypeGuids = array_values( array_intersect( $pTypeGuids, self::TYPES ) );
 		if( !$pTypeGuids || ( $pContentIds !== null && !$pContentIds ) ) {
 			return [ 'items' => 0, 'credits' => 0, 'people' => [] ];
 		}
 		$bind = $pTypeGuids;
-		$sql = "SELECT x.`xref_id`, x.`content_id`, x.`item`, x.`xref`, x.`xkey_ext`, x.`data`, lc.`title`
+		$sql = "SELECT x.`xref_id`, x.`content_id`, x.`item`, x.`xorder`, x.`xref`, x.`xkey_ext`, x.`data`, lc.`title`
 			 FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE lc.`content_type_guid` IN ( ".implode( ',', array_fill( 0, count( $pTypeGuids ), '?' ) )." )
@@ -67,11 +68,14 @@ class FisheyeCredits {
 			$key = mb_strtolower( $name );
 			$p = &$people[$key];
 			$p ??= [ 'name' => $name, 'names' => [], 'roles' => [], 'items' => [], 'credits' => 0,
-				'xref_ids' => [], 'unlinked_ids' => [], 'contacts' => [], 'episodes' => 0 ];
+				'xref_ids' => [], 'unlinked_ids' => [], 'contacts' => [], 'episodes' => 0, 'minor' => $pStarDepth !== null ];
 			$p['names'][$name] = ( $p['names'][$name] ?? 0 ) + 1;
 			$p['roles'][$row['item']] = ( $p['roles'][$row['item']] ?? 0 ) + 1;
 			$p['items'][(int)$row['content_id']] = $row['title'];
 			$p['credits']++;
+			if( $pStarDepth === null || $row['item'] !== 'star' || (int)$row['xorder'] <= $pStarDepth ) {
+				$p['minor'] = false;
+			}
 			$p['xref_ids'][] = (int)$row['xref_id'];
 			if( empty( $row['xref'] ) ) {
 				$p['unlinked_ids'][] = (int)$row['xref_id'];

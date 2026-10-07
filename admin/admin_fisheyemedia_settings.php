@@ -49,6 +49,10 @@ $formFisheyeMediaGeneral = [
 		'label' => 'Season cast: billing depth',
 		'note' => 'A person among the first this-many names of any episode\'s cast list (Plex lists the cast in billing order) is kept in the season\'s cast even for a single episode - what keeps the leads of a one-episode season. Default 6.',
 	],
+	"fisheyemedia_film_cast_depth" => [
+		'label' => 'Film people: billing depth',
+		'note' => 'The film people pass offers a contact for a person billed among the first this-many stars of at least one film (and always for directors and writers). Further down the cast stays as a plain-text credit - though it still links on its own when the name matches an existing contact. Default 15.',
+	],
 	"fisheye_musicbrainz_contact" => [
 		'label' => 'MusicBrainz Contact (User-Agent)',
 		'note' => 'MusicBrainz\'s API etiquette policy asks every client to identify itself with real contact info in its User-Agent string - used by FisheyeAlbum\'s Discogs-link lookup. Leave blank to send the request with no contact info (MusicBrainz may rate-limit or block an unidentified client).',

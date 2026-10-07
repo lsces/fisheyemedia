@@ -421,7 +421,10 @@ class FisheyeFilm extends FisheyeMediaImage {
 	 * @return array{films:int, credits:int, people:array<string,array>}
 	 */
 	public static function surveyCredits(): array {
-		$survey = FisheyeCredits::survey( [ 'fisheyefilm' ] );
+		global $gBitSystem;
+		// Plex lists a film's whole cast; only the first stars billed (default 15) are worth a contact each - see FisheyeCredits::survey().
+		$depth = max( 1, (int)$gBitSystem->getConfig( 'fisheyemedia_film_cast_depth', 15 ) );
+		$survey = FisheyeCredits::survey( [ 'fisheyefilm' ], null, $depth );
 		foreach( $survey['people'] as &$person ) {
 			$person['films'] = $person['items'];
 		}
