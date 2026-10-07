@@ -29,11 +29,18 @@
 				{if $gContent->mInfo.data}
 					<p class="film-summary">{$gContent->mInfo.data|escape}</p>
 				{/if}
+				{if $rollup.director || $rollup.star}
+					<div class="film-credits">
+						{if $rollup.director}<strong>{tr}Director{/tr}{if $rollup.director|@count > 1}s{/if}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.director limit=10}<br />{/if}
+						{if $rollup.star}<strong>{tr}Starring{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.star limit=12}{/if}
+					</div>
+				{else}
 				{if $directors|@count || $stars|@count}
 					<p class="film-credits">
 						{if $directors|@count}<strong>{tr}Director{/tr}{if $directors|@count > 1}s{/if}:</strong> {include file="bitpackage:fisheyemedia/credit_names_inc.tpl" names=$directors limit=null}<br />{/if}
 						{if $stars|@count}<strong>{tr}Starring{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_names_inc.tpl" names=$stars limit=null}{/if}
 					</p>
+				{/if}
 				{/if}
 				{if $genres|@count}
 					<p class="film-genres">
@@ -43,7 +50,7 @@
 				<dl class="film-info">
 					{if $contentRating}<dt>{tr}Rating{/tr}</dt><dd>{$contentRating|escape}</dd>{/if}
 					{if $durationMs}<dt>{tr}Duration{/tr}</dt><dd>{($durationMs/1000)|display_duration}</dd>{/if}
-					{if $writers|@count}<dt>{tr}Writer{/tr}{if $writers|@count > 1}s{/if}</dt><dd>{include file="bitpackage:fisheyemedia/credit_names_inc.tpl" names=$writers limit=null}</dd>{/if}
+					{if $rollup.writer}<dt>{tr}Writer{/tr}{if $rollup.writer|@count > 1}s{/if}</dt><dd>{include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.writer limit=10}</dd>{elseif $writers|@count}<dt>{tr}Writer{/tr}{if $writers|@count > 1}s{/if}</dt><dd>{include file="bitpackage:fisheyemedia/credit_names_inc.tpl" names=$writers limit=null}</dd>{/if}
 				</dl>
 				{if $externalLinks|@count}
 					<p class="film-external-links">

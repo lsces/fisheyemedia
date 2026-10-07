@@ -187,6 +187,48 @@ class FisheyeCredits {
 	}
 
 	/**
+	 * A show's credits rolled up from its seasons' credit directories: for each of director/writer/star, the distinct people with
+	 * the episodes they appear in across all seasons and how many seasons, most episodes first. A person's link comes from their
+	 * season rows (xref) - the contact they were linked to. Empty for a show whose directories have not been built yet.
+	 *
+	 * @return array<string,list<array{name:string, url:?string, episodes:int, seasons:int}>>  role => people
+	 */
+	public static function programRollup( int $pProgramId ): array {
+		global $gBitDb;
+		$rows = $gBitDb->getAll(
+			"SELECT x.`item`, x.`xkey_ext`, x.`xref`, x.`data` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyeseason' AND x.`end_date` IS NULL
+			 AND x.`item` IN ( 'director', 'writer', 'star' ) AND x.`xkey_ext` IS NOT NULL",
+			[ $pProgramId ]
+		) ?: [];
+		$byRole = [];
+		foreach( $rows as $row ) {
+			$name = trim( preg_replace( '/\s+/u', ' ', (string)$row['xkey_ext'] ) );
+			if( $name === '' ) {
+				continue;
+			}
+			$data = !empty( $row['data'] ) ? ( json_decode( $row['data'], true ) ?: [] ) : [];
+			$entry = &$byRole[$row['item']][mb_strtolower( $name )];
+			$entry ??= [ 'name' => $name, 'url' => null, 'episodes' => 0, 'seasons' => 0 ];
+			$entry['episodes'] += max( 1, count( (array)( $data['episodes'] ?? [] ) ) );
+			$entry['seasons']++;
+			if( !empty( $row['xref'] ) ) {
+				$entry['url'] = BIT_ROOT_URL.'index.php?content_id='.(int)$row['xref'];
+			}
+			unset( $entry );
+		}
+		$ret = [];
+		foreach( [ 'director', 'writer', 'star' ] as $role ) {
+			$people = array_values( $byRole[$role] ?? [] );
+			usort( $people, fn( $a, $b ) => [ $b['episodes'], $a['name'] ] <=> [ $a['episodes'], $b['name'] ] );
+			$ret[$role] = $people;
+		}
+		return $ret;
+	}
+
+	/**
 	 * The content_ids of a program's seasons (its gallery's season items), in season order.
 	 *
 	 * @return int[]

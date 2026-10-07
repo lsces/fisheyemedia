@@ -573,6 +573,10 @@ can, an external player or a download prompt otherwise).
   a page's names in one lookup to the contact each name is linked to on ANY credit row (`linkedContactsByName()`: film, program or season), which also links a
   guest who was never promoted to a season row; the page assigns `creditUrls` (name => `index.php?content_id=`) and `templates/credit_names_inc.tpl` prints a list
   (names=..., optional limit=N for "and M more"). Same name = same person, the assumption the people tools make. A name with no link stays plain text.
+- **Show page credits (roll-up)** - `FisheyeCredits::programRollup()` rolls a show's season directories up to show level (distinct people per role with total
+  episodes and seasons, most episodes first, each linked to the contact on its season rows); `view_program.tpl`/`view_program_single_season.tpl` show the lead names
+  (10 directors / 12 cast / 10 writers) and the rest behind an "and N more" link (`credit_rollup_inc.tpl`), the hover giving episodes and seasons. A show whose
+  directories are not built yet keeps the Plex show-level lines. A show's *creator* is not a separate role in our data (Plex credits them as a writer on episodes).
 - **Credits directory** - `FisheyeSeason::deriveCreditDirectory()`, run at the end of both rebuilds (and from
   contactwiki's "Build credit directories"): episodes are xref rows, not content items, so the season is the lowest
   content that can carry a person's `xref`. One `director`/`writer`/`star` row per person per role: `xkey_ext` = the
