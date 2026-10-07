@@ -188,7 +188,7 @@ class FisheyeCredits {
 
 	/**
 	 * A show's credits rolled up from its seasons' credit directories: for each of director/writer/star, the distinct people with
-	 * the episodes they appear in across all seasons and how many seasons, most episodes first. A person's link comes from their
+	 * the episodes they appear in across all seasons and how many seasons, most episodes first (ties in billing order). A person's link comes from their
 	 * season rows (xref) - the contact they were linked to. Empty for a show whose directories have not been built yet.
 	 *
 	 * @return array<string,list<array{name:string, url:?string, episodes:int, seasons:int}>>  role => people
@@ -196,7 +196,7 @@ class FisheyeCredits {
 	public static function programRollup( int $pProgramId ): array {
 		global $gBitDb;
 		$rows = $gBitDb->getAll(
-			"SELECT x.`item`, x.`xkey_ext`, x.`xref`, x.`data` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			"SELECT x.`item`, x.`xkey_ext`, x.`xref`, x.`data`, x.`xorder` FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyeseason' AND x.`end_date` IS NULL
@@ -211,9 +211,11 @@ class FisheyeCredits {
 			}
 			$data = !empty( $row['data'] ) ? ( json_decode( $row['data'], true ) ?: [] ) : [];
 			$entry = &$byRole[$row['item']][mb_strtolower( $name )];
-			$entry ??= [ 'name' => $name, 'url' => null, 'episodes' => 0, 'seasons' => 0 ];
+			$entry ??= [ 'name' => $name, 'url' => null, 'episodes' => 0, 'seasons' => 0, 'rankSum' => 0 ];
 			$entry['episodes'] += max( 1, count( (array)( $data['episodes'] ?? [] ) ) );
 			$entry['seasons']++;
+			// A season row's xorder is its place in that season's billing (episodes, then order of first appearance).
+			$entry['rankSum'] += (int)$row['xorder'];
 			if( !empty( $row['xref'] ) ) {
 				$entry['url'] = BIT_ROOT_URL.'index.php?content_id='.(int)$row['xref'];
 			}
@@ -222,7 +224,8 @@ class FisheyeCredits {
 		$ret = [];
 		foreach( [ 'director', 'writer', 'star' ] as $role ) {
 			$people = array_values( $byRole[$role] ?? [] );
-			usort( $people, fn( $a, $b ) => [ $b['episodes'], $a['name'] ] <=> [ $a['episodes'], $b['name'] ] );
+			// Most episodes first; people tied on episodes in billing order (their average place across the seasons), then by name.
+			usort( $people, fn( $a, $b ) => [ $b['episodes'], $a['rankSum'] / $a['seasons'], $a['name'] ] <=> [ $a['episodes'], $b['rankSum'] / $b['seasons'], $b['name'] ] );
 			$ret[$role] = $people;
 		}
 		return $ret;
