@@ -51,7 +51,7 @@ $formFisheyeMediaGeneral = [
 	],
 	"fisheyemedia_film_cast_depth" => [
 		'label' => 'Film people: billing depth',
-		'note' => 'The film people pass offers a contact for a person billed among the first this-many stars of at least one film (and always for directors and writers). Further down the cast stays as a plain-text credit - though it still links on its own when the name matches an existing contact. Default 15.',
+		'note' => 'The film people pass offers a contact for a person billed among the first this-many stars of at least one film (and always for directors and writers). Further down the cast stays as a plain-text credit - though it still links on its own when the name matches an existing contact. Default 10.',
 	],
 	"fisheye_musicbrainz_contact" => [
 		'label' => 'MusicBrainz Contact (User-Agent)',
