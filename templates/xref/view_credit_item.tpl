@@ -10,7 +10,8 @@
 		{$xrefInfo.xkey_ext|escape}
 	{/if}
 	{if $xrefInfo.xkey && $xrefInfo.xkey|truncate:1:'' == 'Q'}
-		<a class="small text-muted" href="https://www.wikidata.org/wiki/{$xrefInfo.xkey|escape}" target="_blank" rel="noopener">{$xrefInfo.xkey|escape}</a>
+		{* On its own line: inside {strip} the name and the Q-id would otherwise run together. *}
+		<br /><a class="small text-muted" href="https://www.wikidata.org/wiki/{$xrefInfo.xkey|escape}" target="_blank" rel="noopener">{$xrefInfo.xkey|escape}</a>
 	{/if}
 </td>
 <td>
