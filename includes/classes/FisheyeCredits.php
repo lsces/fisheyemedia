@@ -23,6 +23,9 @@ class FisheyeCredits {
 	/** The xref items that credit a person. */
 	public const ITEMS = [ 'director', 'writer', 'star' ];
 
+	/** Every item that credits a person, for the survey/link/name queries: ITEMS plus the show-level 'creator' (a program's own rows only - a season has none). */
+	public const ALL_ITEMS = [ 'director', 'writer', 'star', 'creator' ];
+
 	/** The content types whose credit rows are surveyed and linked. */
 	public const TYPES = [ 'fisheyefilm', 'fisheyeprogram', 'fisheyeseason' ];
 
@@ -48,7 +51,7 @@ class FisheyeCredits {
 			 FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE lc.`content_type_guid` IN ( ".implode( ',', array_fill( 0, count( $pTypeGuids ), '?' ) )." )
-			 AND x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star' ) AND x.`xkey_ext` IS NOT NULL";
+			 AND x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star', 'creator' ) AND x.`xkey_ext` IS NOT NULL";
 		if( $pContentIds !== null ) {
 			$sql .= " AND x.`content_id` IN ( ".implode( ',', array_fill( 0, count( $pContentIds ), '?' ) )." )";
 			$bind = array_merge( $bind, array_map( 'intval', $pContentIds ) );
@@ -112,7 +115,7 @@ class FisheyeCredits {
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE x.`xref_id` IN ( ".implode( ',', array_fill( 0, count( $pXrefIds ), '?' ) )." )
 			 AND lc.`content_type_guid` IN ( '".implode( "','", self::TYPES )."' ) AND x.`end_date` IS NULL
-			 AND x.`item` IN ( 'director', 'writer', 'star' ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
+			 AND x.`item` IN ( 'director', 'writer', 'star', 'creator' ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
 			$pXrefIds
 		) ?: [];
 		$linked = 0;
@@ -146,7 +149,7 @@ class FisheyeCredits {
 				 FROM `".BIT_DB_PREFIX."liberty_xref` x
 				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 				 WHERE lc.`content_type_guid` IN ( '".implode( "','", self::TYPES )."' ) AND x.`end_date` IS NULL
-				 AND x.`item` IN ( 'director', 'writer', 'star' ) AND x.`xref` IS NOT NULL AND x.`xref` <> 0
+				 AND x.`item` IN ( 'director', 'writer', 'star', 'creator' ) AND x.`xref` IS NOT NULL AND x.`xref` <> 0
 				 AND LOWER( x.`xkey_ext` ) IN ( ".implode( ',', array_fill( 0, count( $chunk ), '?' ) )." )
 				 GROUP BY LOWER( x.`xkey_ext` ), x.`xref`, x.`xkey`",
 				$chunk
@@ -227,6 +230,25 @@ class FisheyeCredits {
 			// Most episodes first; people tied on episodes in billing order (their average place across the seasons), then by name.
 			usort( $people, fn( $a, $b ) => [ $b['episodes'], $a['rankSum'] / $a['seasons'], $a['name'] ] <=> [ $a['episodes'], $b['rankSum'] / $b['seasons'], $b['name'] ] );
 			$ret[$role] = $people;
+		}
+		return $ret;
+	}
+
+	/**
+	 * A show's creators: the people on its own `creator` rows (TMDb's created_by, written by the TV people tool's reload), each with the
+	 * contact it is linked to. Empty until that reload has run.
+	 *
+	 * @return list<array{name:string, url:?string}>
+	 */
+	public static function programCreators( int $pProgramId ): array {
+		global $gBitDb;
+		$ret = [];
+		foreach( $gBitDb->getAll(
+			"SELECT x.`xkey_ext`, x.`xref` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 WHERE x.`content_id` = ? AND x.`item` = 'creator' AND x.`end_date` IS NULL AND x.`xkey_ext` IS NOT NULL ORDER BY x.`xorder`, x.`xref_id`",
+			[ $pProgramId ]
+		) ?: [] as $row ) {
+			$ret[] = [ 'name' => trim( (string)$row['xkey_ext'] ), 'url' => !empty( $row['xref'] ) ? BIT_ROOT_URL.'index.php?content_id='.(int)$row['xref'] : null ];
 		}
 		return $ret;
 	}

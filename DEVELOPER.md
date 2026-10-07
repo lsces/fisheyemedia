@@ -577,6 +577,11 @@ can, an external player or a download prompt otherwise).
   episodes and seasons, most episodes first, each linked to the contact on its season rows); `view_program.tpl`/`view_program_single_season.tpl` show the lead names
   (10 directors / 12 cast / 10 writers) and the rest behind an "and N more" link (`credit_rollup_inc.tpl`), the hover giving episodes and seasons. A show whose
   directories are not built yet keeps the Plex show-level lines. A show's *creator* is not a separate role in our data (Plex credits them as a writer on episodes).
+- **"Created by"** - a show's creators are `creator` rows on the program itself (xkey_ext = the name, linked like any credit; item defined for `fisheyeprogram` in the site scheme, template `credit`).
+  They come from TMDb's `created_by`, which is not in a show's credits, and are written by contactwiki's TV people page when it reloads the show (first batch): `reconcileXrefItem( 'creator', ... )`
+  with keep-links, linked on the spot to a contact the name is already linked to anywhere. `FisheyeCredits::programCreators()` reads them; the show templates print "Created by:" above Directors. They
+  are in `FisheyeCredits::ALL_ITEMS` (survey, link, name lookup) but not `ITEMS` (the season directory loops over that, and a season has no creator). The item definition needs an Apply on each site
+  to show in the edit tabs; the page reads the rows directly.
 - **Credits directory** - `FisheyeSeason::deriveCreditDirectory()`, run at the end of both rebuilds (and from
   contactwiki's "Build credit directories"): episodes are xref rows, not content items, so the season is the lowest
   content that can carry a person's `xref`. One `director`/`writer`/`star` row per person per role: `xkey_ext` = the

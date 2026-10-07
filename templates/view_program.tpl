@@ -29,6 +29,9 @@
 				{if $gContent->mInfo.data}
 					<p class="film-summary">{$gContent->mInfo.data|escape}</p>
 				{/if}
+				{if $creators}
+					<div class="film-credits"><strong>{tr}Created by{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$creators limit=8}</div>
+				{/if}
 				{if $rollup.director || $rollup.writer || $rollup.star}
 					<div class="film-credits">
 						{if $rollup.director}<strong>{tr}Director{/tr}{if $rollup.director|@count > 1}s{/if}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.director limit=10}<br />{/if}
