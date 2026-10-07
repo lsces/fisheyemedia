@@ -269,6 +269,16 @@ class FisheyeCredits {
 		) ?: [] );
 	}
 
+	/** The IMDb id (tt1234567) held in a content item's own live `imdb` xref, or null. */
+	public static function imdbIdFor( int $pContentId ): ?string {
+		global $gBitDb;
+		$id = trim( (string)$gBitDb->getOne(
+			"SELECT x.`xkey` FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'imdb' AND x.`end_date` IS NULL",
+			[ $pContentId ]
+		) );
+		return preg_match( '/^tt\d+$/', $id ) ? $id : null;
+	}
+
 	/** The TMDb id held in a content item's own live `tmdb` xref (a program's is its TMDb TV id). */
 	public static function tmdbIdFor( int $pContentId ): ?int {
 		global $gBitDb;
