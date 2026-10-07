@@ -656,6 +656,37 @@ class FisheyeFilm extends FisheyeMediaImage {
 	}
 
 	/**
+	 * Just the credits from Plex - director, writer and the full star list - reconciled the way reloadPlexMetadata() does (history kept, hand
+	 * edits and links to contacts left alone), without its ffprobe, description, Plex API or other items. For refreshing a whole library's
+	 * cast cheaply (the film people pass's bulk reload).
+	 *
+	 * @return array{matched:bool, counts:array<string,int>}  the number of credits stored per item
+	 */
+	public function reloadPlexCredits(): array {
+		$summary = [ 'matched' => false, 'counts' => [] ];
+		$plexMatch = $this->matchPlexMetadataItem();
+		if( !$plexMatch ) {
+			return $summary;
+		}
+		$summary['matched'] = true;
+		$tagStmt = $plexMatch['db']->prepare(
+			"SELECT t.tag FROM taggings tg JOIN tags t ON t.id = tg.tag_id WHERE tg.metadata_item_id = ? AND t.tag_type = ? ORDER BY tg.\"index\""
+		);
+		foreach( [ 'director' => 4, 'writer' => 5, 'star' => 6 ] as $item => $tagType ) {
+			$tagStmt->execute( [ $plexMatch['id'], $tagType ] );
+			$wanted = [];
+			foreach( $tagStmt->fetchAll( \PDO::FETCH_COLUMN ) as $value ) {
+				if( !isset( $wanted[$value] ) ) {
+					$wanted[$value] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
+				}
+			}
+			$this->reconcileXrefItem( $item, array_values( $wanted ), 'xkey_ext', false, true );
+			$summary['counts'][$item] = count( $wanted );
+		}
+		return $summary;
+	}
+
+	/**
 	 * Fetch alternate poster/backdrop images from Plex's local API (posters/arts endpoints -
 	 * xref-based rather than a second liberty_attachments row per image, since a film can have
 	 * several alternates and LibertyMime only supports one attachment per content_id) and store
