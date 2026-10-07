@@ -54,6 +54,7 @@ $gBitSmarty->assign( 'externalLinks', $externalLinks );
 $viewData = $gContent->getSeasonViewData();
 $gBitSmarty->assign( 'seasonImages', $viewData['images'] );
 $gBitSmarty->assign( 'episodes', $viewData['episodes'] );
+$gBitSmarty->assign( 'creditUrls', $viewData['creditUrls'] );
 $gBitSmarty->assign( 'seasonFeaturettes', $viewData['featurettes'] );
 $gBitSmarty->assign( 'firstContentTab', $viewData['firstTab'] );
 

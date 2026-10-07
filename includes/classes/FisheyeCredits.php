@@ -163,6 +163,30 @@ class FisheyeCredits {
 	}
 
 	/**
+	 * Where each credited name links to: the page of the contact that name is already linked to on any film, program or
+	 * season credit row (see linkedContactsByName()). Display pages use it to turn the plain names in an episode's or
+	 * show's cast list into links - including a guest who was never promoted to a season row but is linked elsewhere.
+	 * Same name = same person, the assumption the people tools make. Names with no link are simply absent.
+	 *
+	 * @param string[] $pNames
+	 * @return array<string,string>  the name as given => url (index.php?content_id=, routed to the contact's own page)
+	 */
+	public static function urlsForNames( array $pNames ): array {
+		$names = array_values( array_unique( array_filter( array_map( 'strval', $pNames ), fn( $n ) => trim( $n ) !== '' ) ) );
+		if( !$names ) {
+			return [];
+		}
+		$linked = self::linkedContactsByName( $names );
+		$urls = [];
+		foreach( $names as $name ) {
+			if( isset( $linked[mb_strtolower( trim( $name ) )] ) ) {
+				$urls[$name] = BIT_ROOT_URL.'index.php?content_id='.$linked[mb_strtolower( trim( $name ) )]['xref'];
+			}
+		}
+		return $urls;
+	}
+
+	/**
 	 * The content_ids of a program's seasons (its gallery's season items), in season order.
 	 *
 	 * @return int[]

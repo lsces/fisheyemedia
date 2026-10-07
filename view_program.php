@@ -95,6 +95,9 @@ $gBitSmarty->assign( 'genres', $genres );
 $gBitSmarty->assign( 'directors', $directors );
 $gBitSmarty->assign( 'writers', $writers );
 $gBitSmarty->assign( 'stars', $stars );
+// The show-level names linked to their contacts (a single-season show adds its episodes' names below).
+$creditUrls = FisheyeCredits::urlsForNames( array_merge( $directors, $writers, $stars ) );
+$gBitSmarty->assign( 'creditUrls', $creditUrls );
 $gBitSmarty->assign( 'contentRating', $contentRating );
 $gBitSmarty->assign( 'durationMs', $durationMs );
 $gBitSmarty->assign( 'externalLinks', $externalLinks );
@@ -128,6 +131,7 @@ if( count( (array)$gContent->mItems ) === 1 ) {
 	$viewData = $season->getSeasonViewData();
 	$gBitSmarty->assign( 'seasonImages', $viewData['images'] );
 	$gBitSmarty->assign( 'episodes', $viewData['episodes'] );
+	$gBitSmarty->assign( 'creditUrls', $creditUrls + $viewData['creditUrls'] );
 	$gBitSmarty->assign( 'seasonFeaturettes', $viewData['featurettes'] );
 	$gBitSmarty->assign( 'firstContentTab', $viewData['firstTab'] );
 	// The show's own $gContent is what this template otherwise renders against - the tab edit

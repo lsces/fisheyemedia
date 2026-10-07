@@ -280,7 +280,13 @@ class FisheyeSeason extends FisheyeMediaImage {
 			(bool)$images       => 'images',
 			default             => null,
 		};
-		return [ 'images' => $images, 'episodes' => $episodes, 'featurettes' => $featurettes, 'firstTab' => $firstTab ];
+		// Every credited name in the season's episodes, resolved once to the contact it is linked to (if any).
+		$creditNames = [];
+		foreach( $episodes as $episode ) {
+			$creditNames = array_merge( $creditNames, $episode['directors'], $episode['writers'], $episode['stars'] );
+		}
+		return [ 'images' => $images, 'episodes' => $episodes, 'featurettes' => $featurettes, 'firstTab' => $firstTab,
+			'creditUrls' => FisheyeCredits::urlsForNames( $creditNames ) ];
 	}
 
 	/**

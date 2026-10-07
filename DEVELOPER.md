@@ -568,6 +568,11 @@ can, an external player or a download prompt otherwise).
   database read (NCIS, 24 seasons / 548 episodes: 2.9 s). A new episode takes the full path. The season page's "Load Episodes"
   and load_program.php's season reload both use it now; only `registerFromDisk()` (a brand-new season) calls the plain
   `reloadPlexEpisodes()`, which downloads every thumbnail. Artwork is Reload Images' job.
+- **Credit names link to their contacts on every display page** - the season page's and the single-season show page's episode panels, the show page's
+  director/starring/writer lines, and the film page. Names are plain text (an episode's JSON carries no contact id), so `FisheyeCredits::urlsForNames()` resolves
+  a page's names in one lookup to the contact each name is linked to on ANY credit row (`linkedContactsByName()`: film, program or season), which also links a
+  guest who was never promoted to a season row; the page assigns `creditUrls` (name => `index.php?content_id=`) and `templates/credit_names_inc.tpl` prints a list
+  (names=..., optional limit=N for "and M more"). Same name = same person, the assumption the people tools make. A name with no link stays plain text.
 - **Credits directory** - `FisheyeSeason::deriveCreditDirectory()`, run at the end of both rebuilds (and from
   contactwiki's "Build credit directories"): episodes are xref rows, not content items, so the season is the lowest
   content that can carry a person's `xref`. One `director`/`writer`/`star` row per person per role: `xkey_ext` = the
