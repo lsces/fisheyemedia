@@ -751,4 +751,90 @@ class FisheyeProgram extends FisheyeMediaGallery {
 
 		return $summary;
 	}
+
+	/**
+	 * Follow a show's folder when it has been renamed on disk (Plex wants "Doctor Who (1963)" once there are three Doctor Whos): its episode
+	 * and featurette rows hold their file as `TV Shows/<folder>/...` and its title - and its seasons' - is the folder name, so after a rename
+	 * every one of them points at nothing. A preview first ($pApply false): how many rows move, how many of the new files really exist
+	 * (only those are moved), the titles that would change. Applying rewrites each row's path in place keeping its place in history (the
+	 * last-update stamp is left alone, so a later Plex reload still refreshes it) and renames the program and the seasons that carry its title.
+	 * Nothing is fetched from Plex - run Reload Metadata/Episodes afterwards to refresh what Plex now says.
+	 *
+	 * @return array{ok:bool, error?:string, old_folder:string, new_folder:string, rows:int, movable:int, missing:list<string>, moved:int,
+	 *               titles:list<array{content_id:int, from:string, to:string}>, titles_changed:int, conflict:?string}
+	 */
+	public function relocateFolder( string $pOldFolder, string $pNewFolder, bool $pApply = false ): array {
+		global $gBitDb;
+		$pOldFolder = trim( $pOldFolder, "/ \t" );
+		$pNewFolder = trim( $pNewFolder, "/ \t" );
+		$result = [ 'ok' => false, 'old_folder' => $pOldFolder, 'new_folder' => $pNewFolder, 'rows' => 0, 'movable' => 0, 'missing' => [], 'moved' => 0,
+			'titles' => [], 'titles_changed' => 0, 'conflict' => null ];
+		if( $pOldFolder === '' || $pNewFolder === '' || $pOldFolder === $pNewFolder || str_contains( $pNewFolder, '/' ) || str_contains( $pOldFolder, '/' ) ) {
+			$result['error'] = KernelTools::tra( 'Give the show\'s old and new folder names (different, no slashes).' );
+			return $result;
+		}
+		$root = \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $pNewFolder );
+		if( $root === '' || !is_dir( $root.'TV Shows/'.$pNewFolder ) ) {
+			$result['error'] = KernelTools::tra( 'The new folder does not exist on disk:' ).' '.$root.'TV Shows/'.$pNewFolder;
+			return $result;
+		}
+		$seasonIds = FisheyeCredits::seasonIdsForProgram( (int)$this->mContentId );
+		$ids = array_merge( [ (int)$this->mContentId ], $seasonIds );
+		$rows = $gBitDb->getAll(
+			"SELECT x.`xref_id`, x.`content_id`, x.`xkey_ext`, x.`last_update_date`, lc.`content_type_guid` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 WHERE x.`content_id` IN ( ".implode( ',', array_fill( 0, count( $ids ), '?' ) )." ) AND x.`item` IN ( 'episode', 'featurette' )
+			 AND x.`end_date` IS NULL AND x.`xkey_ext` LIKE ?",
+			array_merge( $ids, [ 'TV Shows/'.$pOldFolder.'/%' ] )
+		) ?: [];
+		$oldPrefix = 'TV Shows/'.$pOldFolder.'/';
+		$move = [];
+		foreach( $rows as $row ) {
+			$result['rows']++;
+			$new = 'TV Shows/'.$pNewFolder.'/'.substr( $row['xkey_ext'], strlen( $oldPrefix ) );
+			if( is_file( $root.$new ) ) {
+				$result['movable']++;
+				$move[] = [ $row, $new ];
+			} elseif( count( $result['missing'] ) < 10 ) {
+				$result['missing'][] = $new;
+			}
+		}
+		// The program's title is the folder name, and a season's is "<show> - <season folder>".
+		$oldTitle = (string)$this->getTitle();
+		$result['titles'][] = [ 'content_id' => (int)$this->mContentId, 'from' => $oldTitle, 'to' => $pNewFolder ];
+		foreach( $seasonIds as $seasonId ) {
+			$seasonTitle = (string)$gBitDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $seasonId ] );
+			if( $oldTitle !== '' && str_starts_with( $seasonTitle, $oldTitle ) ) {
+				$result['titles'][] = [ 'content_id' => $seasonId, 'from' => $seasonTitle, 'to' => $pNewFolder.substr( $seasonTitle, strlen( $oldTitle ) ) ];
+			}
+		}
+		$taken = $gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyeprogram' AND `title` = ? AND `content_id` <> ?", [ $pNewFolder, (int)$this->mContentId ] );
+		if( $taken ) {
+			$result['conflict'] = sprintf( KernelTools::tra( 'Another show is already titled "%s" (content %d).' ), $pNewFolder, (int)$taken );
+		}
+		$result['ok'] = !$result['conflict'] && $result['movable'] > 0;
+		if( !$pApply || !$result['ok'] ) {
+			return $result;
+		}
+		foreach( $move as [ $row, $new ] ) {
+			$xref = new \Bitweaver\Liberty\LibertyXref();
+			$xref->mContentTypeGuid = $row['content_type_guid'];
+			$xref->load( (int)$row['xref_id'] );
+			$hash = [ 'xref_id' => (int)$row['xref_id'], 'xkey_ext' => $new, 'last_update_date' => (int)$row['last_update_date'] ];
+			if( $xref->store( $hash ) ) {
+				$result['moved']++;
+			}
+		}
+		foreach( $result['titles'] as $title ) {
+			$content = FisheyeGallery::lookup( [ 'content_id' => $title['content_id'] ] );
+			if( $content && $content->isValid() ) {
+				$content->load();
+				$hash = [ 'content_id' => $title['content_id'], 'title' => $title['to'], 'edit' => (string)( $content->mInfo['data'] ?? '' ) ];
+				if( $content->store( $hash ) ) {
+					$result['titles_changed']++;
+				}
+			}
+		}
+		return $result;
+	}
 }

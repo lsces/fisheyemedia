@@ -593,3 +593,16 @@ can, an external player or a download prompt otherwise).
   content ids), `linkRows()` (xref = contact, xkey = Q-id, only unlinked live rows; **keeps the row's
   `last_update_date`**, so linking is not a hand edit and a later reload still updates episode lists), `seasonIdsForProgram()`,
   `tmdbIdFor()`, `programOverview()`. `FisheyeFilm::surveyCredits()/linkCreditRows()` are thin wrappers.
+
+## Renaming a show's folder: `relocate_show.php`
+
+When a show's folder on disk is renamed (e.g. `Doctor Who` → `Doctor Who (1963)`), every episode/featurette
+row's `xkey_ext` still points at the old path. `FisheyeProgram::relocateFolder( $old, $new, $apply )` previews,
+then rewrites the prefix in place (keeping `last_update_date`, so reconcile does not treat the rows as hand-edited),
+only for rows whose new file exists, and renames the program and season titles to match. It refuses if another
+program already has the new title. Admin page: `relocate_show.php?content_id=<program>` (`p_fisheye_admin`).
+
+`FisheyeSeason::matchPlexSeasonMetadataItem()` finds the season's Plex match from its episode rows. The TV root is
+shared by every show, so it prefers rows in the show's own folder, and when only another show's rows remain it
+anchors on a file in the season's own folder on disk. `reloadPlexEpisodes()` skips Plex files outside the matched
+show folder. Without this, a stray foreign row made a reload archive the season's real episodes.

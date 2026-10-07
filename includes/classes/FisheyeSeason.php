@@ -497,10 +497,25 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// try every seeded episode row, not just the first - a single stale/renamed anchor
 		// file (e.g. after fixing a mistagged episode) shouldn't permanently break matching
 		// for the whole season when another row still points at a real file
-		foreach( $episodeXrefs as $episodeXref ) {
-			if( empty( $episodeXref['xkey_ext'] ) ) {
-				continue;
+		// Anchors in this show's own folder go first: the root is shared by every show, and a stray row left from
+		// another show (Plex once merged two Doctor Who folders) would otherwise match that show's season, and
+		// this season's real episodes would then be archived as no longer listed.
+		$anchors = array_values( array_filter( $episodeXrefs, fn( $xref ) => !empty( $xref['xkey_ext'] ) ) );
+		// A stored path is "<shelf>/<show folder>/<season folder>/<file>"; the shelf is whatever precedes the show folder.
+		$shelf = $anchors ? dirname( $anchors[0]['xkey_ext'], 3 ) : '.';
+		$shelf = $shelf === '.' ? '' : $shelf.'/';
+		$ownFolder = $shelf.$showTitle.'/';
+		$isOwn = fn( $xref ) => str_starts_with( $xref['xkey_ext'], $ownFolder );
+		if( is_dir( $root.$ownFolder ) && !array_filter( $anchors, $isOwn ) ) {
+			// Only another show's rows are left: anchor on a file in this season's own folder on disk instead.
+			$seasonFolder = preg_match( '/ - (Season \\d+|Specials)$/', $this->getTitle(), $m ) ? $m[1] : '';
+			foreach( $seasonFolder ? (array)glob( $root.$ownFolder.$seasonFolder.'/*.*' ) : [] as $file ) {
+				array_unshift( $anchors, [ 'xkey_ext' => substr( $file, strlen( $root ) ) ] );
+				break;
 			}
+		}
+		usort( $anchors, fn( $a, $b ) => $isOwn( $b ) <=> $isOwn( $a ) );
+		foreach( $anchors as $episodeXref ) {
 			$realPath = realpath( $root.$episodeXref['xkey_ext'] );
 			if( empty( $realPath ) ) {
 				continue;
@@ -508,7 +523,8 @@ class FisheyeSeason extends FisheyeMediaImage {
 			$stmt->execute( [ $realPath ] );
 			$seasonMetadataItemId = $stmt->fetchColumn();
 			if( $seasonMetadataItemId ) {
-				return [ 'db' => $plexDb, 'id' => (int)$seasonMetadataItemId, 'root' => $root ];
+				return [ 'db' => $plexDb, 'id' => (int)$seasonMetadataItemId, 'root' => $root,
+					'folder' => implode( '/', array_slice( explode( '/', $episodeXref['xkey_ext'] ), 0, $shelf === '' ? 1 : 2 ) ).'/' ];
 			}
 		}
 
@@ -861,6 +877,9 @@ class FisheyeSeason extends FisheyeMediaImage {
 				continue;
 			}
 			$relativePath = substr( $row['file'], strlen( $realRoot ) );
+			if( !str_starts_with( $relativePath, $plexMatch['folder'] ) ) {
+				continue;
+			}
 
 			$episodeData = [
 				'title'    => $row['title'],
