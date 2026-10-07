@@ -8,6 +8,9 @@
 				<a title="{tr}Load More Seasons{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?gallery_id={$gContent->mGalleryId}&amp;show={$gContent->getTitle()|escape:"url"}">{biticon ipackage="icons" iname="folder-open" iexplain="Load More Seasons"}</a>
 				<a title="{tr}Season Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Season Order"}</a>
 			{/if}
+			{foreach from=$programTools item=tool}
+				<a title="{$tool.title|escape}" href="{$tool.url|escape}">{biticon ipackage="icons" iname=$tool.icon iexplain=$tool.title}{if $tool.badge}<span class="badge" title="{$tool.badgeTitle|escape}">{$tool.badge|escape}</span>{/if}</a>
+			{/foreach}
 		</div>
 		{* Breadcrumb - same getBreadcrumbTrail() mechanism as view_film.tpl/fisheye_film_grid_inc.tpl/
 		   fisheye_program_grid_inc.tpl, previously just missing here entirely. Walks the real

@@ -25,7 +25,7 @@ use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\HttpStatusCodes;
 
 require_once '../kernel/includes/setup_inc.php';
-global $gBitSystem, $gBitSmarty;
+global $gBitSystem, $gBitSmarty, $gLibertySystem, $gBitUser;
 
 $gBitSystem->verifyPackage( 'fisheye' );
 
@@ -40,6 +40,32 @@ if( !$gContent || !$gContent->isValid() || !( $gContent instanceof FisheyeProgra
 }
 $gContent->verifyViewPermission();
 $gContent->addHit();
+
+// Tools other packages offer on a show's page (the 'program_tools' service - e.g. contactwiki's people loader). A
+// tool that asks for 'credit_status' gets a badge from this show's own credit rows: a tick when every credit is
+// linked to a contact, otherwise how many are not yet; nothing before the show's credits have been built.
+$programTools = [];
+foreach( $gLibertySystem->getServiceValues( 'program_tools' ) ?? [] as $serviceTools ) {
+	foreach( $serviceTools as $tool ) {
+		if( empty( $tool['url'] ) || ( !empty( $tool['perm'] ) && !$gBitUser->hasPermission( $tool['perm'] ) ) ) {
+			continue;
+		}
+		$entry = [ 'title' => KernelTools::tra( $tool['title'] ?? '' ), 'icon' => $tool['icon'] ?? 'view-list',
+			'url' => $tool['url'].$gContent->mContentId, 'badge' => null, 'badgeTitle' => null ];
+		if( !empty( $tool['credit_status'] ) ) {
+			$status = FisheyeCredits::programOverview( (int)$gContent->mContentId )[0] ?? null;
+			if( $status && $status['credits'] > 0 ) {
+				$linked = $status['credits'] - $status['unlinked'];
+				$entry['badge'] = $status['unlinked'] === 0 ? "\u{2713}" : (string)$status['unlinked'];
+				$entry['badgeTitle'] = $status['unlinked'] === 0
+					? KernelTools::tra( 'All credits linked to contacts' )
+					: $linked.' / '.$status['credits'].' '.KernelTools::tra( 'credits linked to contacts' );
+			}
+		}
+		$programTools[] = $entry;
+	}
+}
+$gBitSmarty->assign( 'programTools', $programTools );
 
 // bucket this show's own xref data - same flat liveXrefs() pass as view_film.php, no group names
 // hardcoded (see that page's own comment for why that matters).
