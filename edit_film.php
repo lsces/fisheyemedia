@@ -47,7 +47,15 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	// populated on Reload Metadata via reloadPlexMetadata()'s own description-store hash, but
 	// edit_film.tpl had no field for it and this handler dropped it silently on manual Save.
 	$storeHash = [ 'content_id' => $gContent->mContentId, 'title' => trim( $_REQUEST['title'] ?? '' ), 'edit' => trim( $_REQUEST['edit'] ?? '' ) ];
-	if( $gContent->store( $storeHash ) ) {
+	// The film's file was renamed or moved on disk: the stored path follows it (checked against the disk).
+	$fileResult = null;
+	if( isset( $_REQUEST['file_name'] ) && trim( $_REQUEST['file_name'] ) !== '' && trim( $_REQUEST['file_name'] ) !== $gContent->getStoredFilePath() ) {
+		$fileResult = $gContent->relocateFile( $_REQUEST['file_name'] );
+		if( !$fileResult['ok'] ) {
+			$gContent->mErrors['file_name'] = $fileResult['error'];
+		}
+	}
+	if( empty( $gContent->mErrors ) && $gContent->store( $storeHash ) ) {
 		KernelTools::bit_redirect( $gContent->getDisplayUrl() );
 	}
 	$gContent->load();
@@ -97,4 +105,7 @@ $gBitSmarty->assign( 'plexResult', $plexResult );
 $gBitSmarty->assign( 'plexResultLabel', $plexResultLabel );
 $gBitSmarty->assign( 'plexResultEmptyLabel', $plexResultEmptyLabel );
 
+$storedFilePath = $gContent->getStoredFilePath();
+$gBitSmarty->assign( 'storedFilePath', $storedFilePath );
+$gBitSmarty->assign( 'storedFileExists', $storedFilePath !== null && is_file( \Bitweaver\Liberty\mime_film_get_storage_root().$storedFilePath ) );
 $gBitSystem->display( 'bitpackage:fisheyemedia/edit_film.tpl', KernelTools::tra( 'Edit Film: ' ).$gContent->getTitle(), [ 'display_mode' => 'edit' ] );

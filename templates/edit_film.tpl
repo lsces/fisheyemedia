@@ -38,6 +38,14 @@
 							{/forminput}
 						</div>
 						<div class="form-group">
+							{formlabel label="File" for="file_name"}
+							{forminput}
+								<input type="text" class="form-control" name="file_name" id="file_name" value="{$storedFilePath|escape}" />
+								{if !$storedFileExists}<div class="alert alert-danger">{tr}There is no file at this path on disk.{/tr}</div>{/if}
+								{formhelp note="The film's file under the storage root. If the file was renamed or moved on disk, correct the path here and Save - it is checked against the disk and must not belong to another film."}
+							{/forminput}
+						</div>
+						<div class="form-group">
 							{formlabel label="Description" for="edit"}
 							{forminput}
 								<textarea class="form-control" name="edit" id="edit" rows="4">{$gContent->mInfo.data|default:''|escape}</textarea>

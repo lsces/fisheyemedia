@@ -317,6 +317,50 @@ class FisheyeFilm extends FisheyeMediaImage {
 		return ltrim( substr( $realPath, strlen( $root ) ), '/' );
 	}
 
+	/** The path stored for this film's file (liberty_files.file_name, relative to the storage root), whether or not a file is there. */
+	public function getStoredFilePath(): ?string {
+		global $gBitDb;
+		$path = $gBitDb->getOne(
+			"SELECT lf.`file_name` FROM `".BIT_DB_PREFIX."liberty_files` lf INNER JOIN `".BIT_DB_PREFIX."liberty_attachments` la ON la.`foreign_id` = lf.`file_id`
+			 WHERE la.`content_id` = ? AND la.`attachment_plugin_guid` = 'mimefilm'", [ (int)$this->mContentId ]
+		);
+		return $path !== false && $path !== null ? (string)$path : null;
+	}
+
+	/**
+	 * Point this film at its file's new path after the file was renamed or moved on disk. The new path (relative to the storage root, as
+	 * Films/Name (Year).mp4) must be a real file and not already another film's; the title and everything else on the film are untouched.
+	 *
+	 * @return array{ok:bool, error?:string, old?:?string, new?:string}
+	 */
+	public function relocateFile( string $pNewPath ): array {
+		global $gBitDb;
+		$new = trim( str_replace( '\\', '/', $pNewPath ), "/ \t" );
+		if( $new === '' || in_array( '..', explode( '/', $new ), true ) ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'Give the file as a path under the storage root, like Films/Name (Year).mp4.' ) ];
+		}
+		$root = \Bitweaver\Liberty\mime_film_get_storage_root();
+		if( $root === '' || !is_file( $root.$new ) ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'There is no file at' ).' '.$root.$new ];
+		}
+		$old = $this->getStoredFilePath();
+		if( $old === $new ) {
+			return [ 'ok' => true, 'old' => $old, 'new' => $new ];
+		}
+		$other = $gBitDb->getOne(
+			"SELECT la.`content_id` FROM `".BIT_DB_PREFIX."liberty_files` lf INNER JOIN `".BIT_DB_PREFIX."liberty_attachments` la ON la.`foreign_id` = lf.`file_id`
+			 WHERE la.`attachment_plugin_guid` = 'mimefilm' AND lf.`file_name` = ? AND la.`content_id` <> ?", [ $new, (int)$this->mContentId ]
+		);
+		if( $other ) {
+			return [ 'ok' => false, 'error' => sprintf( KernelTools::tra( 'Another film (content %d) already uses that file.' ), (int)$other ) ];
+		}
+		$gBitDb->query(
+			"UPDATE `".BIT_DB_PREFIX."liberty_files` SET `file_name` = ? WHERE `file_id` IN ( SELECT la.`foreign_id` FROM `".BIT_DB_PREFIX."liberty_attachments` la
+			 WHERE la.`content_id` = ? AND la.`attachment_plugin_guid` = 'mimefilm' )", [ $new, (int)$this->mContentId ]
+		);
+		return [ 'ok' => true, 'old' => $old, 'new' => $new ];
+	}
+
 	/**
 	 * This film's own facts, xref data and tab content, bucketed once for view_film.php/
 	 * view_film.tpl - same "one flat pass over liveXrefs(), keyed by item name only" shape as

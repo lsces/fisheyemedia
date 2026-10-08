@@ -625,3 +625,9 @@ by name. A film's `star` rows carry it as `data.role`; an episode's data packet 
 carries the distinct characters that person played in the season as `data.roles` (first appearance order, at most 8). It is displayed as
 "Name as Character" (`credit_names_inc.tpl`, the film Starring line, episode panels) and by the generic credit row template on the cast tab.
 A later enrichment can add the Wikidata character item (cast statement qualifier P453) beside the text; nothing here depends on it.
+
+## Correcting a film's file path (edit_film.php)
+When a film's file is renamed or moved on disk, its stored path (`liberty_files.file_name`, relative to the storage root, e.g. `Films/Name (Year).mp4`)
+no longer matches. The edit page has a **File** field (shown with a warning when nothing is at the stored path); saving a changed value calls
+`FisheyeFilm::relocateFile()`, which refuses a path that is empty, contains `..`, is not a real file under the storage root, or already belongs to
+another film, and otherwise updates the stored path only (title, credits and the rest are untouched). `getStoredFilePath()` reads the stored path.
