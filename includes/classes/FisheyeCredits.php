@@ -148,11 +148,37 @@ class FisheyeCredits {
 			$variants = array_keys( $g['variants'] );
 			usort( $variants, fn( $a, $b ) => [ $g['variants'][$b], strlen( $b ) ] <=> [ $g['variants'][$a], strlen( $a ) ] );
 			$linkedTo = array_values( array_unique( array_filter( array_map( fn( $r ) => $r['linked'], $g['rows'] ) ) ) );
-			$ret[] = [ 'key' => $key, 'role' => $variants[0], 'variants' => $variants, 'seasons' => count( $g['seasons'] ),
+			$ret[] = [ 'key' => $key, 'role' => self::tidyRoleName( $variants[0] ), 'variants' => $variants, 'seasons' => count( $g['seasons'] ),
 				'actors' => array_keys( $g['actors'] ), 'xref_ids' => $pending, 'existing' => count( $linkedTo ) === 1 ? $linkedTo[0] : null, 'rows' => count( $g['rows'] ) ];
 		}
 		usort( $ret, fn( $a, $b ) => [ $b['seasons'], $a['role'] ] <=> [ $a['seasons'], $b['role'] ] );
 		return $ret;
+	}
+
+	/** A role as displayed: the full stops of abbreviations dropped ("Sgt. Hanlon" is "Sgt Hanlon", "D.C.I. Peters" "DCI Peters"); a single initial keeps its stop. */
+	public static function tidyRoleName( string $pRole ): string {
+		$words = preg_split( '/\s+/u', trim( $pRole ), -1, PREG_SPLIT_NO_EMPTY ) ?: [];
+		foreach( $words as &$word ) {
+			if( strpos( $word, '.' ) !== false && mb_strlen( str_replace( '.', '', $word ) ) >= 2 ) {
+				$word = str_replace( '.', '', $word );
+			}
+		}
+		return implode( ' ', $words );
+	}
+
+	/** The character contact's URL for a role key: a row linked under that key, else under a longer role that contains it; null if none. */
+	private static function characterContactUrl( string $pKey, array $pLinks ): ?string {
+		$contactId = $pLinks[$pKey] ?? null;
+		if( !$contactId ) {
+			$tokens = explode( ' ', $pKey );
+			foreach( $pLinks as $key => $id ) {
+				if( count( explode( ' ', (string)$key ) ) > count( $tokens ) && !array_diff( $tokens, explode( ' ', (string)$key ) ) ) {
+					$contactId = $id;
+					break;
+				}
+			}
+		}
+		return $contactId ? BIT_ROOT_URL.'index.php?content_id='.$contactId : null;
 	}
 
 	/** A role's grouping key: lower case, no full stops or bracketed notes ("(voice)", "(uncredited)"), single spaces. */
@@ -464,7 +490,7 @@ class FisheyeCredits {
 	 * the episodes they appear in across all seasons and how many seasons, most episodes first (ties in billing order). A person's link comes from their
 	 * season rows (xref) - the contact they were linked to. Empty for a show whose directories have not been built yet.
 	 *
-	 * @return array<string,list<array{name:string, url:?string, episodes:int, seasons:int, roles:string}>>  role => people (roles: the characters a star played, "" for the other roles)
+	 * @return array<string,list<array{name:string, url:?string, episodes:int, seasons:int, roles:string, roleList:list<array{name:string,url:?string}>, rolesMore:int}>>  role => people (roles: the characters a star played as text, roleList the same with each character's contact link)
 	 */
 	public static function programRollup( int $pProgramId ): array {
 		global $gBitDb;
@@ -500,6 +526,16 @@ class FisheyeCredits {
 			}
 			unset( $entry );
 		}
+		// The character contacts this show's rows are linked to, by role key, so a star's characters can link to them.
+		$characterLinks = [];
+		foreach( $gBitDb->getAll(
+			"SELECT x.`xkey_ext`, x.`xref` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
+			 WHERE m.`gallery_content_id` = ? AND x.`item` = ? AND x.`end_date` IS NULL AND x.`xref` > 0 AND x.`xkey_ext` IS NOT NULL",
+			[ $pProgramId, self::CHARACTER_ITEM ]
+		) ?: [] as $linkRow ) {
+			$characterLinks[self::characterRoleKey( (string)$linkRow['xkey_ext'] )] ??= (int)$linkRow['xref'];
+		}
 		$ret = [];
 		foreach( self::ITEMS as $role ) {
 			$people = array_values( $byRole[$role] ?? [] );
@@ -507,20 +543,34 @@ class FisheyeCredits {
 			usort( $people, fn( $a, $b ) => [ $b['episodes'], $a['rankSum'] / $a['seasons'], $a['name'] ] <=> [ $a['episodes'], $b['rankSum'] / $b['seasons'], $b['name'] ] );
 			foreach( $people as &$person ) {
 				arsort( $person['roleSeasons'] );   // stable: ties keep first-seen order
-				$characters = array_keys( $person['roleSeasons'] );
-				// A shorter spelling of a role already listed ("Sgt. Brady" beside "Sgt Don Brady") is the same role.
-				$characters = array_values( array_filter( $characters, function( $c ) use ( $characters ) {
-					$tokens = explode( ' ', self::characterRoleKey( $c ) );
-					foreach( $characters as $other ) {
-						$otherTokens = explode( ' ', self::characterRoleKey( $other ) );
-						if( $other !== $c && count( $otherTokens ) > count( $tokens ) && !array_diff( $tokens, $otherTokens ) ) {
-							return false;
+				// One entry per role: "Sgt. Hanlon" and "Sgt Hanlon" are the same, and so is a shorter form of a role listed in full
+				// ("Sgt. Brady" beside "Sgt Don Brady"). The usual spelling leads, shown without the full stops.
+				$byKey = [];
+				foreach( $person['roleSeasons'] as $character => $n ) {
+					$key = self::characterRoleKey( $character );
+					if( $key !== '' ) {
+						$byKey[$key] ??= [ 'name' => self::tidyRoleName( $character ), 'n' => 0 ];
+						$byKey[$key]['n'] += $n;
+					}
+				}
+				foreach( array_keys( $byKey ) as $short ) {
+					$shortTokens = explode( ' ', $short );
+					foreach( array_keys( $byKey ) as $long ) {
+						if( $long !== $short && isset( $byKey[$long], $byKey[$short] ) && count( explode( ' ', $long ) ) > count( $shortTokens ) && !array_diff( $shortTokens, explode( ' ', $long ) ) ) {
+							$byKey[$long]['n'] += $byKey[$short]['n'];
+							unset( $byKey[$short] );
+							break;
 						}
 					}
-					return true;
-				} ) );
-				// "as The Doctor, Romana" - the usual characters, at most three, then "+N" for the rest.
-				$person['roles'] = implode( ', ', array_slice( $characters, 0, 3 ) ).( count( $characters ) > 3 ? ' +'.( count( $characters ) - 3 ) : '' );
+				}
+				uasort( $byKey, fn( $a, $b ) => $b['n'] <=> $a['n'] );
+				// "as The Doctor, Romana" - the usual characters, at most three, each linked to its character contact where it has one, then "+N".
+				$person['roleList'] = [];
+				foreach( array_slice( $byKey, 0, 3, true ) as $key => $entry ) {
+					$person['roleList'][] = [ 'name' => $entry['name'], 'url' => self::characterContactUrl( $key, $characterLinks ) ];
+				}
+				$person['rolesMore'] = max( 0, count( $byKey ) - 3 );
+				$person['roles'] = implode( ', ', array_column( $person['roleList'], 'name' ) ).( $person['rolesMore'] ? ' +'.$person['rolesMore'] : '' );
 				unset( $person['roleSeasons'] );
 			}
 			unset( $person );
