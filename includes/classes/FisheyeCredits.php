@@ -71,7 +71,7 @@ class FisheyeCredits {
 		}
 		$ret = [];
 		foreach( $gBitDb->getAll( "SELECT `xref_id`, `content_id`, `xkey_ext`, `xref`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = ? AND `end_date` IS NULL AND `content_id` IN ( $in ) ORDER BY `content_id`, `xorder`", array_merge( [ self::CHARACTER_ITEM ], $pFilmIds ) ) ?: [] as $row ) {
-			$actor = self::characterKey( $row );
+			$actor = self::characterActor( $row );
 			$ret[(int)$row['content_id']][] = [ 'xref_id' => (int)$row['xref_id'], 'role' => (string)$row['xkey_ext'], 'actor' => $actor,
 				'actor_qid' => $actorQ[(int)$row['content_id']][$actor] ?? null, 'linked' => !empty( $row['xref'] ) ];
 		}
@@ -100,7 +100,7 @@ class FisheyeCredits {
 				$actorLinks[(int)$star['content_id']][(string)$star['xkey_ext']] = (int)$star['xref'];
 			}
 			foreach( $rows as $row ) {
-				$actor = self::characterKey( $row );
+				$actor = self::characterActor( $row );
 				$ret['playedBy'][] = [ 'title' => (string)$row['title'], 'url' => $url( (int)$row['content_id'] ), 'role' => (string)$row['xkey_ext'], 'actor' => $actor,
 					'actor_url' => isset( $actorLinks[(int)$row['content_id']][$actor] ) ? $url( $actorLinks[(int)$row['content_id']][$actor] ) : null ];
 			}
@@ -117,7 +117,7 @@ class FisheyeCredits {
 				 WHERE x.`item` = ? AND x.`end_date` IS NULL AND x.`content_id` IN ( ".implode( ',', array_fill( 0, count( $byContent ), '?' ) )." ) ORDER BY lc.`title`, x.`xorder`",
 				array_merge( [ self::CHARACTER_ITEM ], array_keys( $byContent ) )
 			) ?: [] as $row ) {
-				if( isset( $byContent[(int)$row['content_id']][self::characterKey( $row )] ) ) {
+				if( isset( $byContent[(int)$row['content_id']][self::characterActor( $row )] ) ) {
 					$ret['played'][] = [ 'title' => (string)$row['title'], 'url' => $url( (int)$row['content_id'] ), 'role' => (string)$row['xkey_ext'],
 						'character_url' => !empty( $row['xref'] ) ? $url( (int)$row['xref'] ) : null ];
 				}
@@ -126,8 +126,14 @@ class FisheyeCredits {
 		return $ret;
 	}
 
-	/** reconcileItem()'s key for a live `character` row: the actor. */
+	/** reconcileItem()'s key for a live `character` row: the actor on a film (one role each), "actor|role" on a season (data.k). */
 	public static function characterKey( array $pRow ): string {
+		$data = json_decode( (string)( $pRow['data'] ?? '' ), true ) ?: [];
+		return (string)( $data['k'] ?? $data['actor'] ?? '' );
+	}
+
+	/** The actor a live `character` row names. */
+	public static function characterActor( array $pRow ): string {
 		return (string)( ( json_decode( (string)( $pRow['data'] ?? '' ), true ) ?: [] )['actor'] ?? '' );
 	}
 

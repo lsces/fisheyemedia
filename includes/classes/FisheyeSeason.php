@@ -1018,6 +1018,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 			[ $this->mContentId ]
 		) ?: [];
 		$byRole = [];
+		$charEpisodes = [];
 		$seen = 0;
 		foreach( $episodes as $episode ) {
 			$data = !empty( $episode['data'] ) ? json_decode( $episode['data'], true ) : [];
@@ -1035,6 +1036,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 					$entry ??= [ 'first' => $seen++, 'episodes' => [], 'billed' => $position, 'roles' => [] ];
 					if( $role === 'star' && !empty( $data['roles'][$name] ) ) {
 						$entry['roles'][$data['roles'][$name]] = $data['roles'][$name];
+						$charEpisodes[$name][$data['roles'][$name]] = array_merge( $charEpisodes[$name][$data['roles'][$name]] ?? [], $numbers );
 					}
 					$entry['episodes'] = array_merge( $entry['episodes'], $numbers );
 					// Plex lists the cast in billing order, so the position in an episode's list is the billing.
@@ -1066,6 +1068,9 @@ class FisheyeSeason extends FisheyeMediaImage {
 					|| isset( $known[mb_strtolower( $name )] ),
 					ARRAY_FILTER_USE_BOTH );
 			}
+			if( $role === 'star' ) {
+				$keptStars = array_keys( $people );
+			}
 			// Most episodes first, then order of first appearance - the billing a cast list wants.
 			uasort( $people, fn( $a, $b ) => [ count( $b['episodes'] ), $a['first'] ] <=> [ count( $a['episodes'] ), $b['first'] ] );
 			$wanted = [];
@@ -1085,6 +1090,18 @@ class FisheyeSeason extends FisheyeMediaImage {
 			}
 			$counts[$role] = $this->reconcileXrefItem( $role, $wanted, 'xkey_ext', false, true );
 		}
+		// The characters: one row per (actor, role) the season's kept cast played, with the episodes - the actor named in the data, the pair
+		// as the key, so an actor playing two parts in a season has two rows. Linked to the character's contact by the characters pass.
+		$characters = [];
+		foreach( $keptStars ?? [] as $name ) {
+			foreach( $charEpisodes[$name] ?? [] as $roleText => $numbers ) {
+				$episodeList = array_values( array_unique( $numbers ) );
+				sort( $episodeList );
+				$characters[] = [ 'key' => $name.'|'.$roleText, 'xkey_ext' => $roleText, 'xorder' => count( $characters ) + 1,
+					'data' => [ 'actor' => $name, 'k' => $name.'|'.$roleText, 'episodes' => $episodeList ] ];
+			}
+		}
+		$counts[FisheyeCredits::CHARACTER_ITEM] = $this->reconcileXrefItem( FisheyeCredits::CHARACTER_ITEM, $characters, [ FisheyeCredits::class, 'characterKey' ], false, true );
 		return $counts;
 	}
 
