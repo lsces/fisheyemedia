@@ -186,7 +186,7 @@ class FisheyeCredits {
 	 * @param int|null   $pStarDepth   a star billed lower than this on every row the person has (and no other role) makes them 'minor' - credited, but not worth a contact of their own; null = nobody is minor
 	 * @return array{items:int, credits:int, people:array<string,array>}  people keyed by lower-cased name,
 	 *         most-credited first; each: name, names, roles (item=>rows), items (content_id=>title),
-	 *         credits (rows), xref_ids, unlinked_ids, contacts, episodes (total episodes named on
+	 *         credits (rows), xref_ids, unlinked_ids, unlinked_by_item (content_id => unlinked xref ids), contacts, episodes (total episodes named on
 	 *         season rows)
 	 */
 	public static function survey( array $pTypeGuids, ?array $pContentIds = null, ?int $pStarDepth = null ): array {
@@ -216,7 +216,7 @@ class FisheyeCredits {
 			$key = mb_strtolower( $name );
 			$p = &$people[$key];
 			$p ??= [ 'name' => $name, 'names' => [], 'roles' => [], 'items' => [], 'credits' => 0,
-				'xref_ids' => [], 'unlinked_ids' => [], 'contacts' => [], 'episodes' => 0, 'minor' => $pStarDepth !== null ];
+				'xref_ids' => [], 'unlinked_ids' => [], 'unlinked_by_item' => [], 'contacts' => [], 'episodes' => 0, 'minor' => $pStarDepth !== null ];
 			$p['names'][$name] = ( $p['names'][$name] ?? 0 ) + 1;
 			$p['roles'][$row['item']] = ( $p['roles'][$row['item']] ?? 0 ) + 1;
 			$p['items'][(int)$row['content_id']] = $row['title'];
@@ -227,6 +227,7 @@ class FisheyeCredits {
 			$p['xref_ids'][] = (int)$row['xref_id'];
 			if( empty( $row['xref'] ) ) {
 				$p['unlinked_ids'][] = (int)$row['xref_id'];
+				$p['unlinked_by_item'][(int)$row['content_id']][] = (int)$row['xref_id'];
 			} else {
 				$p['contacts'][(int)$row['xref']] = (int)$row['xref'];
 			}
