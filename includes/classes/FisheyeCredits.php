@@ -126,6 +126,38 @@ class FisheyeCredits {
 		return $ret;
 	}
 
+	/**
+	 * Make each linked credit's key (xkey) agree with its contact's current Wikidata id. The key is what matches a credit to Wikidata (the
+	 * characters pass finds a cast row's actor through it), but it was written when the link was made: a Wikidata item merged since, or a
+	 * contact whose id was corrected, leaves it stale. Only rows whose contact has a Wikidata id are touched, and linking is not a hand edit,
+	 * so the row's last-update stamp is kept.
+	 *
+	 * @return int  rows corrected
+	 */
+	public static function syncLinkKeys( int $pLimit = 300 ): int {
+		global $gBitDb;
+		$pLimit = max( 1, $pLimit );
+		$rows = $gBitDb->getAll(
+			"SELECT FIRST $pLimit x.`xref_id`, x.`last_update_date`, lc.`content_type_guid`, w.`xkey_ext` AS qid
+			 FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 JOIN `".BIT_DB_PREFIX."liberty_xref` w ON w.`content_id` = x.`xref` AND w.`item` = 'wikidata' AND w.`end_date` IS NULL
+			 WHERE x.`end_date` IS NULL AND x.`xref` > 0 AND lc.`content_type_guid` IN ( '".implode( "','", self::TYPES )."' )
+			 AND x.`item` IN ( ".self::allItemsSql().", '".self::CHARACTER_ITEM."' ) AND ( x.`xkey` IS NULL OR x.`xkey` <> w.`xkey_ext` )"
+		) ?: [];
+		$fixed = 0;
+		foreach( $rows as $row ) {
+			$xref = new LibertyXref();
+			$xref->mContentTypeGuid = $row['content_type_guid'];
+			$xref->load( (int)$row['xref_id'] );
+			$hash = [ 'xref_id' => (int)$row['xref_id'], 'xkey' => (string)$row['qid'], 'last_update_date' => (int)$row['last_update_date'] ];
+			if( $xref->store( $hash ) ) {
+				$fixed++;
+			}
+		}
+		return $fixed;
+	}
+
 	/** reconcileItem()'s key for a live `character` row: the actor on a film (one role each), "actor|role" on a season (data.k). */
 	public static function characterKey( array $pRow ): string {
 		$data = json_decode( (string)( $pRow['data'] ?? '' ), true ) ?: [];
