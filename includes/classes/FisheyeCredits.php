@@ -29,6 +29,33 @@ class FisheyeCredits {
 	/** The content types whose credit rows are surveyed and linked. */
 	public const TYPES = [ 'fisheyefilm', 'fisheyeprogram', 'fisheyeseason' ];
 
+	/** The item holding a cast member's character - not a person credit, so not in ITEMS (the people survey must not see it). */
+	public const CHARACTER_ITEM = 'character';
+
+	/**
+	 * The wanted `character` rows for a film or season from plexCredits(): one per cast member whose role text Plex has, in billing order.
+	 * The row's text is the role, its key the actor (a cast name is unique on an item, a role such as "Student" is not), and `data.actor`
+	 * names the actor so the pair can be shown together; a later Wikidata pass sets the row's link (xref) and xkey to the character's
+	 * contact and Wikidata item.
+	 *
+	 * @param array $pCredits  plexCredits() output
+	 * @return list<array{key:string, xkey_ext:string, xorder:int, data:array}>
+	 */
+	public static function characterRows( array $pCredits ): array {
+		$rows = [];
+		foreach( $pCredits['star'] as $actor ) {
+			if( !empty( $pCredits['roles'][$actor] ) ) {
+				$rows[] = [ 'key' => $actor, 'xkey_ext' => $pCredits['roles'][$actor], 'xorder' => count( $rows ) + 1, 'data' => [ 'actor' => $actor ] ];
+			}
+		}
+		return $rows;
+	}
+
+	/** reconcileItem()'s key for a live `character` row: the actor. */
+	public static function characterKey( array $pRow ): string {
+		return (string)( ( json_decode( (string)( $pRow['data'] ?? '' ), true ) ?: [] )['actor'] ?? '' );
+	}
+
 	/** ALL_ITEMS as a quoted SQL list. */
 	private static function allItemsSql(): string {
 		return "'".implode( "', '", self::ALL_ITEMS )."'";

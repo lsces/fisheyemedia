@@ -650,6 +650,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 			}
 			$tally( $item, $this->reconcileXrefItem( $item, $wanted, 'xkey_ext', false, true ) );
 		}
+		$tally( FisheyeCredits::CHARACTER_ITEM, $this->reconcileXrefItem( FisheyeCredits::CHARACTER_ITEM, FisheyeCredits::characterRows( $credits ), [ FisheyeCredits::class, 'characterKey' ], false, true ) );
 
 		if( !empty( $plexRow['content_rating'] ) ) {
 			// Plex stores e.g. 'gb/12A' - the region prefix isn't useful for display.
@@ -701,6 +702,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 			$this->reconcileXrefItem( $item, $wanted, 'xkey_ext', false, true );
 			$summary['counts'][$item] = count( $wanted );
 		}
+		$this->reconcileXrefItem( FisheyeCredits::CHARACTER_ITEM, FisheyeCredits::characterRows( $credits ), [ FisheyeCredits::class, 'characterKey' ], false, true );
 		return $summary;
 	}
 
