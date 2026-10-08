@@ -155,11 +155,17 @@ class FisheyeCredits {
 		return $ret;
 	}
 
-	/** A role as displayed: the full stops of abbreviations dropped ("Sgt. Hanlon" is "Sgt Hanlon", "D.C.I. Peters" "DCI Peters"); a single initial keeps its stop. */
+	/**
+	 * A role as displayed and stored: the full stops of rank abbreviations dropped - "Sgt. Hanlon" is "Sgt Hanlon", "D.C.I. Peters" is "DCI Peters",
+	 * "Dr. Smith" is "Dr Smith". Only a short word ending in a stop (Sgt. Supt. Mrs. Jr.) or a leading initialism (D.C.I.) is touched, so a
+	 * middle initial ("Jack T. Smith") and anything longer keep theirs. Idempotent.
+	 */
 	public static function tidyRoleName( string $pRole ): string {
 		$words = preg_split( '/\s+/u', trim( $pRole ), -1, PREG_SPLIT_NO_EMPTY ) ?: [];
-		foreach( $words as &$word ) {
-			if( strpos( $word, '.' ) !== false && mb_strlen( str_replace( '.', '', $word ) ) >= 2 ) {
+		foreach( $words as $i => &$word ) {
+			if( preg_match( '/^\p{L}{2,5}\.$/u', $word ) ) {
+				$word = rtrim( $word, '.' );
+			} elseif( $i === 0 && preg_match( '/^(\p{L}\.){2,4}$/u', $word ) ) {
 				$word = str_replace( '.', '', $word );
 			}
 		}
@@ -272,7 +278,13 @@ class FisheyeCredits {
 	/** reconcileItem()'s key for a live `character` row: the actor on a film (one role each), "actor|role" on a season (data.k). */
 	public static function characterKey( array $pRow ): string {
 		$data = json_decode( (string)( $pRow['data'] ?? '' ), true ) ?: [];
-		return (string)( $data['k'] ?? $data['actor'] ?? '' );
+		$key = (string)( $data['k'] ?? $data['actor'] ?? '' );
+		// The role part is compared tidied, so a row stored as "David Jason|Sgt. Hanlon" still matches the "…|Sgt Hanlon" a reload now produces and keeps its link.
+		if( strpos( $key, '|' ) !== false ) {
+			[ $actor, $role ] = explode( '|', $key, 2 );
+			$key = $actor.'|'.self::tidyRoleName( $role );
+		}
+		return $key;
 	}
 
 	/** The actor a live `character` row names. */
@@ -311,7 +323,7 @@ class FisheyeCredits {
 			$role = [ 4 => 'director', 5 => 'writer', 6 => 'star' ][(int)$row['tag_type']];
 			$ret[$role][$row['tag']] = $row['tag'];
 			if( $role === 'star' && !isset( $roles[$row['tag']] ) && ( $text = trim( preg_replace( '/\s+/u', ' ', (string)$row['text'] ) ) ) !== '' ) {
-				$roles[$row['tag']] = $text;
+				$roles[$row['tag']] = self::tidyRoleName( $text );
 			}
 			if( $role === 'star' && preg_match( '/\bnarrat/i', (string)$row['text'] ) && !preg_match( '/trailer|promo|teaser/i', (string)$row['text'] ) ) {
 				$ret['narrator'][$row['tag']] = $row['tag'];

@@ -1035,8 +1035,10 @@ class FisheyeSeason extends FisheyeMediaImage {
 					$entry = &$byRole[$role][$name];
 					$entry ??= [ 'first' => $seen++, 'episodes' => [], 'billed' => $position, 'roles' => [] ];
 					if( $role === 'star' && !empty( $data['roles'][$name] ) ) {
-						$entry['roles'][$data['roles'][$name]] = $data['roles'][$name];
-						$charEpisodes[$name][$data['roles'][$name]] = array_merge( $charEpisodes[$name][$data['roles'][$name]] ?? [], $numbers );
+						// tidied here too: an episode read from before the tidy still holds the raw "Sgt. Hanlon"
+						$roleText = FisheyeCredits::tidyRoleName( (string)$data['roles'][$name] );
+						$entry['roles'][$roleText] = $roleText;
+						$charEpisodes[$name][$roleText] = array_merge( $charEpisodes[$name][$roleText] ?? [], $numbers );
 					}
 					$entry['episodes'] = array_merge( $entry['episodes'], $numbers );
 					// Plex lists the cast in billing order, so the position in an episode's list is the billing.
