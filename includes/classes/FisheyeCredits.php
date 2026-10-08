@@ -21,13 +21,47 @@ use Bitweaver\Liberty\LibertyXref;
 class FisheyeCredits {
 
 	/** The xref items that credit a person. */
-	public const ITEMS = [ 'director', 'writer', 'star' ];
+	public const ITEMS = [ 'director', 'writer', 'star', 'narrator' ];
 
 	/** Every item that credits a person, for the survey/link/name queries: ITEMS plus the show-level 'creator' (a program's own rows only - a season has none). */
-	public const ALL_ITEMS = [ 'director', 'writer', 'star', 'creator' ];
+	public const ALL_ITEMS = [ 'director', 'writer', 'star', 'narrator', 'creator' ];
 
 	/** The content types whose credit rows are surveyed and linked. */
 	public const TYPES = [ 'fisheyefilm', 'fisheyeprogram', 'fisheyeseason' ];
+
+	/** ALL_ITEMS as a quoted SQL list. */
+	private static function allItemsSql(): string {
+		return "'".implode( "', '", self::ALL_ITEMS )."'";
+	}
+
+	/** ITEMS as a quoted SQL list. */
+	private static function itemsSql(): string {
+		return "'".implode( "', '", self::ITEMS )."'";
+	}
+
+	/**
+	 * A Plex item's credits by role, in billing order, each name once: director/writer/star from the director/writer/actor taggings, plus
+	 * narrator for an actor tagging whose role text says narrator ("Narrator", "Narrator (voice)", "Self - Narrator"), not a trailer's narrator. A narrator stays in the
+	 * cast too: Plex lists them there, and in fiction "Narrator" can be a character (Fight Club) who is really one of the stars.
+	 *
+	 * @return array{director:string[], writer:string[], star:string[], narrator:string[]}
+	 */
+	public static function plexCredits( \PDO $pPlexDb, int $pMetadataItemId ): array {
+		$stmt = $pPlexDb->prepare(
+			"SELECT t.tag, t.tag_type, tg.text FROM taggings tg JOIN tags t ON t.id = tg.tag_id
+			 WHERE tg.metadata_item_id = ? AND t.tag_type IN ( 4, 5, 6 ) ORDER BY t.tag_type, tg.\"index\""
+		);
+		$stmt->execute( [ $pMetadataItemId ] );
+		$ret = [ 'director' => [], 'writer' => [], 'star' => [], 'narrator' => [] ];
+		foreach( $stmt->fetchAll( \PDO::FETCH_ASSOC ) as $row ) {
+			$role = [ 4 => 'director', 5 => 'writer', 6 => 'star' ][(int)$row['tag_type']];
+			$ret[$role][$row['tag']] = $row['tag'];
+			if( $role === 'star' && preg_match( '/\bnarrat/i', (string)$row['text'] ) && !preg_match( '/trailer|promo|teaser/i', (string)$row['text'] ) ) {
+				$ret['narrator'][$row['tag']] = $row['tag'];
+			}
+		}
+		return array_map( 'array_values', $ret );
+	}
 
 	/**
 	 * Every person credited on the given content types (optionally only on given content items), one
@@ -52,7 +86,7 @@ class FisheyeCredits {
 			 FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE lc.`content_type_guid` IN ( ".implode( ',', array_fill( 0, count( $pTypeGuids ), '?' ) )." )
-			 AND x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star', 'creator' ) AND x.`xkey_ext` IS NOT NULL";
+			 AND x.`end_date` IS NULL AND x.`item` IN ( ".self::allItemsSql()." ) AND x.`xkey_ext` IS NOT NULL";
 		if( $pContentIds !== null ) {
 			$sql .= " AND x.`content_id` IN ( ".implode( ',', array_fill( 0, count( $pContentIds ), '?' ) )." )";
 			$bind = array_merge( $bind, array_map( 'intval', $pContentIds ) );
@@ -119,7 +153,7 @@ class FisheyeCredits {
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE x.`xref_id` IN ( ".implode( ',', array_fill( 0, count( $pXrefIds ), '?' ) )." )
 			 AND lc.`content_type_guid` IN ( '".implode( "','", self::TYPES )."' ) AND x.`end_date` IS NULL
-			 AND x.`item` IN ( 'director', 'writer', 'star', 'creator' ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
+			 AND x.`item` IN ( ".self::allItemsSql()." ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
 			$pXrefIds
 		) ?: [];
 		$linked = 0;
@@ -153,7 +187,7 @@ class FisheyeCredits {
 				 FROM `".BIT_DB_PREFIX."liberty_xref` x
 				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 				 WHERE lc.`content_type_guid` IN ( '".implode( "','", self::TYPES )."' ) AND x.`end_date` IS NULL
-				 AND x.`item` IN ( 'director', 'writer', 'star', 'creator' ) AND x.`xref` IS NOT NULL AND x.`xref` <> 0
+				 AND x.`item` IN ( ".self::allItemsSql()." ) AND x.`xref` IS NOT NULL AND x.`xref` <> 0
 				 AND LOWER( x.`xkey_ext` ) IN ( ".implode( ',', array_fill( 0, count( $chunk ), '?' ) )." )
 				 GROUP BY LOWER( x.`xkey_ext` ), x.`xref`, x.`xkey`",
 				$chunk
@@ -207,7 +241,7 @@ class FisheyeCredits {
 			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyeseason' AND x.`end_date` IS NULL
-			 AND x.`item` IN ( 'director', 'writer', 'star' ) AND x.`xkey_ext` IS NOT NULL",
+			 AND x.`item` IN ( ".self::itemsSql()." ) AND x.`xkey_ext` IS NOT NULL",
 			[ $pProgramId ]
 		) ?: [];
 		$byRole = [];
@@ -229,7 +263,7 @@ class FisheyeCredits {
 			unset( $entry );
 		}
 		$ret = [];
-		foreach( [ 'director', 'writer', 'star' ] as $role ) {
+		foreach( self::ITEMS as $role ) {
 			$people = array_values( $byRole[$role] ?? [] );
 			// Most episodes first; people tied on episodes in billing order (their average place across the seasons), then by name.
 			usort( $people, fn( $a, $b ) => [ $b['episodes'], $a['rankSum'] / $a['seasons'], $a['name'] ] <=> [ $a['episodes'], $b['rankSum'] / $b['seasons'], $b['name'] ] );
@@ -322,7 +356,7 @@ class FisheyeCredits {
 			        SUM( CASE WHEN x.`xref` IS NULL OR x.`xref` = 0 THEN 1 ELSE 0 END ) AS unlinked
 			 FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
 			 JOIN `".BIT_DB_PREFIX."liberty_xref` x ON x.`content_id` = m.`item_content_id`
-			 WHERE x.`end_date` IS NULL AND x.`item` IN ( 'director', 'writer', 'star' )".$mapWhere."
+			 WHERE x.`end_date` IS NULL AND x.`item` IN ( ".self::itemsSql()." )".$mapWhere."
 			 GROUP BY m.`gallery_content_id`", $bind
 		) ?: [] as $row ) {
 			$credits[(int)$row['pid']] = $row;

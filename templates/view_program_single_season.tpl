@@ -46,10 +46,11 @@
 				{if $creators}
 					<div class="film-credits"><strong>{tr}Created by{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$creators limit=8}</div>
 				{/if}
-				{if $rollup.director || $rollup.writer || $rollup.star}
+				{if $rollup.director || $rollup.writer || $rollup.star || $rollup.narrator}
 					<div class="film-credits">
 						{if $rollup.director}<strong>{tr}Director{/tr}{if $rollup.director|@count > 1}s{/if}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.director limit=10}<br />{/if}
 						{if $rollup.writer}<strong>{tr}Writer{/tr}{if $rollup.writer|@count > 1}s{/if}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.writer limit=10}<br />{/if}
+						{if $rollup.narrator}<strong>{tr}Narrated by{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.narrator limit=4}<br />{/if}
 						{if $rollup.star}<strong>{tr}Starring{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$rollup.star limit=12}{/if}
 					</div>
 				{else}

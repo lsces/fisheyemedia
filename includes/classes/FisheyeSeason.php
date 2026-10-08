@@ -250,6 +250,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 							'directors'      => $data['director'] ?? [],
 							'writers'        => $data['writer'] ?? [],
 							'stars'          => $data['star'] ?? [],
+							'narrators'      => $data['narrator'] ?? [],
 							'content_rating' => $data['content_rating'] ?? '',
 							'durationMs'     => $data['duration'] ?? null,
 							'thumb'          => $data['thumb'] ?? null,
@@ -283,7 +284,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// Every credited name in the season's episodes, resolved once to the contact it is linked to (if any).
 		$creditNames = [];
 		foreach( $episodes as $episode ) {
-			$creditNames = array_merge( $creditNames, $episode['directors'], $episode['writers'], $episode['stars'] );
+			$creditNames = array_merge( $creditNames, $episode['directors'], $episode['writers'], $episode['stars'], $episode['narrators'] );
 		}
 		return [ 'images' => $images, 'episodes' => $episodes, 'featurettes' => $featurettes, 'firstTab' => $firstTab,
 			'creditUrls' => FisheyeCredits::urlsForNames( $creditNames ) ];
@@ -871,7 +872,6 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// stays. Only a new episode takes the full path below.
 		$existingEpisodes = $pDataOnly ? $this->liveEpisodeData() : [];
 
-		$tagTypes = [ 'director' => 4, 'writer' => 5, 'star' => 6 ];
 		foreach( $episodeRows as $row ) {
 			if( !str_starts_with( $row['file'], $realRoot ) || !is_file( $row['file'] ) ) {
 				continue;
@@ -886,12 +886,8 @@ class FisheyeSeason extends FisheyeMediaImage {
 				'summary'  => $row['summary'],
 				'air_date' => !empty( $row['originally_available_at'] ) ? gmdate( 'Y-m-d', (int)$row['originally_available_at'] ) : null,
 			];
-			foreach( $tagTypes as $tagItem => $tagType ) {
-				$tagStmt = $plexDb->prepare(
-					"SELECT t.tag FROM taggings tg JOIN tags t ON t.id = tg.tag_id WHERE tg.metadata_item_id = ? AND t.tag_type = ? ORDER BY tg.\"index\""
-				);
-				$tagStmt->execute( [ $row['id'], $tagType ] );
-				$values = $tagStmt->fetchAll( \PDO::FETCH_COLUMN );
+			// director/writer/star, and narrator (an actor tagged with a narrator role - they stay in the cast too).
+			foreach( FisheyeCredits::plexCredits( $plexDb, (int)$row['id'] ) as $tagItem => $values ) {
 				if( $values ) {
 					$episodeData[$tagItem] = $values;
 				}

@@ -606,3 +606,14 @@ program already has the new title. Admin page: `relocate_show.php?content_id=<pr
 shared by every show, so it prefers rows in the show's own folder, and when only another show's rows remain it
 anchors on a file in the season's own folder on disk. `reloadPlexEpisodes()` skips Plex files outside the matched
 show folder. Without this, a stray foreign row made a reload archive the season's real episodes.
+
+## Narrator credits (films and seasons)
+
+`FisheyeCredits::plexCredits()` reads a Plex item's director/writer/actor taggings and also returns `narrator`: an actor tagging whose
+role text matches "narrat" ("Narrator", "Narrator (voice)", "Self - Narrator"), unless it says trailer/promo/teaser. A narrator stays in
+the cast as well (Plex lists them there, and in fiction "Narrator" can be a character who is really a star - Fight Club), so the
+`narrator` row is additive. `narrator` is in `FisheyeCredits::ITEMS`: films reconcile it on Reload Metadata and the bulk film cast
+reload, episodes carry it in their data, a season's credit directory gets one narrator row per person with episode numbers (never
+filtered by the min-episodes rule, like directors/writers), and the show page rolls it up. It is not subject to the billing depth.
+The item definitions (film and season, group `metadata`, template `credit`) live in the rdmcloud scheme file `media.php` -
+Apply it on each site before reloading.

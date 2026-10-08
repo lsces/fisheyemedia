@@ -326,13 +326,13 @@ class FisheyeFilm extends FisheyeMediaImage {
 	 * group names here already broke silently once, when 'star' moved out of 'metadata' into its
 	 * own 'cast' tab and this page kept reading only 'metadata'.
 	 *
-	 * @return array{genres:array,directors:array,writers:array,stars:array,creditUrls:array<string,string>,contentRating:?string,
+	 * @return array{genres:array,directors:array,writers:array,stars:array,narrators:array,creditUrls:array<string,string>,contentRating:?string,
 	 *               durationMs:?int,resolution:?string,audio:?string,externalLinks:array,
 	 *               filmImages:array,featurettes:array,firstTab:?string}
 	 */
 	public function getFilmViewData(): array {
 		$this->loadXrefInfo();
-		$genres = $directors = $writers = $stars = [];
+		$genres = $directors = $writers = $stars = $narrators = [];
 		// name => contact page, for credits linked to a contact (xref) - the index.php?content_id=
 		// dispatcher routes to whatever display page that contact's own package defines.
 		$creditUrls = [];
@@ -356,6 +356,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 					case 'director':       $directors[]  = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
 					case 'writer':         $writers[]    = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
 					case 'star':           $stars[]      = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
+					case 'narrator':       $narrators[]  = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
 					case 'content_rating': $contentRating = $xref['xkey_ext']; break;
 					case 'duration':       $durationMs    = (int)$xref['xkey_ext']; break;
 					case 'resolution':     $resolution    = $xref['xkey_ext']; break;
@@ -399,6 +400,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 			'directors'     => $directors,
 			'writers'       => $writers,
 			'stars'         => $stars,
+			'narrators'     => $narrators,
 			'creditUrls'    => $creditUrls,
 			'contentRating' => $contentRating,
 			'durationMs'    => $durationMs,
@@ -620,19 +622,22 @@ class FisheyeFilm extends FisheyeMediaImage {
 		// tag_type: 1=genre, 4=director, 5=writer, 6=actor(star) - confirmed against real live
 		// data 2026-09-02, not documented anywhere by Plex itself. The full cast is kept (no cap) -
 		// credits are keyed by name, so a person Plex lists twice is stored once.
-		$tagTypes = [ 'genre' => 1, 'director' => 4, 'writer' => 5, 'star' => 6 ];
-		foreach( $tagTypes as $item => $tagType ) {
-			$tagStmt = $plexDb->prepare(
-				"SELECT t.tag FROM taggings tg JOIN tags t ON t.id = tg.tag_id WHERE tg.metadata_item_id = ? AND t.tag_type = ? ORDER BY tg.\"index\""
-			);
-			$tagStmt->execute( [ $metadataItemId, $tagType ] );
+		$tagStmt = $plexDb->prepare(
+			"SELECT t.tag FROM taggings tg JOIN tags t ON t.id = tg.tag_id WHERE tg.metadata_item_id = ? AND t.tag_type = 1 ORDER BY tg.\"index\""
+		);
+		$tagStmt->execute( [ $metadataItemId ] );
+		$wanted = [];
+		foreach( array_unique( $tagStmt->fetchAll( \PDO::FETCH_COLUMN ) ) as $value ) {
+			$wanted[] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
+		}
+		$tally( 'genre', $this->reconcileXrefItem( 'genre', $wanted, 'xkey_ext', false, false ) );
+		$credits = FisheyeCredits::plexCredits( $plexDb, $metadataItemId );
+		foreach( FisheyeCredits::ITEMS as $item ) {
 			$wanted = [];
-			foreach( $tagStmt->fetchAll( \PDO::FETCH_COLUMN ) as $value ) {
-				if( !isset( $wanted[$value] ) ) {
-					$wanted[$value] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
-				}
+			foreach( $credits[$item] as $value ) {
+				$wanted[] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
 			}
-			$tally( $item, $this->reconcileXrefItem( $item, array_values( $wanted ), 'xkey_ext', false, $item !== 'genre' ) );
+			$tally( $item, $this->reconcileXrefItem( $item, $wanted, 'xkey_ext', false, true ) );
 		}
 
 		if( !empty( $plexRow['content_rating'] ) ) {
@@ -672,18 +677,13 @@ class FisheyeFilm extends FisheyeMediaImage {
 			return $summary;
 		}
 		$summary['matched'] = true;
-		$tagStmt = $plexMatch['db']->prepare(
-			"SELECT t.tag FROM taggings tg JOIN tags t ON t.id = tg.tag_id WHERE tg.metadata_item_id = ? AND t.tag_type = ? ORDER BY tg.\"index\""
-		);
-		foreach( [ 'director' => 4, 'writer' => 5, 'star' => 6 ] as $item => $tagType ) {
-			$tagStmt->execute( [ $plexMatch['id'], $tagType ] );
+		$credits = FisheyeCredits::plexCredits( $plexMatch['db'], $plexMatch['id'] );
+		foreach( FisheyeCredits::ITEMS as $item ) {
 			$wanted = [];
-			foreach( $tagStmt->fetchAll( \PDO::FETCH_COLUMN ) as $value ) {
-				if( !isset( $wanted[$value] ) ) {
-					$wanted[$value] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
-				}
+			foreach( $credits[$item] as $value ) {
+				$wanted[] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
 			}
-			$this->reconcileXrefItem( $item, array_values( $wanted ), 'xkey_ext', false, true );
+			$this->reconcileXrefItem( $item, $wanted, 'xkey_ext', false, true );
 			$summary['counts'][$item] = count( $wanted );
 		}
 		return $summary;
