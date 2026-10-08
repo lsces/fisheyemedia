@@ -326,13 +326,13 @@ class FisheyeFilm extends FisheyeMediaImage {
 	 * group names here already broke silently once, when 'star' moved out of 'metadata' into its
 	 * own 'cast' tab and this page kept reading only 'metadata'.
 	 *
-	 * @return array{genres:array,directors:array,writers:array,stars:array,narrators:array,creditUrls:array<string,string>,contentRating:?string,
+	 * @return array{genres:array,directors:array,writers:array,stars:array,narrators:array,creditRoles:array<string,string>,creditUrls:array<string,string>,contentRating:?string,
 	 *               durationMs:?int,resolution:?string,audio:?string,externalLinks:array,
 	 *               filmImages:array,featurettes:array,firstTab:?string}
 	 */
 	public function getFilmViewData(): array {
 		$this->loadXrefInfo();
-		$genres = $directors = $writers = $stars = $narrators = [];
+		$genres = $directors = $writers = $stars = $narrators = $roles = [];
 		// name => contact page, for credits linked to a contact (xref) - the index.php?content_id=
 		// dispatcher routes to whatever display page that contact's own package defines.
 		$creditUrls = [];
@@ -355,7 +355,13 @@ class FisheyeFilm extends FisheyeMediaImage {
 					case 'genre':          $genres[]     = $xref['xkey_ext']; break;
 					case 'director':       $directors[]  = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
 					case 'writer':         $writers[]    = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
-					case 'star':           $stars[]      = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
+					case 'star':
+						$stars[] = $xref['xkey_ext'];
+						$creditUrls = self::creditUrl( $creditUrls, $xref );
+						if( !empty( $xref['data'] ) && ( $roleData = json_decode( $xref['data'], true ) ) && !empty( $roleData['role'] ) ) {
+							$roles[$xref['xkey_ext']] = $roleData['role'];
+						}
+						break;
 					case 'narrator':       $narrators[]  = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
 					case 'content_rating': $contentRating = $xref['xkey_ext']; break;
 					case 'duration':       $durationMs    = (int)$xref['xkey_ext']; break;
@@ -401,6 +407,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 			'writers'       => $writers,
 			'stars'         => $stars,
 			'narrators'     => $narrators,
+			'creditRoles'   => $roles,
 			'creditUrls'    => $creditUrls,
 			'contentRating' => $contentRating,
 			'durationMs'    => $durationMs,
@@ -635,7 +642,11 @@ class FisheyeFilm extends FisheyeMediaImage {
 		foreach( FisheyeCredits::ITEMS as $item ) {
 			$wanted = [];
 			foreach( $credits[$item] as $value ) {
-				$wanted[] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
+				$row = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
+				if( $item === 'star' && isset( $credits['roles'][$value] ) ) {
+					$row['data'] = [ 'role' => $credits['roles'][$value] ];
+				}
+				$wanted[] = $row;
 			}
 			$tally( $item, $this->reconcileXrefItem( $item, $wanted, 'xkey_ext', false, true ) );
 		}
@@ -681,7 +692,11 @@ class FisheyeFilm extends FisheyeMediaImage {
 		foreach( FisheyeCredits::ITEMS as $item ) {
 			$wanted = [];
 			foreach( $credits[$item] as $value ) {
-				$wanted[] = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
+				$row = [ 'key' => $value, 'xkey_ext' => $value, 'xorder' => count( $wanted ) + 1 ];
+				if( $item === 'star' && isset( $credits['roles'][$value] ) ) {
+					$row['data'] = [ 'role' => $credits['roles'][$value] ];
+				}
+				$wanted[] = $row;
 			}
 			$this->reconcileXrefItem( $item, $wanted, 'xkey_ext', false, true );
 			$summary['counts'][$item] = count( $wanted );

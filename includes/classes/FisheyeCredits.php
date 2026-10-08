@@ -44,7 +44,9 @@ class FisheyeCredits {
 	 * narrator for an actor tagging whose role text says narrator ("Narrator", "Narrator (voice)", "Self - Narrator"), not a trailer's narrator. A narrator stays in the
 	 * cast too: Plex lists them there, and in fiction "Narrator" can be a character (Fight Club) who is really one of the stars.
 	 *
-	 * @return array{director:string[], writer:string[], star:string[], narrator:string[]}
+	 * Also 'roles': each actor's role text as Plex holds it ('Tristan Thorn'), by name - the character played. Plex has it for 99% of cast.
+	 *
+	 * @return array{director:string[], writer:string[], star:string[], narrator:string[], roles:array<string,string>}
 	 */
 	public static function plexCredits( \PDO $pPlexDb, int $pMetadataItemId ): array {
 		$stmt = $pPlexDb->prepare(
@@ -53,14 +55,18 @@ class FisheyeCredits {
 		);
 		$stmt->execute( [ $pMetadataItemId ] );
 		$ret = [ 'director' => [], 'writer' => [], 'star' => [], 'narrator' => [] ];
+		$roles = [];
 		foreach( $stmt->fetchAll( \PDO::FETCH_ASSOC ) as $row ) {
 			$role = [ 4 => 'director', 5 => 'writer', 6 => 'star' ][(int)$row['tag_type']];
 			$ret[$role][$row['tag']] = $row['tag'];
+			if( $role === 'star' && !isset( $roles[$row['tag']] ) && ( $text = trim( preg_replace( '/\s+/u', ' ', (string)$row['text'] ) ) ) !== '' ) {
+				$roles[$row['tag']] = $text;
+			}
 			if( $role === 'star' && preg_match( '/\bnarrat/i', (string)$row['text'] ) && !preg_match( '/trailer|promo|teaser/i', (string)$row['text'] ) ) {
 				$ret['narrator'][$row['tag']] = $row['tag'];
 			}
 		}
-		return array_map( 'array_values', $ret );
+		return array_map( 'array_values', $ret ) + [ 'roles' => $roles ];
 	}
 
 	/**

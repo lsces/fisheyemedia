@@ -617,3 +617,11 @@ reload, episodes carry it in their data, a season's credit directory gets one na
 filtered by the min-episodes rule, like directors/writers), and the show page rolls it up. It is not subject to the billing depth.
 The item definitions (film and season, group `metadata`, template `credit`) live in the rdmcloud scheme file `media.php` -
 Apply it on each site before reloading.
+
+## Character (role) text on cast rows
+
+`FisheyeCredits::plexCredits()` also returns `roles`: each actor's role text from Plex's tagging (`taggings.text`, present on 99% of cast),
+by name. A film's `star` rows carry it as `data.role`; an episode's data packet carries the map as `roles`; a season's `star` directory row
+carries the distinct characters that person played in the season as `data.roles` (first appearance order, at most 8). It is displayed as
+"Name as Character" (`credit_names_inc.tpl`, the film Starring line, episode panels) and by the generic credit row template on the cast tab.
+A later enrichment can add the Wikidata character item (cast statement qualifier P453) beside the text; nothing here depends on it.

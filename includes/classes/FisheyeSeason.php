@@ -251,6 +251,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 							'writers'        => $data['writer'] ?? [],
 							'stars'          => $data['star'] ?? [],
 							'narrators'      => $data['narrator'] ?? [],
+							'roles'          => $data['roles'] ?? [],
 							'content_rating' => $data['content_rating'] ?? '',
 							'durationMs'     => $data['duration'] ?? null,
 							'thumb'          => $data['thumb'] ?? null,
@@ -1031,7 +1032,10 @@ class FisheyeSeason extends FisheyeMediaImage {
 						continue;
 					}
 					$entry = &$byRole[$role][$name];
-					$entry ??= [ 'first' => $seen++, 'episodes' => [], 'billed' => $position ];
+					$entry ??= [ 'first' => $seen++, 'episodes' => [], 'billed' => $position, 'roles' => [] ];
+					if( $role === 'star' && !empty( $data['roles'][$name] ) ) {
+						$entry['roles'][$data['roles'][$name]] = $data['roles'][$name];
+					}
 					$entry['episodes'] = array_merge( $entry['episodes'], $numbers );
 					// Plex lists the cast in billing order, so the position in an episode's list is the billing.
 					$entry['billed'] = min( $entry['billed'], $position );
@@ -1069,6 +1073,10 @@ class FisheyeSeason extends FisheyeMediaImage {
 				$episodeList = array_values( array_unique( $person['episodes'] ) );
 				sort( $episodeList );
 				$row = [ 'key' => $name, 'xkey_ext' => $name, 'xorder' => count( $wanted ) + 1, 'data' => [ 'episodes' => $episodeList ] ];
+				if( $role === 'star' && $person['roles'] ) {
+					// The characters played in this season, in order of first appearance.
+					$row['data']['roles'] = array_slice( array_values( $person['roles'] ), 0, 8 );
+				}
 				if( $link = ( $known[mb_strtolower( $name )] ?? null ) ) {
 					$row['xref'] = $link['xref'];
 					$row['xkey'] = $link['xkey'];
