@@ -84,7 +84,7 @@ class FisheyeCredits {
 	 * the same actor plays both. Each group lists the rows still to link; a group whose rows are all linked is left out. If some of a
 	 * group's rows are already linked to one contact, that contact is the group's existing one (a new season's rows join it).
 	 *
-	 * @return list<array{key:string, role:string, variants:list<string>, seasons:int, actors:list<string>, xref_ids:int[], existing:?int, rows:int}>
+	 * @return list<array{key:string, role:string, variants:list<string>, seasons:int, actors:list<string>, multi:bool, xref_ids:int[], existing:?int, rows:int}>
 	 *         most seasons first
 	 */
 	public static function recurringCharacters( int $pProgramId, int $pMinSeasons = 3 ): array {
@@ -149,7 +149,7 @@ class FisheyeCredits {
 			usort( $variants, fn( $a, $b ) => [ $g['variants'][$b], strlen( $b ) ] <=> [ $g['variants'][$a], strlen( $a ) ] );
 			$linkedTo = array_values( array_unique( array_filter( array_map( fn( $r ) => $r['linked'], $g['rows'] ) ) ) );
 			$ret[] = [ 'key' => $key, 'role' => self::tidyRoleName( $variants[0] ), 'variants' => $variants, 'seasons' => count( $g['seasons'] ),
-				'actors' => array_keys( $g['actors'] ), 'xref_ids' => $pending, 'existing' => count( $linkedTo ) === 1 ? $linkedTo[0] : null, 'rows' => count( $g['rows'] ) ];
+				'actors' => array_keys( $g['actors'] ), 'multi' => (bool)preg_match( '~\s/\s|\s&\s|\sand\s~i', $variants[0] ), 'xref_ids' => $pending, 'existing' => count( $linkedTo ) === 1 ? $linkedTo[0] : null, 'rows' => count( $g['rows'] ) ];
 		}
 		usort( $ret, fn( $a, $b ) => [ $b['seasons'], $a['role'] ] <=> [ $a['seasons'], $b['role'] ] );
 		return $ret;
