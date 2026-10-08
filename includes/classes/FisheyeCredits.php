@@ -165,7 +165,7 @@ class FisheyeCredits {
 		foreach( $words as $i => &$word ) {
 			if( preg_match( '/^\p{L}{2,5}\.$/u', $word ) ) {
 				$word = rtrim( $word, '.' );
-			} elseif( $i === 0 && preg_match( '/^(\p{L}\.){2,4}$/u', $word ) ) {
+			} elseif( $i === 0 && preg_match( '/^(\p{L}\.){1,3}\p{L}\.?$/u', $word ) ) {
 				$word = str_replace( '.', '', $word );
 			}
 		}
