@@ -79,6 +79,91 @@ class FisheyeCredits {
 	}
 
 	/**
+	 * A show's recurring roles, from the `character` rows its seasons carry (the role text Plex gives each cast member): roles that
+	 * appear in at least $pMinSeasons seasons, grouped so that variants of one role count together - "Sgt Don Brady" and "Sgt. Brady" when
+	 * the same actor plays both. Each group lists the rows still to link; a group whose rows are all linked is left out. If some of a
+	 * group's rows are already linked to one contact, that contact is the group's existing one (a new season's rows join it).
+	 *
+	 * @return list<array{key:string, role:string, variants:list<string>, seasons:int, actors:list<string>, xref_ids:int[], existing:?int, rows:int}>
+	 *         most seasons first
+	 */
+	public static function recurringCharacters( int $pProgramId, int $pMinSeasons = 3 ): array {
+		global $gBitDb;
+		$seasonIds = self::seasonIdsForProgram( $pProgramId );
+		if( !$seasonIds ) {
+			return [];
+		}
+		$groups = [];
+		foreach( $gBitDb->getAll(
+			"SELECT `xref_id`, `content_id`, `xkey_ext`, `xref`, `data` FROM `".BIT_DB_PREFIX."liberty_xref`
+			 WHERE `item` = ? AND `end_date` IS NULL AND `xkey_ext` IS NOT NULL AND `content_id` IN ( ".implode( ',', array_map( 'intval', $seasonIds ) )." )",
+			[ self::CHARACTER_ITEM ]
+		) ?: [] as $row ) {
+			$role = trim( preg_replace( '/\s+/u', ' ', (string)$row['xkey_ext'] ) );
+			$key = self::characterRoleKey( $role );
+			if( $key === '' ) {
+				continue;
+			}
+			$g = &$groups[$key];
+			$g ??= [ 'variants' => [], 'seasons' => [], 'actors' => [], 'rows' => [] ];
+			$g['variants'][$role] = ( $g['variants'][$role] ?? 0 ) + 1;
+			$g['seasons'][(int)$row['content_id']] = true;
+			if( ( $actor = self::characterActor( $row ) ) !== '' ) {
+				$g['actors'][$actor] = true;
+			}
+			$g['rows'][] = [ 'xref_id' => (int)$row['xref_id'], 'linked' => (int)$row['xref'] ];
+			unset( $g );
+		}
+		// Fold a shorter form into a longer one it is part of when the same actor plays both ("sgt brady" into "sgt don brady").
+		uksort( $groups, fn( $a, $b ) => substr_count( $b, ' ' ) <=> substr_count( $a, ' ' ) ?: strcmp( $a, $b ) );
+		foreach( array_keys( $groups ) as $short ) {
+			if( !isset( $groups[$short] ) ) {
+				continue;
+			}
+			$shortTokens = explode( ' ', $short );
+			foreach( array_keys( $groups ) as $long ) {
+				if( $long === $short || count( explode( ' ', $long ) ) <= count( $shortTokens ) || !isset( $groups[$long] ) ) {
+					continue;
+				}
+				if( !array_diff( $shortTokens, explode( ' ', $long ) ) && array_intersect_key( $groups[$short]['actors'], $groups[$long]['actors'] ) ) {
+					foreach( $groups[$short]['variants'] as $v => $n ) {
+						$groups[$long]['variants'][$v] = ( $groups[$long]['variants'][$v] ?? 0 ) + $n;
+					}
+					$groups[$long]['seasons'] += $groups[$short]['seasons'];
+					$groups[$long]['actors'] += $groups[$short]['actors'];
+					$groups[$long]['rows'] = array_merge( $groups[$long]['rows'], $groups[$short]['rows'] );
+					unset( $groups[$short] );
+					break;
+				}
+			}
+		}
+		$ret = [];
+		foreach( $groups as $key => $g ) {
+			$pending = array_values( array_map( fn( $r ) => $r['xref_id'], array_filter( $g['rows'], fn( $r ) => !$r['linked'] ) ) );
+			if( !$pending || count( $g['seasons'] ) < $pMinSeasons ) {
+				continue;
+			}
+			arsort( $g['variants'] );
+			// The name to use: the most used spelling, the longer one when tied.
+			$variants = array_keys( $g['variants'] );
+			usort( $variants, fn( $a, $b ) => [ $g['variants'][$b], strlen( $b ) ] <=> [ $g['variants'][$a], strlen( $a ) ] );
+			$linkedTo = array_values( array_unique( array_filter( array_map( fn( $r ) => $r['linked'], $g['rows'] ) ) ) );
+			$ret[] = [ 'key' => $key, 'role' => $variants[0], 'variants' => $variants, 'seasons' => count( $g['seasons'] ),
+				'actors' => array_keys( $g['actors'] ), 'xref_ids' => $pending, 'existing' => count( $linkedTo ) === 1 ? $linkedTo[0] : null, 'rows' => count( $g['rows'] ) ];
+		}
+		usort( $ret, fn( $a, $b ) => [ $b['seasons'], $a['role'] ] <=> [ $a['seasons'], $b['role'] ] );
+		return $ret;
+	}
+
+	/** A role's grouping key: lower case, no full stops or bracketed notes ("(voice)", "(uncredited)"), single spaces. */
+	public static function characterRoleKey( string $pRole ): string {
+		$role = preg_replace( '/\([^)]*\)/u', ' ', $pRole );
+		// Full stops drop out without leaving a space ("D.C.I. Peters" is "dci peters"), commas become spaces.
+		$role = str_replace( ',', ' ', str_replace( '.', '', mb_strtolower( $role ) ) );
+		return trim( preg_replace( '/\s+/u', ' ', $role ) );
+	}
+
+	/**
 	 * What a contact's character links show: as a character, who played it in what (the `character` rows linked to it); as a person, the
 	 * characters they played (a cast row linked to them whose `character` row names them as the actor).
 	 *
@@ -379,7 +464,7 @@ class FisheyeCredits {
 	 * the episodes they appear in across all seasons and how many seasons, most episodes first (ties in billing order). A person's link comes from their
 	 * season rows (xref) - the contact they were linked to. Empty for a show whose directories have not been built yet.
 	 *
-	 * @return array<string,list<array{name:string, url:?string, episodes:int, seasons:int}>>  role => people
+	 * @return array<string,list<array{name:string, url:?string, episodes:int, seasons:int, roles:string}>>  role => people (roles: the characters a star played, "" for the other roles)
 	 */
 	public static function programRollup( int $pProgramId ): array {
 		global $gBitDb;
@@ -399,8 +484,14 @@ class FisheyeCredits {
 			}
 			$data = !empty( $row['data'] ) ? ( json_decode( $row['data'], true ) ?: [] ) : [];
 			$entry = &$byRole[$row['item']][mb_strtolower( $name )];
-			$entry ??= [ 'name' => $name, 'url' => null, 'episodes' => 0, 'seasons' => 0, 'rankSum' => 0 ];
+			$entry ??= [ 'name' => $name, 'url' => null, 'episodes' => 0, 'seasons' => 0, 'rankSum' => 0, 'roleSeasons' => [] ];
 			$entry['episodes'] += max( 1, count( (array)( $data['episodes'] ?? [] ) ) );
+			// The characters a star row carries (the season's own list, see deriveCreditDirectory()) - counted per season so the usual ones come first.
+			foreach( (array)( $data['roles'] ?? [] ) as $character ) {
+				if( is_string( $character ) && trim( $character ) !== '' ) {
+					$entry['roleSeasons'][trim( $character )] = ( $entry['roleSeasons'][trim( $character )] ?? 0 ) + 1;
+				}
+			}
 			$entry['seasons']++;
 			// A season row's xorder is its place in that season's billing (episodes, then order of first appearance).
 			$entry['rankSum'] += (int)$row['xorder'];
@@ -414,6 +505,25 @@ class FisheyeCredits {
 			$people = array_values( $byRole[$role] ?? [] );
 			// Most episodes first; people tied on episodes in billing order (their average place across the seasons), then by name.
 			usort( $people, fn( $a, $b ) => [ $b['episodes'], $a['rankSum'] / $a['seasons'], $a['name'] ] <=> [ $a['episodes'], $b['rankSum'] / $b['seasons'], $b['name'] ] );
+			foreach( $people as &$person ) {
+				arsort( $person['roleSeasons'] );   // stable: ties keep first-seen order
+				$characters = array_keys( $person['roleSeasons'] );
+				// A shorter spelling of a role already listed ("Sgt. Brady" beside "Sgt Don Brady") is the same role.
+				$characters = array_values( array_filter( $characters, function( $c ) use ( $characters ) {
+					$tokens = explode( ' ', self::characterRoleKey( $c ) );
+					foreach( $characters as $other ) {
+						$otherTokens = explode( ' ', self::characterRoleKey( $other ) );
+						if( $other !== $c && count( $otherTokens ) > count( $tokens ) && !array_diff( $tokens, $otherTokens ) ) {
+							return false;
+						}
+					}
+					return true;
+				} ) );
+				// "as The Doctor, Romana" - the usual characters, at most three, then "+N" for the rest.
+				$person['roles'] = implode( ', ', array_slice( $characters, 0, 3 ) ).( count( $characters ) > 3 ? ' +'.( count( $characters ) - 3 ) : '' );
+				unset( $person['roleSeasons'] );
+			}
+			unset( $person );
 			$ret[$role] = $people;
 		}
 		return $ret;
