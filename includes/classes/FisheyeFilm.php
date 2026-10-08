@@ -614,7 +614,8 @@ class FisheyeFilm extends FisheyeMediaImage {
 		// hard requirement for 'title' to be present, so it's safely omitted here (confirmed
 		// against edit_film.php's own title-only $gContent->store() calls using this same path).
 		if( !empty( $plexRow['summary'] ) ) {
-			$descriptionStoreHash = [ 'content_id' => $this->mContentId, 'edit' => $plexRow['summary'] ];
+			// The title goes too: the search index text is built from the hash being saved, so a save without it would index the description alone.
+			$descriptionStoreHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $plexRow['summary'] ];
 			$this->store( $descriptionStoreHash );
 			$summary['items'][] = 'description updated';
 		}
