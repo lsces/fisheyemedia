@@ -51,6 +51,81 @@ class FisheyeCredits {
 		return $rows;
 	}
 
+	/**
+	 * The live `character` rows of these films, each with the Wikidata item of the actor playing it when that actor's cast row is linked to a
+	 * contact (the cast row's xkey) - what a Wikidata cast-statement lookup needs to find the character.
+	 *
+	 * @param int[] $pFilmIds
+	 * @return array<int,list<array{xref_id:int, role:string, actor:string, actor_qid:?string, linked:bool}>>  film => rows
+	 */
+	public static function characterRowsForFilms( array $pFilmIds ): array {
+		global $gBitDb;
+		$pFilmIds = array_values( array_unique( array_filter( array_map( 'intval', $pFilmIds ) ) ) );
+		if( !$pFilmIds ) {
+			return [];
+		}
+		$in = implode( ',', array_fill( 0, count( $pFilmIds ), '?' ) );
+		$actorQ = [];
+		foreach( $gBitDb->getAll( "SELECT `content_id`, `xkey_ext`, `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'star' AND `end_date` IS NULL AND `xref` > 0 AND `xkey` LIKE 'Q%' AND `content_id` IN ( $in )", $pFilmIds ) ?: [] as $row ) {
+			$actorQ[(int)$row['content_id']][(string)$row['xkey_ext']] = (string)$row['xkey'];
+		}
+		$ret = [];
+		foreach( $gBitDb->getAll( "SELECT `xref_id`, `content_id`, `xkey_ext`, `xref`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = ? AND `end_date` IS NULL AND `content_id` IN ( $in ) ORDER BY `content_id`, `xorder`", array_merge( [ self::CHARACTER_ITEM ], $pFilmIds ) ) ?: [] as $row ) {
+			$actor = self::characterKey( $row );
+			$ret[(int)$row['content_id']][] = [ 'xref_id' => (int)$row['xref_id'], 'role' => (string)$row['xkey_ext'], 'actor' => $actor,
+				'actor_qid' => $actorQ[(int)$row['content_id']][$actor] ?? null, 'linked' => !empty( $row['xref'] ) ];
+		}
+		return $ret;
+	}
+
+	/**
+	 * What a contact's character links show: as a character, who played it in what (the `character` rows linked to it); as a person, the
+	 * characters they played (a cast row linked to them whose `character` row names them as the actor).
+	 *
+	 * @return array{playedBy:list<array{title:string,url:string,role:string,actor:string,actor_url:?string}>, played:list<array{title:string,url:string,role:string,character_url:?string}>}
+	 */
+	public static function characterLinksFor( int $pContactId ): array {
+		global $gBitDb;
+		$ret = [ 'playedBy' => [], 'played' => [] ];
+		$url = fn( int $pContentId ) => BIT_ROOT_URL.'index.php?content_id='.$pContentId;
+		$rows = $gBitDb->getAll(
+			"SELECT x.`content_id`, x.`xkey_ext`, x.`data`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 WHERE x.`item` = ? AND x.`xref` = ? AND x.`end_date` IS NULL ORDER BY lc.`title`",
+			[ self::CHARACTER_ITEM, $pContactId ]
+		) ?: [];
+		if( $rows ) {
+			$actorLinks = [];
+			foreach( $gBitDb->getAll( "SELECT `content_id`, `xkey_ext`, `xref` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'star' AND `end_date` IS NULL AND `xref` > 0 AND `content_id` IN ( ".implode( ',', array_fill( 0, count( $rows ), '?' ) )." )", array_column( $rows, 'content_id' ) ) ?: [] as $star ) {
+				$actorLinks[(int)$star['content_id']][(string)$star['xkey_ext']] = (int)$star['xref'];
+			}
+			foreach( $rows as $row ) {
+				$actor = self::characterKey( $row );
+				$ret['playedBy'][] = [ 'title' => (string)$row['title'], 'url' => $url( (int)$row['content_id'] ), 'role' => (string)$row['xkey_ext'], 'actor' => $actor,
+					'actor_url' => isset( $actorLinks[(int)$row['content_id']][$actor] ) ? $url( $actorLinks[(int)$row['content_id']][$actor] ) : null ];
+			}
+		}
+		$stars = $gBitDb->getAll( "SELECT `content_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'star' AND `end_date` IS NULL AND `xref` = ?", [ $pContactId ] ) ?: [];
+		if( $stars ) {
+			$byContent = [];
+			foreach( $stars as $star ) {
+				$byContent[(int)$star['content_id']][(string)$star['xkey_ext']] = true;
+			}
+			foreach( $gBitDb->getAll(
+				"SELECT x.`content_id`, x.`xkey_ext`, x.`xref`, x.`data`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_xref` x
+				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+				 WHERE x.`item` = ? AND x.`end_date` IS NULL AND x.`content_id` IN ( ".implode( ',', array_fill( 0, count( $byContent ), '?' ) )." ) ORDER BY lc.`title`, x.`xorder`",
+				array_merge( [ self::CHARACTER_ITEM ], array_keys( $byContent ) )
+			) ?: [] as $row ) {
+				if( isset( $byContent[(int)$row['content_id']][self::characterKey( $row )] ) ) {
+					$ret['played'][] = [ 'title' => (string)$row['title'], 'url' => $url( (int)$row['content_id'] ), 'role' => (string)$row['xkey_ext'],
+						'character_url' => !empty( $row['xref'] ) ? $url( (int)$row['xref'] ) : null ];
+				}
+			}
+		}
+		return $ret;
+	}
+
 	/** reconcileItem()'s key for a live `character` row: the actor. */
 	public static function characterKey( array $pRow ): string {
 		return (string)( ( json_decode( (string)( $pRow['data'] ?? '' ), true ) ?: [] )['actor'] ?? '' );
@@ -175,7 +250,7 @@ class FisheyeCredits {
 	 * @param int[]   $pXrefIds
 	 * @return int  rows linked
 	 */
-	public static function linkRows( array $pXrefIds, int $pContactId, ?string $pXkey ): int {
+	public static function linkRows( array $pXrefIds, int $pContactId, ?string $pXkey, ?array $pItems = null ): int {
 		global $gBitDb;
 		$pXrefIds = array_values( array_filter( array_map( 'intval', $pXrefIds ) ) );
 		if( !$pXrefIds || $pContactId <= 0 ) {
@@ -186,7 +261,7 @@ class FisheyeCredits {
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE x.`xref_id` IN ( ".implode( ',', array_fill( 0, count( $pXrefIds ), '?' ) )." )
 			 AND lc.`content_type_guid` IN ( '".implode( "','", self::TYPES )."' ) AND x.`end_date` IS NULL
-			 AND x.`item` IN ( ".self::allItemsSql()." ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
+			 AND x.`item` IN ( ".( $pItems ? "'".implode( "', '", array_map( fn( $i ) => str_replace( "'", '', $i ), $pItems ) )."'" : self::allItemsSql() )." ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
 			$pXrefIds
 		) ?: [];
 		$linked = 0;
