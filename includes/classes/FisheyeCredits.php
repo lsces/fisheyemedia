@@ -289,7 +289,28 @@ class FisheyeCredits {
 				}
 			}
 		}
+		// By title as text, "Season 10" falls between "Season 1" and "Season 2": order by series, then season number (Specials first).
+		foreach( [ 'playedBy', 'played' ] as $list ) {
+			usort( $ret[$list], fn( $a, $b ) => self::compareSeasonTitles( $a['title'], $b['title'] ) );
+		}
 		return $ret;
+	}
+
+	/**
+	 * Order two content titles such as "Doctor Who (1963) - Season 10" naturally: by the part before " - " (digit runs compared as numbers), then
+	 * Specials before Season 1, Season 2 ... Season 10. Any other title falls back to a natural, case-insensitive comparison.
+	 */
+	public static function compareSeasonTitles( string $pA, string $pB ): int {
+		$split = function( string $pTitle ): array {
+			$pos = strrpos( $pTitle, ' - ' );
+			$series = $pos === false ? $pTitle : substr( $pTitle, 0, $pos );
+			$part = $pos === false ? '' : substr( $pTitle, $pos + 3 );
+			$rank = preg_match( '/^season\s+(\d+)/i', $part, $m ) ? (int)$m[1] : ( preg_match( '/special/i', $part ) ? 0 : null );
+			return [ $series, $rank, $part ];
+		};
+		[ $seriesA, $rankA, $partA ] = $split( $pA );
+		[ $seriesB, $rankB, $partB ] = $split( $pB );
+		return strnatcasecmp( $seriesA, $seriesB ) ?: ( $rankA !== null && $rankB !== null ? $rankA <=> $rankB : strnatcasecmp( $partA, $partB ) );
 	}
 
 	/**
