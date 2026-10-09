@@ -84,11 +84,12 @@ class FisheyeCredits {
 	 * the same actor plays both. Each group lists the rows still to link; a group whose rows are all linked is left out. If some of a
 	 * group's rows are already linked to one contact, that contact is the group's existing one (a new season's rows join it).
 	 *
-	 * @return list<array{key:string, role:string, variants:list<string>, seasons:int, actors:list<string>, multi:bool, fromSister:bool, xref_ids:int[], existing:?int, rows:int}>
+	 * @return list<array{key:string, role:string, variants:list<string>, seasons:int, actors:list<string>, multi:bool, fromSister:bool, xref_ids:int[], existing:?int, rows:int}> (min seasons: see defaultMinSeasons())
 	 *         most seasons first
 	 */
-	public static function recurringCharacters( int $pProgramId, int $pMinSeasons = 3 ): array {
+	public static function recurringCharacters( int $pProgramId, ?int $pMinSeasons = null ): array {
 		global $gBitDb;
+		$pMinSeasons ??= self::defaultMinSeasons( $pProgramId );
 		$seasonIds = self::seasonIdsForProgram( $pProgramId );
 		if( !$seasonIds ) {
 			return [];
@@ -167,6 +168,20 @@ class FisheyeCredits {
 		}
 		usort( $ret, fn( $a, $b ) => [ $b['seasons'], $a['role'] ] <=> [ $a['seasons'], $b['role'] ] );
 		return $ret;
+	}
+
+	/**
+	 * How many seasons a role must appear in to count as recurring in a show: 3, but never more than the show has with character rows - a
+	 * two-season show (Dinnerladies) has its regulars in 2, and 3 would hide every one of them. At least 2: a role in one season is a guest.
+	 */
+	public static function defaultMinSeasons( int $pProgramId ): int {
+		global $gBitDb;
+		$seasonIds = self::seasonIdsForProgram( $pProgramId );
+		$withCharacters = $seasonIds ? (int)$gBitDb->getOne(
+			"SELECT COUNT(DISTINCT `content_id`) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = ? AND `end_date` IS NULL AND `content_id` IN ( ".implode( ',', array_map( 'intval', $seasonIds ) )." )",
+			[ self::CHARACTER_ITEM ]
+		) : 0;
+		return max( 2, min( 3, $withCharacters ) );
 	}
 
 	/**
