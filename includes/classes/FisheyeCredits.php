@@ -84,7 +84,7 @@ class FisheyeCredits {
 	 * the same actor plays both. Each group lists the rows still to link; a group whose rows are all linked is left out. If some of a
 	 * group's rows are already linked to one contact, that contact is the group's existing one (a new season's rows join it).
 	 *
-	 * @return list<array{key:string, role:string, variants:list<string>, seasons:int, actors:list<string>, multi:bool, xref_ids:int[], existing:?int, rows:int}>
+	 * @return list<array{key:string, role:string, variants:list<string>, seasons:int, actors:list<string>, multi:bool, fromSister:bool, xref_ids:int[], existing:?int, rows:int}>
 	 *         most seasons first
 	 */
 	public static function recurringCharacters( int $pProgramId, int $pMinSeasons = 3 ): array {
@@ -137,6 +137,9 @@ class FisheyeCredits {
 				}
 			}
 		}
+		// The same character in another series of the same programme ("Doctor Who (2005)" / "Doctor Who (2023)" share a base title): a role already
+		// linked there to exactly one contact is that character, so a new series' rows join it instead of making a second "The Doctor".
+		$sisterContacts = self::sisterSeriesCharacterContacts( $pProgramId );
 		$ret = [];
 		foreach( $groups as $key => $g ) {
 			$pending = array_values( array_map( fn( $r ) => $r['xref_id'], array_filter( $g['rows'], fn( $r ) => !$r['linked'] ) ) );
@@ -148,7 +151,18 @@ class FisheyeCredits {
 			$variants = array_keys( $g['variants'] );
 			usort( $variants, fn( $a, $b ) => [ $g['variants'][$b], strlen( $b ) ] <=> [ $g['variants'][$a], strlen( $a ) ] );
 			$linkedTo = array_values( array_unique( array_filter( array_map( fn( $r ) => $r['linked'], $g['rows'] ) ) ) );
-			$ret[] = [ 'key' => $key, 'role' => self::tidyRoleName( $variants[0] ), 'variants' => $variants, 'seasons' => count( $g['seasons'] ),
+			$fromSister = false;
+			if( !$linkedTo ) {
+				// the group's own key, then the other spellings it folded together
+				foreach( array_unique( array_merge( [ $key ], array_map( [ self::class, 'characterRoleKey' ], $variants ) ) ) as $tryKey ) {
+					if( isset( $sisterContacts[$tryKey] ) && count( $sisterContacts[$tryKey] ) === 1 ) {
+						$linkedTo = array_keys( $sisterContacts[$tryKey] );
+						$fromSister = true;
+						break;
+					}
+				}
+			}
+			$ret[] = [ 'fromSister' => $fromSister, 'key' => $key, 'role' => self::tidyRoleName( $variants[0] ), 'variants' => $variants, 'seasons' => count( $g['seasons'] ),
 				'actors' => array_keys( $g['actors'] ), 'multi' => (bool)preg_match( '~\s/\s|\s&\s|\sand\s~i', $variants[0] ), 'xref_ids' => $pending, 'existing' => count( $linkedTo ) === 1 ? $linkedTo[0] : null, 'rows' => count( $g['rows'] ) ];
 		}
 		usort( $ret, fn( $a, $b ) => [ $b['seasons'], $a['role'] ] <=> [ $a['seasons'], $b['role'] ] );
@@ -185,6 +199,41 @@ class FisheyeCredits {
 			}
 		}
 		return $contactId ? BIT_ROOT_URL.'index.php?content_id='.$contactId : null;
+	}
+
+	/**
+	 * Character contacts already linked from the OTHER series of a programme: those programs whose title matches this one's once a trailing "(year)"
+	 * is dropped ("Doctor Who (2005)" and "Doctor Who (2023)"). Role key => [ contact_id => rows ]; a key with two contacts is ambiguous and not used.
+	 *
+	 * @return array<string,array<int,int>>
+	 */
+	public static function sisterSeriesCharacterContacts( int $pProgramId ): array {
+		global $gBitDb;
+		$base = fn( string $t ) => mb_strtolower( trim( preg_replace( '/\s*\(\s*\d{4}\s*\)\s*$/u', '', $t ) ) );
+		$title = (string)$gBitDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $pProgramId ] );
+		if( $title === '' ) {
+			return [];
+		}
+		$sisters = [];
+		foreach( $gBitDb->getAll( "SELECT `content_id`, `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyeprogram' AND `content_id` <> ?", [ $pProgramId ] ) ?: [] as $row ) {
+			if( $base( (string)$row['title'] ) === $base( $title ) ) {
+				$sisters[] = (int)$row['content_id'];
+			}
+		}
+		if( !$sisters ) {
+			return [];
+		}
+		$ret = [];
+		foreach( $gBitDb->getAll(
+			"SELECT x.`xkey_ext`, x.`xref` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
+			 WHERE m.`gallery_content_id` IN ( ".implode( ',', $sisters )." ) AND x.`item` = ? AND x.`end_date` IS NULL AND x.`xref` > 0 AND x.`xkey_ext` IS NOT NULL",
+			[ self::CHARACTER_ITEM ]
+		) ?: [] as $row ) {
+			$key = self::characterRoleKey( (string)$row['xkey_ext'] );
+			$ret[$key][(int)$row['xref']] = ( $ret[$key][(int)$row['xref']] ?? 0 ) + 1;
+		}
+		return $ret;
 	}
 
 	/** A role's grouping key: lower case, no full stops or bracketed notes ("(voice)", "(uncredited)"), single spaces. */
