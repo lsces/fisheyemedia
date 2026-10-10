@@ -376,7 +376,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 	 */
 	public function getFilmViewData(): array {
 		$this->loadXrefInfo();
-		$genres = $directors = $writers = $stars = $narrators = $roles = [];
+		$genres = $directors = $writers = $stars = $narrators = $roles = $functions = [];
 		// name => contact page, for credits linked to a contact (xref) - the index.php?content_id=
 		// dispatcher routes to whatever display page that contact's own package defines.
 		$creditUrls = [];
@@ -403,7 +403,12 @@ class FisheyeFilm extends FisheyeMediaImage {
 						$stars[] = $xref['xkey_ext'];
 						$creditUrls = self::creditUrl( $creditUrls, $xref );
 						if( !empty( $xref['data'] ) && ( $roleData = json_decode( $xref['data'], true ) ) && !empty( $roleData['role'] ) ) {
-							$roles[$xref['xkey_ext']] = $roleData['role'];
+							// "Self - Host" is who they are on it, not a part they play: a suffix to the name, apart from the characters.
+							if( ( $selfFunction = FisheyeCredits::selfFunction( (string)$roleData['role'] ) ) === null ) {
+								$roles[$xref['xkey_ext']] = $roleData['role'];
+							} elseif( $selfFunction !== '' ) {
+								$functions[$xref['xkey_ext']] = FisheyeCredits::functionLabel( $selfFunction );
+							}
 						}
 						break;
 					case 'narrator':       $narrators[]  = $xref['xkey_ext']; $creditUrls = self::creditUrl( $creditUrls, $xref ); break;
@@ -452,6 +457,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 			'stars'         => $stars,
 			'narrators'     => $narrators,
 			'creditRoles'   => $roles,
+			'creditFunctions' => $functions,
 			'creditUrls'    => $creditUrls,
 			'contentRating' => $contentRating,
 			'durationMs'    => $durationMs,

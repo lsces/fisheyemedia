@@ -29,8 +29,8 @@
 				{if $directors|@count || $stars|@count || $narrators|@count}
 					<p class="film-credits">
 						{if $directors|@count}<strong>{tr}Director{/tr}{if $directors|@count > 1}s{/if}:</strong> {foreach from=$directors item=person name=dir}{if $creditUrls.$person}<a href="{$creditUrls.$person|escape}">{$person|escape}</a>{else}{$person|escape}{/if}{if !$smarty.foreach.dir.last}, {/if}{/foreach}<br />{/if}
-						{if $narrators|@count}<strong>{tr}Narrated by{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_names_inc.tpl" names=$narrators limit=null}<br />{/if}
-						{if $stars|@count}<strong>{tr}Starring{/tr}:</strong> {foreach from=$stars item=star name=cast}{if $smarty.foreach.cast.iteration <= 6}{if !$smarty.foreach.cast.first}, {/if}{if $creditUrls.$star}<a href="{$creditUrls.$star|escape}">{$star|escape}</a>{else}{$star|escape}{/if}{if $creditRoles.$star} <span class="text-muted">{tr}as{/tr} {$creditRoles.$star|escape}</span>{/if}{/if}{/foreach}{if $stars|@count > 6} <span class="film-more-cast"><span style="margin:0 0.4em;">...</span>{tr}and{/tr} {$stars|@count - 6} {tr}more{/tr}</span>{/if}{/if}
+						{if $narrators|@count}<strong>{tr}Narrated by{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_names_inc.tpl" names=$narrators creditFunctions=$creditFunctions limit=null}<br />{/if}
+						{if $stars|@count}<strong>{tr}Starring{/tr}:</strong> {foreach from=$stars item=star name=cast}{if $smarty.foreach.cast.iteration <= 6}{if !$smarty.foreach.cast.first}, {/if}{if $creditUrls.$star}<a href="{$creditUrls.$star|escape}">{$star|escape}</a>{else}{$star|escape}{/if}{if $creditRoles.$star} <span class="text-muted">{tr}as{/tr} {$creditRoles.$star|escape}</span>{/if}{if $creditFunctions.$star} <span class="text-muted">&ndash; {$creditFunctions.$star|escape}</span>{/if}{/if}{/foreach}{if $stars|@count > 6} <span class="film-more-cast"><span style="margin:0 0.4em;">...</span>{tr}and{/tr} {$stars|@count - 6} {tr}more{/tr}</span>{/if}{/if}
 					</p>
 				{/if}
 				{if $genres|@count}

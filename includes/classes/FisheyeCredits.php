@@ -56,7 +56,7 @@ class FisheyeCredits {
 	 * contact (the cast row's xkey) - what a Wikidata cast-statement lookup needs to find the character.
 	 *
 	 * @param int[] $pFilmIds
-	 * @return array<int,list<array{xref_id:int, role:string, actor:string, actor_qid:?string, linked:bool}>>  film => rows
+	 * @return array<int,list<array{xref_id:int, role:string, actor:string, actor_qid:?string, linked:bool, self:bool}>>  film => rows (self: a "Self - ..." appearance, not a character)
 	 */
 	public static function characterRowsForFilms( array $pFilmIds ): array {
 		global $gBitDb;
@@ -73,7 +73,8 @@ class FisheyeCredits {
 		foreach( $gBitDb->getAll( "SELECT `xref_id`, `content_id`, `xkey_ext`, `xref`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = ? AND `end_date` IS NULL AND `content_id` IN ( $in ) ORDER BY `content_id`, `xorder`", array_merge( [ self::CHARACTER_ITEM ], $pFilmIds ) ) ?: [] as $row ) {
 			$actor = self::characterActor( $row );
 			$ret[(int)$row['content_id']][] = [ 'xref_id' => (int)$row['xref_id'], 'role' => (string)$row['xkey_ext'], 'actor' => $actor,
-				'actor_qid' => $actorQ[(int)$row['content_id']][$actor] ?? null, 'linked' => !empty( $row['xref'] ) ];
+				'actor_qid' => $actorQ[(int)$row['content_id']][$actor] ?? null, 'linked' => !empty( $row['xref'] ),
+				'self' => self::selfFunction( (string)$row['xkey_ext'] ) !== null ];
 		}
 		return $ret;
 	}
@@ -102,7 +103,8 @@ class FisheyeCredits {
 		) ?: [] as $row ) {
 			$role = trim( preg_replace( '/\s+/u', ' ', (string)$row['xkey_ext'] ) );
 			$key = self::characterRoleKey( $role );
-			if( $key === '' ) {
+			// "Self - Plumbing Contractor" is a person appearing as themselves, not a character to make a contact for (see selfFunction()).
+			if( $key === '' || self::selfFunction( $role ) !== null ) {
 				continue;
 			}
 			$g = &$groups[$key];
@@ -182,6 +184,109 @@ class FisheyeCredits {
 			[ self::CHARACTER_ITEM ]
 		) : 0;
 		return max( 2, min( 3, $withCharacters ) );
+	}
+
+	/**
+	 * Is this role text a person appearing as themselves rather than a character? Plex and TMDb write it "Self" or "Self - <function>"
+	 * ("Self - Host", "Self - Master Carpenter", "Self - Homeowner"; also Himself/Herself/Themselves). The function is what the person
+	 * is on that programme - part of them, not a part they play - so it is a suffix to the name, never a character contact.
+	 *
+	 * @return string|null  the function ('' for a bare "Self"), or null when the text names a character
+	 */
+	/** Role texts that are a function whatever the programme ("Host" on The New Yankee Workshop has no "Self -" in front of it). Not "Narrator": in fiction that can be a character. */
+	private const BARE_FUNCTIONS = [ 'host', 'co-host', 'co host', 'guest host', 'presenter', 'co-presenter', 'guest', 'contestant', 'judge', 'commentator', 'interviewer', 'interviewee',
+		'panellist', 'panelist', 'reporter', 'correspondent', 'expert', 'participant', 'homeowner', 'home owner' ];
+
+	public static function selfFunction( string $pRole ): ?string {
+		if( in_array( mb_strtolower( trim( $pRole ) ), self::BARE_FUNCTIONS, true ) ) {
+			return trim( $pRole );
+		}
+		if( !preg_match( '/^\s*(?:self|himself|herself|themselves)\b\s*(?:[-\x{2013}\x{2014}:]\s*|\(\s*)?(.*?)\s*\)?\s*$/iu', $pRole, $m ) ) {
+			return null;
+		}
+		return trim( $m[1] );
+	}
+
+	/** A function as shown ("Plumbing & Heating Contractor" stays as written, full stops tidied) and a key that folds "&" with "and" and case, to catch spellings of one function. */
+	public static function functionLabel( string $pFunction ): string {
+		return self::tidyRoleName( trim( $pFunction ) );
+	}
+
+	public static function functionKey( string $pFunction ): string {
+		return self::characterRoleKey( str_replace( '&', ' and ', $pFunction ) );
+	}
+
+	/**
+	 * One line saying who a person is from their credits, for a contact that has nothing else: "Master Carpenter, Head Carpenter on This Old House
+	 * (12 seasons)", "Director on Vera and Endeavour". Season titles ("Show - Season 3") are folded to their show.
+	 *
+	 * @param string[] $pLabels  what they do: their functions, else the credit roles (Director, Star ...)
+	 * @param string[] $pTitles  the titles of the seasons or films they are credited on
+	 */
+	public static function describeAppearances( array $pLabels, array $pTitles ): string {
+		$shows = [];
+		$seasons = false;
+		foreach( $pTitles as $title ) {
+			$show = trim( preg_replace( '/\s+-\s+(Season\s+\S+|Specials?|Featurettes?|Extras)\s*$/iu', '', (string)$title ) );
+			$seasons = $seasons || $show !== trim( (string)$title );
+			if( $show !== '' ) {
+				$shows[$show] = ( $shows[$show] ?? 0 ) + 1;
+			}
+		}
+		arsort( $shows );
+		if( !$shows ) {
+			return '';
+		}
+		$names = array_keys( $shows );
+		if( count( $names ) === 1 ) {
+			$on = $names[0].( $shows[$names[0]] > 1 ? ' ('.$shows[$names[0]].' '.( $seasons ? 'seasons' : 'credits' ).')' : '' );
+		} elseif( count( $names ) === 2 ) {
+			$on = $names[0].' and '.$names[1];
+		} else {
+			$on = $names[0].', '.$names[1].' and '.( count( $names ) - 2 ).' more';
+		}
+		return ( $pLabels ? implode( ', ', array_slice( $pLabels, 0, 3 ) ) : 'Credited' ).' on '.$on.'.';
+	}
+
+	/** SQL for "this role text is NOT a self appearance" on the given column - the same test as selfFunction() for the common prefixes. */
+	public static function notSelfSql( string $pColumn ): string {
+		$c = $pColumn;
+		$bareList = "'".implode( "', '", array_map( fn( $f ) => str_replace( "'", '', $f ), self::BARE_FUNCTIONS ) )."'";
+		return "NOT ( $c = 'Self' OR $c STARTING WITH 'Self -' OR $c STARTING WITH 'Self (' OR $c STARTING WITH 'Self:' OR $c STARTING WITH 'Himself' OR $c STARTING WITH 'Herself' OR $c STARTING WITH 'Themselves' OR LOWER( $c ) IN ( $bareList ) )";
+	}
+
+	/**
+	 * What each credited person does on these programmes, from their "Self - <function>" role text: lower-cased name => [ function => rows ], most
+	 * used first. Only functions that say something (not a bare "Self"). With $pContentIds null, every season and film.
+	 *
+	 * @param int[]|null $pContentIds
+	 * @return array<string,array<string,int>>
+	 */
+	public static function functionsByActor( ?array $pContentIds = null ): array {
+		global $gBitDb;
+		$bareList = "'".implode( "', '", array_map( fn( $f ) => str_replace( "'", '', $f ), self::BARE_FUNCTIONS ) )."'";
+		$sql = "SELECT `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = ? AND `end_date` IS NULL AND ( `xkey_ext` STARTING WITH 'Self' OR `xkey_ext` STARTING WITH 'Himself' OR `xkey_ext` STARTING WITH 'Herself' OR `xkey_ext` STARTING WITH 'Themselves' OR LOWER( `xkey_ext` ) IN ( $bareList ) )";
+		$bind = [ self::CHARACTER_ITEM ];
+		if( $pContentIds !== null ) {
+			if( !$pContentIds ) {
+				return [];
+			}
+			$sql .= " AND `content_id` IN ( ".implode( ',', array_map( 'intval', $pContentIds ) )." )";
+		}
+		$ret = [];
+		foreach( $gBitDb->getAll( $sql, $bind ) ?: [] as $row ) {
+			$function = self::selfFunction( (string)$row['xkey_ext'] );
+			$actor = mb_strtolower( self::characterActor( $row ) );
+			if( $function === null || $function === '' || $actor === '' ) {
+				continue;
+			}
+			$label = self::functionLabel( $function );
+			$ret[$actor][$label] = ( $ret[$actor][$label] ?? 0 ) + 1;
+		}
+		foreach( $ret as &$byFunction ) {
+			arsort( $byFunction );
+		}
+		return $ret;
 	}
 
 	/**
@@ -267,7 +372,7 @@ class FisheyeCredits {
 	 */
 	public static function characterLinksFor( int $pContactId ): array {
 		global $gBitDb;
-		$ret = [ 'playedBy' => [], 'played' => [] ];
+		$ret = [ 'playedBy' => [], 'played' => [], 'appearances' => [] ];
 		$url = fn( int $pContentId ) => BIT_ROOT_URL.'index.php?content_id='.$pContentId;
 		$rows = $gBitDb->getAll(
 			"SELECT x.`content_id`, x.`xkey_ext`, x.`data`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_xref` x
@@ -299,13 +404,19 @@ class FisheyeCredits {
 				array_merge( [ self::CHARACTER_ITEM ], array_keys( $byContent ) )
 			) ?: [] as $row ) {
 				if( isset( $byContent[(int)$row['content_id']][self::characterActor( $row )] ) ) {
+					$function = self::selfFunction( (string)$row['xkey_ext'] );
+					if( $function !== null && empty( $row['xref'] ) ) {
+						// appeared as themselves: "Master Carpenter on This Old House - Season 3", not a character played
+						$ret['appearances'][] = [ 'title' => (string)$row['title'], 'url' => $url( (int)$row['content_id'] ), 'function' => $function === '' ? '' : self::functionLabel( $function ) ];
+						continue;
+					}
 					$ret['played'][] = [ 'title' => (string)$row['title'], 'url' => $url( (int)$row['content_id'] ), 'role' => (string)$row['xkey_ext'],
 						'character_url' => !empty( $row['xref'] ) ? $url( (int)$row['xref'] ) : null ];
 				}
 			}
 		}
 		// By title as text, "Season 10" falls between "Season 1" and "Season 2": order by series, then season number (Specials first).
-		foreach( [ 'playedBy', 'played' ] as $list ) {
+		foreach( [ 'playedBy', 'played', 'appearances' ] as $list ) {
 			usort( $ret[$list], fn( $a, $b ) => self::compareSeasonTitles( $a['title'], $b['title'] ) );
 		}
 		return $ret;
@@ -662,12 +773,29 @@ class FisheyeCredits {
 				}
 				uasort( $byKey, fn( $a, $b ) => $b['n'] <=> $a['n'] );
 				// "as The Doctor, Romana" - the usual characters, at most three, each linked to its character contact where it has one, then "+N".
+				// A "Self - <function>" text is what the person IS on the programme ("Master Carpenter"), kept apart and shown as a suffix to the name.
 				$person['roleList'] = [];
+				$functions = [];
+				foreach( $byKey as $key => $entry ) {
+					$function = self::selfFunction( $entry['name'] );
+					$url = self::characterContactUrl( $key, $characterLinks );
+					if( $function !== null && !$url ) {
+						if( $function !== '' ) {
+							$fKey = self::functionKey( $function );
+							$functions[$fKey] ??= [ 'name' => self::functionLabel( $function ), 'n' => 0 ];
+							$functions[$fKey]['n'] += $entry['n'];
+						}
+						unset( $byKey[$key] );
+					}
+				}
 				foreach( array_slice( $byKey, 0, 3, true ) as $key => $entry ) {
 					$person['roleList'][] = [ 'name' => $entry['name'], 'url' => self::characterContactUrl( $key, $characterLinks ) ];
 				}
 				$person['rolesMore'] = max( 0, count( $byKey ) - 3 );
 				$person['roles'] = implode( ', ', array_column( $person['roleList'], 'name' ) ).( $person['rolesMore'] ? ' +'.$person['rolesMore'] : '' );
+				uasort( $functions, fn( $a, $b ) => $b['n'] <=> $a['n'] );
+				$person['functions'] = array_values( array_column( array_slice( $functions, 0, 3 ), 'name' ) );
+				$person['functionsMore'] = max( 0, count( $functions ) - 3 );
 				unset( $person['roleSeasons'] );
 			}
 			unset( $person );
