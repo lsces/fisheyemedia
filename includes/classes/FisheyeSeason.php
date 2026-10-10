@@ -741,6 +741,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 				$episodeTitle = $m[2] ?? $m[1];
 			}
 			$episodeData = [ 'title' => $episodeTitle ];
+			$this->tvdbFill( $episodeData, preg_match( '/S\d+E(\d+)/i', $stem, $epMatch ) ? (int)$epMatch[1] : $xorder );
 			// Plex never gets a chance to supply this for a no-match show - straight from the
 			// file's own container via ffprobe instead (same helper as the featurette fallback,
 			// FisheyeMediaTrait::registerFeaturettesFromFolder()).
@@ -897,6 +898,8 @@ class FisheyeSeason extends FisheyeMediaImage {
 			if( !empty( $row['content_rating'] ) ) {
 				$episodeData['content_rating'] = preg_replace( '#^[a-z]{2}/#i', '', $row['content_rating'] );
 			}
+			// Plex gave this episode no people: TheTVDB's, from the show's cache file (no API call here), so a reload never wipes them.
+			$this->tvdbFill( $episodeData, (int)$row['index'] );
 			if( $pDataOnly && isset( $existingEpisodes[$relativePath] ) ) {
 				$kept = $existingEpisodes[$relativePath];
 				if( !empty( $row['duration'] ) ) {
@@ -996,6 +999,88 @@ class FisheyeSeason extends FisheyeMediaImage {
 		}
 
 		return $summary;
+	}
+
+	/** The content id of the program (show) this season sits in, or 0. */
+	private function tvdbProgramId(): int {
+		$parents = $this->getParentGalleries();
+		if( !$parents ) {
+			return 0;
+		}
+		$first = current( $parents );
+		return (int)( $first['content_id'] ?? array_key_first( $parents ) );
+	}
+
+	/** This season's number from its title ("Show - Season 3" is 3, "Show - Specials" is 0); null for anything else. */
+	private function tvdbSeasonNumber(): ?int {
+		$title = (string)$this->getTitle();
+		if( preg_match( '/\bSeason\s+(\d+)\s*$/i', $title, $m ) ) {
+			return (int)$m[1];
+		}
+		return preg_match( '/\bSpecials?\s*$/i', $title ) ? 0 : null;
+	}
+
+	/** Fill an episode's data packet with TheTVDB's people when Plex gave it none (reads the show's cache file; never the API). */
+	private function tvdbFill( array &$pData, int $pEpisode ): void {
+		if( !empty( $pData['director'] ) || !empty( $pData['writer'] ) || !empty( $pData['star'] ) ) {
+			return;
+		}
+		if( !( $programId = $this->tvdbProgramId() ) ) {
+			return;
+		}
+		if( $credits = FisheyeTvdb::creditsFor( $programId, $this->tvdbSeasonNumber(), $pEpisode ) ) {
+			$pData = array_merge( $pData, $credits, [ 'credits_source' => 'thetvdb' ] );
+		}
+	}
+
+	/** "SxE" keys of this season's live episodes that have no director, writer or star - what TheTVDB is asked for. */
+	public function episodesWithoutPeople(): array {
+		$season = $this->tvdbSeasonNumber();
+		$keys = [];
+		foreach( $this->liveEpisodeRows() as $row ) {
+			$data = json_decode( (string)$row['data'], true ) ?: [];
+			if( $season !== null && empty( $data['director'] ) && empty( $data['writer'] ) && empty( $data['star'] ) ) {
+				$keys[] = $season.'x'.$this->episodeNumberOf( $row );
+			}
+		}
+		return $keys;
+	}
+
+	/** @return list<array{xkey_ext:string,xorder:int,data:string}> */
+	private function liveEpisodeRows(): array {
+		global $gBitDb;
+		return $gBitDb->getAll(
+			"SELECT `xkey_ext`, `xorder`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'episode' AND `end_date` IS NULL ORDER BY `xorder`",
+			[ $this->mContentId ]
+		) ?: [];
+	}
+
+	private function episodeNumberOf( array $pRow ): int {
+		return preg_match( '/S\d+E(\d+)/i', (string)$pRow['xkey_ext'], $m ) ? (int)$m[1] : (int)$pRow['xorder'];
+	}
+
+	/**
+	 * Fill this season's episodes that have no people from the show's TheTVDB cache and rebuild the season's credits - for a show already loaded,
+	 * without a Plex reload. Episodes keep every other field; only those with no director, writer or star are touched.
+	 *
+	 * @return array{episodes:int, filled:int, credits:array}
+	 */
+	public function fillCreditsFromCache(): array {
+		$result = [ 'episodes' => 0, 'filled' => 0, 'credits' => [] ];
+		$wanted = [];
+		foreach( $this->liveEpisodeRows() as $row ) {
+			$data = json_decode( (string)$row['data'], true ) ?: [];
+			$before = $data;
+			$this->tvdbFill( $data, $this->episodeNumberOf( $row ) );
+			$wanted[] = [ 'key' => $row['xkey_ext'], 'xkey_ext' => $row['xkey_ext'], 'xorder' => (int)$row['xorder'], 'data' => $data ];
+			$result['episodes']++;
+			$result['filled'] += $data !== $before ? 1 : 0;
+		}
+		if( $result['filled'] ) {
+			$this->reconcileXrefItem( 'episode', $wanted, 'xkey_ext' );
+			$result['credits'] = $this->deriveCreditDirectory();
+		}
+		return $result;
 	}
 
 	/**

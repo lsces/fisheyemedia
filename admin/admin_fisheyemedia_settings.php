@@ -41,6 +41,10 @@ $formFisheyeMediaGeneral = [
 		'label' => 'Plex API Token',
 		'note' => 'From Plex\'s own Preferences.xml (PlexOnlineToken) - only needed for external ID lookups (IMDB/TMDB/TheTVDB/MusicBrainz) via Plex\'s local API, since those aren\'t stored in the database itself. Leave blank to skip external-id lookup only (genre/director/etc still works without it).',
 	],
+	"fisheyemedia_tvdb_api_key" => [
+		'label' => 'TheTVDB API Key',
+		'note' => 'A TheTVDB v4 API key (thetvdb.com/dashboard/account/apikey). Used only to fill the gaps Plex and TMDb leave in a show\'s credits - above all a documentary\'s presenters, and some series\' episode writers, directors and guests - by the "Fill gaps from TheTVDB" button on a show\'s people page. Leave blank to switch it off.',
+	],
 	"fisheyemedia_credit_min_episodes" => [
 		'label' => 'Season cast: minimum episodes',
 		'note' => 'A season\'s cast list keeps a person who appears in at least this many of the season\'s episodes (or who is billed high enough, below). A one-episode guest stays in that episode\'s own cast list only. Directors and writers are always kept. Default 2.',

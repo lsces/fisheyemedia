@@ -849,6 +849,13 @@ class FisheyeCredits {
 		return preg_match( '/^tt\d+$/', $id ) ? $id : null;
 	}
 
+	/** The TheTVDB series id held in a program's own live `tvdb` xref, or null. */
+	public static function tvdbIdFor( int $pContentId ): ?int {
+		global $gBitDb;
+		$id = $gBitDb->getOne( "SELECT x.`xkey` FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'tvdb' AND x.`end_date` IS NULL", [ $pContentId ] );
+		return ctype_digit( trim( (string)$id ) ) ? (int)trim( (string)$id ) : null;
+	}
+
 	/** The TMDb id held in a content item's own live `tmdb` xref (a program's is its TMDb TV id). */
 	public static function tmdbIdFor( int $pContentId ): ?int {
 		global $gBitDb;

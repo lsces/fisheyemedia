@@ -229,6 +229,39 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	}
 
 	/**
+	 * Fill this show's gaps from TheTVDB: ask it who is in the show (and, within the time budget, in each episode that has nobody), save the answer
+	 * in the show's cache file, then fill every season's people-less episodes from it and rebuild the seasons' credits. Safe to repeat; a repeat
+	 * carries on with the episodes not yet fetched.
+	 *
+	 * @return array{ok:bool, error:?string, series_id:?int, via:?string, name:string, people:int, episodes_fetched:int, episodes_left:int, seasons_filled:int, episodes_filled:int}
+	 */
+	public function fillCreditsFromTvdb( float $pBudget = 25.0 ): array {
+		$seasons = [];
+		$wanted = [];
+		foreach( FisheyeCredits::seasonIdsForProgram( (int)$this->mContentId ) as $seasonId ) {
+			$season = new FisheyeSeason( null, $seasonId );
+			$season->load();
+			if( $season->isValid() ) {
+				$seasons[] = $season;
+				$wanted = array_merge( $wanted, $season->episodesWithoutPeople() );
+			}
+		}
+		$result = FisheyeTvdb::fetchShow( (int)$this->mContentId, (string)$this->getTitle(), array_values( array_unique( $wanted ) ), $pBudget ) + [ 'seasons_filled' => 0, 'episodes_filled' => 0 ];
+		if( !$result['ok'] ) {
+			return $result;
+		}
+		if( empty( FisheyeCredits::tvdbIdFor( (int)$this->mContentId ) ) ) {
+			$this->upsertXref( $this->mContentId, 'tvdb', [ 'xkey' => (string)$result['series_id'] ] );
+		}
+		foreach( $seasons as $season ) {
+			$filled = $season->fillCreditsFromCache();
+			$result['episodes_filled'] += $filled['filled'];
+			$result['seasons_filled'] += $filled['filled'] ? 1 : 0;
+		}
+		return $result;
+	}
+
+	/**
 	 * Override of FisheyeBase's own getImageStorageRoot()-relative default - a show's own
 	 * downloaded Plex alternates live in storage/attachments/<branch>/, not the external TV
 	 * library tree, same fix FisheyeFilm/FisheyeAlbum already got - this class just wasn't
