@@ -248,6 +248,44 @@ class FisheyeCredits {
 		return ( $pLabels ? implode( ', ', array_slice( $pLabels, 0, 3 ) ) : 'Credited' ).' on '.$on.'.';
 	}
 
+	/**
+	 * Every role text each person is credited with on these programmes (a season's `character` rows): lower-cased name => [ role text ... ].
+	 * With $pContentIds null, every season and film.
+	 *
+	 * @param int[]|null $pContentIds
+	 * @return array<string,string[]>
+	 */
+	public static function rolesByActor( ?array $pContentIds = null ): array {
+		global $gBitDb;
+		$sql = "SELECT `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = ? AND `end_date` IS NULL";
+		if( $pContentIds !== null ) {
+			if( !$pContentIds ) {
+				return [];
+			}
+			$sql .= " AND `content_id` IN ( ".implode( ',', array_map( 'intval', $pContentIds ) )." )";
+		}
+		$ret = [];
+		foreach( $gBitDb->getAll( $sql, [ self::CHARACTER_ITEM ] ) ?: [] as $row ) {
+			if( ( $actor = mb_strtolower( self::characterActor( $row ) ) ) !== '' ) {
+				$ret[$actor][(string)$row['xkey_ext']] = (string)$row['xkey_ext'];
+			}
+		}
+		return array_map( 'array_values', $ret );
+	}
+
+	/** True when every role text is a "Self ..." appearance (and there is at least one): someone who is on screen as themselves, not an actor. */
+	public static function appearsOnlyAsThemselves( array $pRoleTexts ): bool {
+		if( !$pRoleTexts ) {
+			return false;
+		}
+		foreach( $pRoleTexts as $text ) {
+			if( self::selfFunction( (string)$text ) === null ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	/** SQL for "this role text is NOT a self appearance" on the given column - the same test as selfFunction() for the common prefixes. */
 	public static function notSelfSql( string $pColumn ): string {
 		$c = $pColumn;
