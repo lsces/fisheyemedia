@@ -537,6 +537,27 @@ class FisheyeCredits {
 	}
 
 	/**
+	 * A credit tag that names several people run together ("Didier Antoine, Cecile Ardail and Irina Arnaoutova") as the separate names; any other
+	 * tag as itself. Splits on commas, "and" and "&" only when there are at least two parts and EVERY part is a full name (two or more words, not
+	 * a suffix like "Jr."), so "Sammy Davis, Jr.", "Earth, Wind & Fire" and "Tom and Jerry" stay whole.
+	 *
+	 * @return string[]
+	 */
+	public static function splitCombinedNames( string $pTag ): array {
+		$tag = trim( preg_replace( '/\s+/u', ' ', $pTag ) );
+		$parts = preg_split( '/\s*,\s*(?:and\s+|&\s*)?|\s+and\s+|\s+&\s+/iu', $tag, -1, PREG_SPLIT_NO_EMPTY );
+		if( count( $parts ) < 2 ) {
+			return [ $pTag ];
+		}
+		foreach( $parts as $part ) {
+			if( count( preg_split( '/\s+/u', trim( $part ) ) ) < 2 || preg_match( '/^(?:jr|sr|ii|iii|iv)\.?$/iu', trim( $part ) ) ) {
+				return [ $pTag ];
+			}
+		}
+		return array_values( array_unique( array_map( 'trim', $parts ) ) );
+	}
+
+	/**
 	 * A Plex item's credits by role, in billing order, each name once: director/writer/star from the director/writer/actor taggings, plus
 	 * narrator for an actor tagging whose role text says narrator ("Narrator", "Narrator (voice)", "Self - Narrator"), not a trailer's narrator. A narrator stays in the
 	 * cast too: Plex lists them there, and in fiction "Narrator" can be a character (Fight Club) who is really one of the stars.
@@ -555,12 +576,15 @@ class FisheyeCredits {
 		$roles = [];
 		foreach( $stmt->fetchAll( \PDO::FETCH_ASSOC ) as $row ) {
 			$role = [ 4 => 'director', 5 => 'writer', 6 => 'star' ][(int)$row['tag_type']];
-			$ret[$role][$row['tag']] = $row['tag'];
-			if( $role === 'star' && !isset( $roles[$row['tag']] ) && ( $text = trim( preg_replace( '/\s+/u', ' ', (string)$row['text'] ) ) ) !== '' ) {
-				$roles[$row['tag']] = self::tidyRoleName( $text );
-			}
-			if( $role === 'star' && preg_match( '/\bnarrat/i', (string)$row['text'] ) && !preg_match( '/trailer|promo|teaser/i', (string)$row['text'] ) ) {
-				$ret['narrator'][$row['tag']] = $row['tag'];
+			// One tag that names several people ("A B, C D and E F") is a run-together credit: each person gets the credit and the role text.
+			foreach( self::splitCombinedNames( (string)$row['tag'] ) as $tag ) {
+				$ret[$role][$tag] = $tag;
+				if( $role === 'star' && !isset( $roles[$tag] ) && ( $text = trim( preg_replace( '/\s+/u', ' ', (string)$row['text'] ) ) ) !== '' ) {
+					$roles[$tag] = self::tidyRoleName( $text );
+				}
+				if( $role === 'star' && preg_match( '/\bnarrat/i', (string)$row['text'] ) && !preg_match( '/trailer|promo|teaser/i', (string)$row['text'] ) ) {
+					$ret['narrator'][$tag] = $tag;
+				}
 			}
 		}
 		return array_map( 'array_values', $ret ) + [ 'roles' => $roles ];
