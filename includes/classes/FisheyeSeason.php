@@ -863,10 +863,11 @@ class FisheyeSeason extends FisheyeMediaImage {
 			KernelTools::mkdir_p( $imagesDir );
 		}
 
-		// A decade folder ("Season 200x", for a long-running show Plex keeps as one season per year) holds the episodes of
+		// A decade or century folder ("Season 200x", "Season 19xx", for a show Plex keeps as one season per year) holds the episodes of
 		// every Plex season of the show whose files sit in it, not just the season the anchor file belongs to.
 		$seasonFolder = dirname( $plexMatch['anchor'] ).'/';
-		$decadeFolder = (bool)preg_match( '#(?:^|/)Season \d{3}x/$#', $seasonFolder );
+		$decadeFolder = (bool)preg_match( '#(?:^|/)Season (?:\d{3}x|\d{2}xx)/$#i', $seasonFolder );
+		$yearModulo = preg_match( '#/Season \d{2}xx/$#i', '/'.$seasonFolder ) ? 100 : 10;
 		$stmt = $plexDb->prepare(
 			"SELECT mi.id, mi.\"index\", mi.title, mi.summary, mi.originally_available_at,
 			        mi.content_rating, mi.duration, mp.file, ps.\"index\" AS season_index
@@ -903,7 +904,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 				continue;
 			}
 			// Episode numbers repeat from year to year in a decade folder, so the year within the decade leads the order (xorder is a small integer).
-			$order = $decadeFolder ? ( (int)$row['season_index'] % 10 ) * 100 + (int)$row['index'] : (int)$row['index'];
+			$order = $decadeFolder ? ( (int)$row['season_index'] % $yearModulo ) * 100 + (int)$row['index'] : (int)$row['index'];
 
 			$episodeData = [
 				'title'    => self::usableEpisodeTitle( (string)$row['title'], (string)$row['file'] ),
