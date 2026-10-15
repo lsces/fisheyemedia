@@ -104,7 +104,7 @@ class FisheyeCredits {
 			$role = trim( preg_replace( '/\s+/u', ' ', (string)$row['xkey_ext'] ) );
 			$key = self::characterRoleKey( $role );
 			// "Self - Plumbing Contractor" is a person appearing as themselves, not a character to make a contact for (see selfFunction()).
-			if( $key === '' || self::selfFunction( $role ) !== null ) {
+			if( $key === '' || self::selfFunction( $role ) !== null || preg_match( '/^narrator(?:\s*\(voice\))?$/iu', $role ) ) {
 				continue;
 			}
 			$g = &$groups[$key];
@@ -195,7 +195,7 @@ class FisheyeCredits {
 	 */
 	/** Role texts that are a function whatever the programme ("Host" on The New Yankee Workshop has no "Self -" in front of it). Not "Narrator": in fiction that can be a character. */
 	private const BARE_FUNCTIONS = [ 'host', 'co-host', 'co host', 'guest host', 'presenter', 'co-presenter', 'guest', 'contestant', 'judge', 'commentator', 'interviewer', 'interviewee',
-		'panellist', 'panelist', 'reporter', 'correspondent', 'expert', 'participant', 'homeowner', 'home owner' ];
+		'panellist', 'panelist', 'reporter', 'correspondent', 'expert', 'participant', 'homeowner', 'home owner', 'guest star', 'special guest', 'special guest star' ];
 
 	public static function selfFunction( string $pRole ): ?string {
 		if( in_array( mb_strtolower( trim( $pRole ) ), self::BARE_FUNCTIONS, true ) ) {
