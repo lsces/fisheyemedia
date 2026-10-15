@@ -454,6 +454,20 @@ class FisheyeSeason extends FisheyeMediaImage {
 		return [ 'created' => $season->mContentId, 'episodes' => $episodes, 'images' => $images, 'featurettes' => $featurettes ];
 	}
 
+	/**
+	 * Plex's episode title, unless it is empty or a release-group tag left in the file's metadata ("Encoded_by_HDBRiSe_for_HD-BiTs.ro"): then the
+	 * title from the library file name ("Show - SnnEnn - Episode Title.ext"), or its SnnEnn tag when there is no title part.
+	 */
+	private static function usableEpisodeTitle( string $pPlexTitle, string $pFile ): string {
+		$title = trim( $pPlexTitle, " \t\n\r\0\x0B\"" );
+		$junk = $title === '' || preg_match( '/encoded[_ ]by|^\S+_\S+$|\bwww\.|\.(?:com|net|org|ro)\b/i', $title );
+		if( !$junk ) {
+			return $pPlexTitle;
+		}
+		$stem = pathinfo( $pFile, PATHINFO_FILENAME );
+		return preg_match( '/ - (S\d+E[\dE&-]+)(?: - (.+))?$/i', $stem, $m ) ? ( $m[2] ?? $m[1] ) : $stem;
+	}
+
 	private function matchPlexSeasonMetadataItem(): ?array {
 		global $gBitSystem;
 
@@ -526,7 +540,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 			$stmt->execute( [ $realPath ] );
 			$seasonMetadataItemId = $stmt->fetchColumn();
 			if( $seasonMetadataItemId ) {
-				return [ 'db' => $plexDb, 'id' => (int)$seasonMetadataItemId, 'root' => $root,
+				return [ 'db' => $plexDb, 'id' => (int)$seasonMetadataItemId, 'root' => $root, 'anchor' => $episodeXref['xkey_ext'],
 					'folder' => implode( '/', array_slice( explode( '/', $episodeXref['xkey_ext'] ), 0, $shelf === '' ? 1 : 2 ) ).'/' ];
 			}
 		}
@@ -849,14 +863,19 @@ class FisheyeSeason extends FisheyeMediaImage {
 			KernelTools::mkdir_p( $imagesDir );
 		}
 
+		// A decade folder ("Season 200x", for a long-running show Plex keeps as one season per year) holds the episodes of
+		// every Plex season of the show whose files sit in it, not just the season the anchor file belongs to.
+		$seasonFolder = dirname( $plexMatch['anchor'] ).'/';
+		$decadeFolder = (bool)preg_match( '#(?:^|/)Season \d{3}x/$#', $seasonFolder );
 		$stmt = $plexDb->prepare(
 			"SELECT mi.id, mi.\"index\", mi.title, mi.summary, mi.originally_available_at,
-			        mi.content_rating, mi.duration, mp.file
+			        mi.content_rating, mi.duration, mp.file, ps.\"index\" AS season_index
 			 FROM metadata_items mi
+			 JOIN metadata_items ps ON ps.id = mi.parent_id
 			 JOIN media_items mi2 ON mi2.metadata_item_id = mi.id
 			 JOIN media_parts mp ON mp.media_item_id = mi2.id
-			 WHERE mi.parent_id = ? AND mi.metadata_type = 4
-			 ORDER BY mi.\"index\""
+			 WHERE ".( $decadeFolder ? "ps.parent_id = ( SELECT parent_id FROM metadata_items WHERE id = ? )" : "mi.parent_id = ?" )." AND mi.metadata_type = 4
+			 ORDER BY ps.\"index\", mi.\"index\""
 		);
 		$stmt->execute( [ $seasonMetadataItemId ] );
 		$episodeRows = $stmt->fetchAll( \PDO::FETCH_ASSOC );
@@ -880,12 +899,14 @@ class FisheyeSeason extends FisheyeMediaImage {
 				continue;
 			}
 			$relativePath = substr( $row['file'], strlen( $realRoot ) );
-			if( !str_starts_with( $relativePath, $plexMatch['folder'] ) ) {
+			if( !str_starts_with( $relativePath, $plexMatch['folder'] ) || ( $decadeFolder && !str_starts_with( $relativePath, $seasonFolder ) ) ) {
 				continue;
 			}
+			// Episode numbers repeat from year to year in a decade folder, so the year within the decade leads the order (xorder is a small integer).
+			$order = $decadeFolder ? ( (int)$row['season_index'] % 10 ) * 100 + (int)$row['index'] : (int)$row['index'];
 
 			$episodeData = [
-				'title'    => $row['title'],
+				'title'    => self::usableEpisodeTitle( (string)$row['title'], (string)$row['file'] ),
 				'summary'  => $row['summary'],
 				'air_date' => !empty( $row['originally_available_at'] ) ? gmdate( 'Y-m-d', (int)$row['originally_available_at'] ) : null,
 			];
@@ -912,7 +933,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 						$episodeData[$keptKey] = $kept[$keptKey];
 					}
 				}
-				$wantedEpisodes[] = [ 'key' => $relativePath, 'xkey_ext' => $relativePath, 'xorder' => (int)$row['index'], 'data' => $episodeData ];
+				$wantedEpisodes[] = [ 'key' => $relativePath, 'xkey_ext' => $relativePath, 'xorder' => $order, 'data' => $episodeData ];
 				$summary['items'][] = "S{$row['index']}: {$row['title']}";
 				continue;
 			}
@@ -988,7 +1009,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 			$wantedEpisodes[] = [
 				'key'      => $relativePath,
 				'xkey_ext' => $relativePath,
-				'xorder'   => (int)$row['index'],
+				'xorder'   => $order,
 				'data'     => $episodeData,
 			];
 			$summary['items'][] = "S{$row['index']}: {$row['title']}";

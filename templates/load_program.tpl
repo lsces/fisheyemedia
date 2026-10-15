@@ -98,7 +98,7 @@
 				</ul>
 				<input type="submit" class="btn btn-primary" name="fImportSeasons" value="{tr}Load Selected Seasons{/tr}" />
 			{/form}
-		{elseif $scopeShow}
+		{elseif $scopeShow && !$reloadCandidates}
 			<p>{tr}Nothing to load - every season folder for this show is already registered.{/tr}</p>
 		{/if}
 
