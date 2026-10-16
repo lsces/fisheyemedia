@@ -4,14 +4,11 @@
 		{if $gContent->getTitle() eq 'Music'}
 			{* Top-level only, same gating as film_gallery_icons_inc.tpl's own "Load Collections". *}
 			<a title="{tr}Add Music Collection{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_music.php">{biticon ipackage="icons" iname="folder-new" iexplain="Add Music Collection"}</a>
-		{elseif $gContent->getTitle() eq 'Library'}
-			{* Top-level books gallery - loads books from an uploaded catalogue spreadsheet. *}
-			<a title="{tr}Add Books{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php">{biticon ipackage="icons" iname="folder-new" iexplain="Add Books"}</a>
 		{else}
 			{* Any collection gallery below the top level - registers one album (a single
 			   FisheyeAlbum::registerFromDisk() folder) into this gallery, as opposed to the
 			   top-level button above which will bulk-scan for whole collections at once.
-			   Only shown when there's actually something left to load (Lester, 2026-09-24) -
+			   Only shown when there's actually something left to load -
 			   hasUnloadedAlbumCandidates()/hasUnloadedVideoCandidates() are cheap short-circuit
 			   scans, same folder shape load_album.php/load_video.php themselves use. *}
 			{if $gContent->hasUnloadedAlbumCandidates()}

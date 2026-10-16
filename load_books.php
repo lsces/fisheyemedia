@@ -110,12 +110,11 @@ if( !empty( $_REQUEST['process_group'] ) ) {
 		$result['group'] = $group['name'];
 		$galleryContentId = load_books_gallery_content_id( $group['name'], $topContentId );
 		if( !$galleryContentId ) {
-			// Music's own layout for now - strips per category, which is what a series-ordered
-			// author page wants too.
+			// The library layout: strips per category on an author's page.
 			$gallery = new FisheyeMediaGallery();
-			$storeHash = [ 'title' => $group['name'], 'gallery_pagination' => FISHEYE_PAGINATION_MUSIC_GRID ];
+			$storeHash = [ 'title' => $group['name'], 'gallery_pagination' => FISHEYE_PAGINATION_LIBRARY_GRID ];
 			if( $gallery->store( $storeHash ) ) {
-				$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_MUSIC_GRID );
+				$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_LIBRARY_GRID );
 				$gallery->addToGalleries( [ $topGalleryId ] );
 				$galleryContentId = (int)$gallery->mContentId;
 			} else {
