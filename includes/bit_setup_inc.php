@@ -13,6 +13,8 @@ define( 'FISHEYEMEDIA_PKG_PATH', BIT_ROOT_PATH . basename( $pRegisterHash['packa
 define( 'FISHEYEMEDIA_PKG_INCLUDE_PATH', BIT_ROOT_PATH . basename( $pRegisterHash['package_path'] ) . '/includes/');
 define( 'FISHEYEMEDIA_PKG_CLASS_PATH', BIT_ROOT_PATH . basename( $pRegisterHash['package_path'] ) . '/includes/classes/');
 define( 'FISHEYEMEDIA_PKG_ADMIN_PATH', BIT_ROOT_PATH . basename( $pRegisterHash['package_path'] ) . '/admin/');
+// Where uploaded source files (a book catalogue spreadsheet) are archived, as health/stock do for theirs.
+define( 'FISHEYEMEDIA_IMPORT_PATH', STORAGE_PKG_PATH . 'fisheyemedia/' );
 
 $gBitSystem->registerPackage( $pRegisterHash );
 
@@ -60,6 +62,14 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 		'handler_class'     => 'FisheyeAlbum',
 		'handler_package'   => 'fisheyemedia',
 		'handler_file'      => 'FisheyeAlbum.php',
+	] );
+	// A book is one edition (ISBN-keyed), an album-shaped leaf with no attachment of its own.
+	$gLibertySystem->registerContentType( 'fisheyebook', [
+		'content_type_guid' => 'fisheyebook',
+		'content_name'      => 'Book',
+		'handler_class'     => 'FisheyeBook',
+		'handler_package'   => 'fisheyemedia',
+		'handler_file'      => 'FisheyeBook.php',
 	] );
 	// FisheyeProgram extends FisheyeMediaGallery (not FisheyeMediaImage) - the show level, a
 	// phantom subclass so a show can carry its own metadata + a genuinely selected thumbnail

@@ -4,6 +4,9 @@
 		{if $gContent->getTitle() eq 'Music'}
 			{* Top-level only, same gating as film_gallery_icons_inc.tpl's own "Load Collections". *}
 			<a title="{tr}Add Music Collection{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_music.php">{biticon ipackage="icons" iname="folder-new" iexplain="Add Music Collection"}</a>
+		{elseif $gContent->getTitle() eq 'Library'}
+			{* Top-level books gallery - loads books from an uploaded catalogue spreadsheet. *}
+			<a title="{tr}Add Books{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php">{biticon ipackage="icons" iname="folder-new" iexplain="Add Books"}</a>
 		{else}
 			{* Any collection gallery below the top level - registers one album (a single
 			   FisheyeAlbum::registerFromDisk() folder) into this gallery, as opposed to the
