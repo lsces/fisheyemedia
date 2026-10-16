@@ -64,6 +64,15 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 		'handler_package'   => 'fisheyemedia',
 		'handler_file'      => 'FisheyeAlbum.php',
 	] );
+	// A series is a gallery of books under their author - a phantom FisheyeMediaGallery subclass so it
+	// can carry its own ids (Wikidata, ISFDB), as a TV show does.
+	$gLibertySystem->registerContentType( 'fisheyeseries', [
+		'content_type_guid' => 'fisheyeseries',
+		'content_name'      => 'Book Series',
+		'handler_class'     => 'FisheyeSeries',
+		'handler_package'   => 'fisheyemedia',
+		'handler_file'      => 'FisheyeSeries.php',
+	] );
 	// A book is one edition (ISBN-keyed), an album-shaped leaf with no attachment of its own.
 	$gLibertySystem->registerContentType( 'fisheyebook', [
 		'content_type_guid' => 'fisheyebook',

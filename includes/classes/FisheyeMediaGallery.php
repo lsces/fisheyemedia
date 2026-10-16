@@ -56,10 +56,11 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	 * @param string      $pTitle             the nested gallery's own title
 	 * @param int         $pParentContentId   content_id of the existing gallery this one is linked into
 	 * @param string|null $pGalleryPagination layout to set at creation (see the store() note below)
+	 * @param string      $pClass             the gallery class to create (a FisheyeMediaGallery subclass such as FisheyeSeries)
 	 * @return array 'gallery_id'=>int, 'content_id'=>int, plus 'already'=>true if it already
 	 *               existed, or 'error'=>string on failure
 	 */
-	public static function findOrCreateNestedGallery( string $pTitle, int $pParentContentId, ?string $pGalleryPagination = null ): array {
+	public static function findOrCreateNestedGallery( string $pTitle, int $pParentContentId, ?string $pGalleryPagination = null, string $pClass = FisheyeMediaGallery::class ): array {
 		global $gBitDb;
 
 		// Scoped to an existing child of THIS parent, not a bare title match - "Compilation"/
@@ -78,7 +79,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			return [ 'gallery_id' => $existingRow['gallery_id'], 'content_id' => $existingRow['content_id'], 'already' => true ];
 		}
 
-		$gallery = new FisheyeMediaGallery();
+		$gallery = new $pClass();
 		$storeHash = [ 'title' => $pTitle ];
 		if( $pGalleryPagination !== null ) {
 			// Must be set in this same store() call, not a storePreference() bolted on afterward -
