@@ -14,6 +14,13 @@
 	<div class="body">
 		{formfeedback error=$errors}
 
+		{if $olMessage}
+			<div class="alert alert-info">
+				<p>{$olMessage|escape}{if $olResult.items}:{/if}</p>
+				{if $olResult.items}<ul>{foreach from=$olResult.items item=line}<li>{$line|escape}</li>{/foreach}</ul>{/if}
+			</div>
+		{/if}
+
 		{form id="editBookForm"}
 			<input type="hidden" name="content_id" value="{$gContent->mContentId}" />
 
@@ -50,6 +57,7 @@
 			<div class="form-group submit">
 				<input type="submit" class="btn btn-default" name="fCancel" value="{tr}Cancel{/tr}" />
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
+				<input type="submit" class="btn btn-secondary" name="fReloadOpenLibrary" value="{tr}Reload from Open Library{/tr}" />
 			</div>
 		{/form}
 	</div><!-- end .body -->

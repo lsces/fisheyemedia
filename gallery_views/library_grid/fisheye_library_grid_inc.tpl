@@ -10,7 +10,9 @@
 <div class="display fisheye">
 	<header>
 		{include file="bitpackage:fisheyemedia/library_gallery_icons_inc.tpl"}
-		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}</h1>
+		{* An author's gallery: the name goes on to the author's own page once the authors pass has linked their books. *}
+		{if $gContent->getTitle() ne 'Library'}{assign var=authorUrl value=$gContent->getAuthorContactUrl()}{/if}
+		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{if $authorUrl}<a href="{$authorUrl|escape}">{$gContent->getTitle()|escape}</a>{else}{$gContent->getTitle()|escape}{/if}</h1>
 	</header>
 
 	{if $gContent->mInfo.data && $gContent->getPreference('show_description') ne 'n'}

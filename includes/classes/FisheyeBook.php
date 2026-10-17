@@ -296,7 +296,10 @@ class FisheyeBook extends FisheyeMediaImage {
 			$linked = $gallery->addItem( $book->mContentId, $pPosition );
 		}
 
-		return [ 'created' => $book->mContentId, 'linked' => $linked, 'counts' => $book->reconcileBookXrefs( $pRow ) ];
+		$counts = $book->reconcileBookXrefs( $pRow );
+		// An author who already has a contact (by name, pen name or birth name) is linked at once.
+		$counts['credits_linked'] = FisheyeBookCredits::linkBookCredits( (int)$book->mContentId );
+		return [ 'created' => $book->mContentId, 'linked' => $linked, 'counts' => $counts ];
 	}
 
 	/**
@@ -375,6 +378,136 @@ class FisheyeBook extends FisheyeMediaImage {
 			$creditKey, true, true ) );
 
 		return $counts;
+	}
+
+	// ---- Images -------------------------------------------------------------------------------
+	// A book keeps its covers and scans in its own storage/attachments/<branch>/, as an album does:
+	// each an 'image' row (the Images tab), the chosen one also its thumbnail. The artwork helpers
+	// (storeArtworkXref() and friends) are FisheyeMediaTrait's.
+
+	private function getImageStorageBranchPath(): string {
+		return STORAGE_PKG_PATH.\Bitweaver\Liberty\liberty_mime_get_storage_branch( [ 'attachment_id' => $this->mContentId ] );
+	}
+
+	public function getExtraImagePath( string $pRelativePath ): string {
+		return $this->getImageStorageBranchPath().$pRelativePath;
+	}
+
+	/** Its existence is what turns on the Images tab's upload (supportsAddImage()). */
+	public function getImageStorageRoot(): string {
+		return $this->getImageStorageBranchPath();
+	}
+
+	public function replaceXrefFile( string $pItem, string $pXkeyExt, string $pTmpPath ): bool {
+		if( $pItem !== 'image' || $pXkeyExt === '' || basename( $pXkeyExt ) !== $pXkeyExt ) {
+			return false;
+		}
+		return move_uploaded_file( $pTmpPath, $this->getImageStorageBranchPath().$pXkeyExt );
+	}
+
+	public function deleteXrefFile( string $pItem, string $pXkeyExt ): bool {
+		if( $pItem !== 'image' || $pXkeyExt === '' || basename( $pXkeyExt ) !== $pXkeyExt ) {
+			return false;
+		}
+		$path = $this->getImageStorageBranchPath().$pXkeyExt;
+		return is_file( $path ) && @unlink( $path );
+	}
+
+	/**
+	 * Make one of the book's stored images its thumbnail (the Images tab's Set as Thumbnail) -
+	 * regenerates thumbs/ from the chosen file, as FisheyeAlbum::promoteImageToThumbnail() does.
+	 */
+	public function promoteImageToThumbnail( string $pRelativePath ): bool {
+		$branchPath = $this->getImageStorageBranchPath();
+		if( basename( $pRelativePath ) !== $pRelativePath || !is_file( $branchPath.$pRelativePath ) ) {
+			return false;
+		}
+		foreach( glob( $branchPath.'thumbs/*' ) ?: [] as $oldThumb ) {
+			@unlink( $oldThumb );
+		}
+		$fileHash = [ 'type' => 'image/jpeg', 'source_file' => $branchPath.$pRelativePath, 'dest_branch' => \Bitweaver\Liberty\liberty_mime_get_storage_branch( [ 'attachment_id' => $this->mContentId ] ) ];
+		$ok = \Bitweaver\Liberty\liberty_generate_thumbnails( $fileHash );
+		$this->load();
+		return $ok;
+	}
+
+	// ---- Open Library -------------------------------------------------------------------------
+
+	/**
+	 * Add what Open Library knows about this edition, found by its ISBN: the edition and work ids, page
+	 * count, format, publication date, language, publisher, and a cover (also the thumbnail). Fills
+	 * blanks only - a value the catalogue or an editor already gave is never replaced, and a book that
+	 * already has an image keeps it - so it is safe to run again and again.
+	 *
+	 * @return array{matched:bool, items:list<string>, error?:string}
+	 */
+	public function reloadFromOpenLibrary(): array {
+		$summary = [ 'matched' => false, 'items' => [] ];
+		$wiki = '\Bitweaver\Contactwiki\ContactWikiIndividual';
+		if( !class_exists( $wiki ) ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'The contactwiki package is needed to ask Open Library.' );
+			return $summary;
+		}
+		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$isbns = array_values( array_filter( [ trim( (string)( $isbnRow['xkey'] ?? '' ) ), trim( (string)( $isbnRow['xkey_ext'] ?? '' ) ) ] ) );
+		if( !$isbns ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'This book has no ISBN to look up.' );
+			return $summary;
+		}
+		$edition = null;
+		foreach( $isbns as $isbn ) {
+			usleep( 300000 );
+			$found = $wiki::fetchOpenLibraryJson( '/isbn/'.rawurlencode( $isbn ).'.json' );
+			if( str_starts_with( (string)( $found['key'] ?? '' ), '/books/' ) ) {
+				$edition = $found;
+				break;
+			}
+		}
+		if( $edition ) {
+			$summary['matched'] = true;
+			$has = fn( string $pItem ): bool => (bool)(int)$this->mDb->getOne(
+				"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] );
+			foreach( FisheyeBookCatalogue::fromOpenLibraryEdition( $edition ) as $item => $value ) {
+				if( $has( $item ) ) {
+					continue;
+				}
+				if( $item === 'publisher' ) {
+					// A credit row, like the catalogue's own: the name in xkey_ext, marked as from Open Library.
+					$this->reconcileXrefItem( 'publisher', [ [ 'key' => 'name:'.mb_strtolower( $value['name'] ), 'xorder' => 1, 'xkey_ext' => $value['name'], 'data' => [ 'source' => 'openlibrary' ] ] ],
+						fn( array $pXrefRow ) => 'name:'.mb_strtolower( (string)$pXrefRow['xkey_ext'] ), true, true );
+					$summary['items'][] = 'publisher: '.$value['name'];
+				} else {
+					$this->reconcileXrefItem( $item, [ $value + [ 'key' => '', 'xorder' => 0 ] ], null );
+					$summary['items'][] = $item.': '.( $value['xkey'] ?? $value['xkey_ext'] );
+				}
+			}
+		}
+
+		// A cover - by ISBN, then by the edition's own cover id. Only for a book with no image yet.
+		if( !$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) ) {
+			$urls = array_map( fn( $isbn ) => 'https://covers.openlibrary.org/b/isbn/'.$isbn.'-L.jpg?default=false', $isbns );
+			foreach( (array)( $edition['covers'] ?? [] ) as $coverId ) {
+				if( (int)$coverId > 0 ) {
+					$urls[] = 'https://covers.openlibrary.org/b/id/'.(int)$coverId.'-L.jpg?default=false';
+					break;
+				}
+			}
+			foreach( $urls as $url ) {
+				usleep( 300000 );
+				$bytes = $wiki::fetchOpenLibraryImage( $url );
+				if( $bytes === null ) {
+					continue;
+				}
+				$tmp = tempnam( sys_get_temp_dir(), 'olcover_' );
+				file_put_contents( $tmp, $bytes );
+				if( $this->storeArtworkXref( $tmp, 'openlibrary-cover', 'openlibrary:'.$isbns[0], [ 'types' => [ 'Front' ] ] ) ) {
+					$summary['items'][] = 'image: Open Library cover'.( $this->attachThumbnail( $tmp ) ? ' (thumbnail)' : '' );
+				}
+				@unlink( $tmp );
+				break;
+			}
+		}
+		return $summary;
 	}
 
 }

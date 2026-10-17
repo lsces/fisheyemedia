@@ -314,6 +314,16 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * Where this gallery's author has their own page, or null - for a library author's gallery. The contact's
+	 * content_id is simply stored on the gallery ('author_contact_id', set by the authors pass and the book
+	 * loader - FisheyeBookCredits::linkGalleryToContact()), so there is nothing to look up.
+	 */
+	public function getAuthorContactUrl(): ?string {
+		$contactId = (int)$this->getPreference( 'author_contact_id' );
+		return $contactId ? BIT_ROOT_URL.'index.php?content_id='.$contactId : null;
+	}
+
+	/**
 	 * Groups this gallery's own items into the artist page's strips (fisheye_music_grid_inc.tpl),
 	 * mirroring the artist folder on disk: everything sitting directly in it first, as an unlabelled
 	 * strip (key ''); then one strip per group folder (FisheyeAlbum::isGroupFolder()), titled with

@@ -3,8 +3,10 @@
  * Loads books from an uploaded catalogue spreadsheet (see FisheyeBookCatalogue for the sheet shape)
  * into the Library gallery, one group at a time - the books counterpart of load_music.php.
  *
- * Filing: an author with two or more books in the catalogue gets a gallery of their own, named as
- * written in the sheet, directly under the top-level Library gallery. A book whose author has only
+ * Filing: an author with two or more books in the catalogue gets a gallery of their own, directly under
+ * the top-level Library gallery - named for their contact once the authors pass has made one (so a pen
+ * name's books and the real name's land together, each credit still reading as published), else as
+ * written in the sheet. A book whose author has only
  * the one is filed into a gallery named for its Category instead (Workshop, Steam, Fiction ...) - a
  * gallery apiece for hundreds of one-book authors would bury the real ones. The author is still a
  * credit on the book itself, so a one-book author turning into a two-book author later only means
@@ -42,14 +44,14 @@ const LOAD_BOOKS_MIN_AUTHOR_BOOKS = 2;
 function load_books_plan( array $pRows ): array {
 	$perAuthor = [];
 	foreach( $pRows as $row ) {
-		$author = FisheyeBookCatalogue::primaryAuthor( $row );
+		$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
 		if( $author !== '' ) {
 			$perAuthor[mb_strtolower( $author )] = ( $perAuthor[mb_strtolower( $author )] ?? 0 ) + 1;
 		}
 	}
 	$groups = [];
 	foreach( $pRows as $row ) {
-		$author = FisheyeBookCatalogue::primaryAuthor( $row );
+		$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
 		if( $author !== '' && $perAuthor[mb_strtolower( $author )] >= LOAD_BOOKS_MIN_AUTHOR_BOOKS ) {
 			$key = 'a|'.mb_strtolower( $author );
 			$groups[$key] ??= [ 'kind' => 'author', 'name' => $author, 'rows' => [] ];
@@ -120,6 +122,9 @@ if( !empty( $_REQUEST['process_group'] ) ) {
 			} else {
 				$result['errors'][] = $group['name'].' - '.implode( '; ', $gallery->mErrors );
 			}
+		}
+		if( $galleryContentId && $group['kind'] === 'author' && ( $authorContactId = FisheyeBookCredits::authorContactFor( $group['name'] ) ) ) {
+			FisheyeBookCredits::linkGalleryToContact( $galleryContentId, $authorContactId );
 		}
 		if( $galleryContentId ) {
 			$done = 0;

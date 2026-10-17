@@ -194,4 +194,42 @@ class FisheyeBookCatalogue {
 	public static function primaryAuthor( array $pRow ): string {
 		return (string)( $pRow['authors'][0] ?? '' );
 	}
+
+	// Open Library's three-letter language codes for the languages the library holds.
+	const OPENLIBRARY_LANGUAGES = [ 'eng' => 'English', 'fre' => 'French', 'ger' => 'German', 'spa' => 'Spanish', 'ita' => 'Italian', 'wel' => 'Welsh', 'lat' => 'Latin', 'gle' => 'Irish' ];
+
+	/**
+	 * What an Open Library edition record says, as the values a book's xref items take - nothing is
+	 * written here. Items: ol_edition and ol_work (ids, in 'xkey'), pages, format, published and language
+	 * (text, in 'xkey_ext'), and publisher (a name).
+	 *
+	 * @param array $pEdition  /books/OL...M.json
+	 * @return array<string,array{xkey?:string,xkey_ext?:string,name?:string}>  item => value
+	 */
+	public static function fromOpenLibraryEdition( array $pEdition ): array {
+		$ret = [];
+		if( !empty( $pEdition['key'] ) ) {
+			$ret['ol_edition'] = [ 'xkey' => basename( (string)$pEdition['key'] ) ];
+		}
+		if( !empty( $pEdition['works'][0]['key'] ) ) {
+			$ret['ol_work'] = [ 'xkey' => basename( (string)$pEdition['works'][0]['key'] ) ];
+		}
+		if( (int)( $pEdition['number_of_pages'] ?? 0 ) > 0 ) {
+			$ret['pages'] = [ 'xkey_ext' => (string)(int)$pEdition['number_of_pages'] ];
+		}
+		foreach( [ 'format' => 'physical_format', 'published' => 'publish_date' ] as $item => $field ) {
+			if( trim( (string)( $pEdition[$field] ?? '' ) ) !== '' ) {
+				$ret[$item] = [ 'xkey_ext' => trim( (string)$pEdition[$field] ) ];
+			}
+		}
+		$code = basename( (string)( $pEdition['languages'][0]['key'] ?? '' ) );
+		if( $code !== '' ) {
+			$ret['language'] = [ 'xkey_ext' => self::OPENLIBRARY_LANGUAGES[$code] ?? $code ];
+		}
+		if( trim( (string)( $pEdition['publishers'][0] ?? '' ) ) !== '' ) {
+			$ret['publisher'] = [ 'name' => trim( (string)$pEdition['publishers'][0] ) ];
+		}
+		return $ret;
+	}
+
 }

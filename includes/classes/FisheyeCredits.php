@@ -668,9 +668,10 @@ class FisheyeCredits {
 	 * (a season's episode list, say) and carries the link across (LibertyXref::reconcileItem()'s keep-links).
 	 *
 	 * @param int[]   $pXrefIds
+	 * @param ?string[] $pTypes  the content types the rows may be on (default: the film/TV types) - books pass ['fisheyebook']
 	 * @return int  rows linked
 	 */
-	public static function linkRows( array $pXrefIds, int $pContactId, ?string $pXkey, ?array $pItems = null ): int {
+	public static function linkRows( array $pXrefIds, int $pContactId, ?string $pXkey, ?array $pItems = null, ?array $pTypes = null ): int {
 		global $gBitDb;
 		$pXrefIds = array_values( array_filter( array_map( 'intval', $pXrefIds ) ) );
 		if( !$pXrefIds || $pContactId <= 0 ) {
@@ -680,7 +681,7 @@ class FisheyeCredits {
 			"SELECT x.`xref_id`, x.`last_update_date`, lc.`content_type_guid` FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE x.`xref_id` IN ( ".implode( ',', array_fill( 0, count( $pXrefIds ), '?' ) )." )
-			 AND lc.`content_type_guid` IN ( '".implode( "','", self::TYPES )."' ) AND x.`end_date` IS NULL
+			 AND lc.`content_type_guid` IN ( '".implode( "','", array_map( fn( $t ) => str_replace( "'", '', $t ), $pTypes ?? self::TYPES ) )."' ) AND x.`end_date` IS NULL
 			 AND x.`item` IN ( ".( $pItems ? "'".implode( "', '", array_map( fn( $i ) => str_replace( "'", '', $i ), $pItems ) )."'" : self::allItemsSql() )." ) AND ( x.`xref` IS NULL OR x.`xref` = 0 )",
 			$pXrefIds
 		) ?: [];

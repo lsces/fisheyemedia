@@ -43,8 +43,6 @@ const FISHEYEALBUM_COVER_NAMES = [ 'cover.jpg', 'folder.jpg', 'front.jpg', 'cove
 // Image files an album's own folder and Artwork/ can hold - reloadAlbumImages() turns each into an
 // 'image' xref; tif/bmp/webp are converted to JPEG on the way (browsers can't show TIFF/BMP).
 const FISHEYEALBUM_ARTWORK_EXTENSIONS = [ 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tif', 'tiff', 'webp' ];
-// Longest side kept for local scans and Cover Art Archive images - large enough to read a booklet.
-const FISHEYEALBUM_ARTWORK_MAX = 1600;
 // A box set's own per-release subfolder naming - CDxx for a set of otherwise-anonymous discs
 // (Stravinsky's "Works of Igor Stravinsky", CD01..CD22), or Volume/Vol. N when each one already
 // has a real distinguishing name of its own (Pachelbel's "Joseph Payne - 10 CD" - despite the
@@ -561,7 +559,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 *
 	 * 1. Local - every image in the album folder and its Artwork/ folder (FISHEYEALBUM_ARTWORK_
 	 *    EXTENSIONS) becomes an 'image' xref, copied into this album's storage branch at up to
-	 *    FISHEYEALBUM_ARTWORK_MAX px (storeArtworkImage()). Each row records its source path in
+	 *    FISHEYEMEDIA_ARTWORK_MAX px (storeArtworkImage()). Each row records its source path in
 	 *    data.source, so a repeat reload only adds what's new. A front/cover/folder-named file
 	 *    (any case) in the album folder becomes the album's thumbnail.
 	 * 2. Only when the folder has no images at all - the Cover Art Archive images for the album's
@@ -625,94 +623,6 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	}
 
 	/**
-	 * The source path each of this album's live 'image' rows was made from (data.source), keyed
-	 * by source - so reloadAlbumImages() doesn't add the same scan twice.
-	 *
-	 * @return array<string, int>  source => xref_id
-	 */
-	private function imageSources(): array {
-		$ret = [];
-		$rows = $this->mDb->getAll(
-			"SELECT `xref_id`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL",
-			[ $this->mContentId ]
-		);
-		foreach( $rows as $row ) {
-			$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : null;
-			if( !empty( $data['source'] ) ) {
-				$ret[$data['source']] = (int)$row['xref_id'];
-			}
-		}
-		return $ret;
-	}
-
-	/**
-	 * Copy one artwork file into this album's storage branch (storeArtworkImage()) and add it as a
-	 * new 'image' row after the existing ones, remembering where it came from.
-	 *
-	 * @param string $pSourceFile  absolute path of the image to store
-	 * @param string $pNameHint    basis for the stored file name (a relative path is flattened)
-	 * @param string $pSource      what data.source records ('Artwork/Book 01.jpg', 'caa:12345')
-	 * @param array  $pExtraData   anything else worth keeping in data (Cover Art Archive types)
-	 * @return string|null  the stored file name, or null if the image couldn't be read
-	 */
-	private function storeArtworkXref( string $pSourceFile, string $pNameHint, string $pSource, array $pExtraData = [] ): ?string {
-		$ext = strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) );
-		$base = trim( preg_replace( '/[^A-Za-z0-9._-]+/', '-', str_replace( '/', ' - ', pathinfo( $pNameHint, PATHINFO_DIRNAME ) !== '.' ? pathinfo( $pNameHint, PATHINFO_DIRNAME ).'/'.pathinfo( $pNameHint, PATHINFO_FILENAME ) : pathinfo( $pNameHint, PATHINFO_FILENAME ) ) ), '-' );
-		$fileName = $base.'.'.( in_array( $ext, [ 'png', 'gif' ], true ) ? $ext : 'jpg' );
-		$branch = $this->getImageStorageBranchPath();
-		\Bitweaver\KernelTools::mkdir_p( $branch );
-		if( !self::storeArtworkImage( $pSourceFile, $branch.$fileName, FISHEYEALBUM_ARTWORK_MAX ) ) {
-			return null;
-		}
-		$nextOrder = (int)$this->mDb->getOne( "SELECT MAX(`xorder`) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) + 1;
-		$xrefHash = [ 'content_id' => $this->mContentId, 'item' => 'image', 'xkey_ext' => $fileName, 'xorder' => $nextOrder,
-			'edit' => json_encode( [ 'source' => $pSource ] + $pExtraData ) ];
-		$this->storeXref( $xrefHash );
-		return $fileName;
-	}
-
-	/**
-	 * Write an image at no more than $pMax px on its longest side - first frame only (a multi-page
-	 * TIFF scan), PNG/GIF kept as they are, anything else (TIFF, BMP, WebP, JPEG) saved as JPEG,
-	 * metadata stripped. Imagick directly rather than liberty's resize function, which keeps the
-	 * source format and copies small images untouched - a TIFF would come out as an unviewable
-	 * .jpg-named TIFF.
-	 *
-	 * @return bool
-	 */
-	private static function storeArtworkImage( string $pSourceFile, string $pDestFile, int $pMax ): bool {
-		if( !extension_loaded( 'imagick' ) ) {
-			return in_array( strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) ), [ 'jpg', 'jpeg', 'png', 'gif' ], true )
-				&& self::resizeImageFile( $pSourceFile, $pDestFile, $pMax );
-		}
-		try {
-			$im = new \Imagick();
-			$im->readImage( $pSourceFile.'[0]' );
-			if( $im->getImageWidth() > $pMax || $im->getImageHeight() > $pMax ) {
-				$im->thumbnailImage( $pMax, $pMax, true );
-			}
-			$destExt = strtolower( pathinfo( $pDestFile, PATHINFO_EXTENSION ) );
-			if( $destExt === 'jpg' ) {
-				$im->setImageBackgroundColor( 'white' );
-				$im = $im->mergeImageLayers( \Imagick::LAYERMETHOD_FLATTEN );
-				$im->setImageFormat( 'jpeg' );
-				$im->setImageCompressionQuality( 88 );
-			} else {
-				$im->setImageFormat( $destExt );
-			}
-			$im->stripImage();
-			$ok = $im->writeImage( $pDestFile );
-			$im->clear();
-			if( $ok ) {
-				@chmod( $pDestFile, 0644 );
-			}
-			return (bool)$ok;
-		} catch( \Exception $e ) {
-			return false;
-		}
-	}
-
-	/**
 	 * The Cover Art Archive images for this album's MusicBrainz release (coverartarchive.org - the
 	 * images on MusicBrainz's own cover-art page), each stored as an 'image' row (data.source =
 	 * 'caa:<image id>', plus its types: Front, Back, Booklet...), the front one also as the album's
@@ -746,7 +656,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			if( isset( $existing[$source] ) ) {
 				continue;
 			}
-			// 1200px where the archive has it, else the full original (scaled to FISHEYEALBUM_ARTWORK_MAX
+			// 1200px where the archive has it, else the full original (scaled to FISHEYEMEDIA_ARTWORK_MAX
 			// on storing) - older releases only offer 250/500px thumbnails, too small to read a booklet.
 			$body = false;
 			foreach( array_filter( [ $image['thumbnails']['1200'] ?? null, $image['image'] ?? null, $image['thumbnails']['large'] ?? null ] ) as $url ) {

@@ -14,6 +14,9 @@ namespace Bitweaver\Fisheyemedia;
  *
  * @package fisheyemedia
  */
+// Longest side kept for artwork stored by storeArtworkXref() - large enough to read a booklet.
+const FISHEYEMEDIA_ARTWORK_MAX = 1600;
+
 trait FisheyeMediaTrait {
 
 	/**
@@ -277,6 +280,94 @@ trait FisheyeMediaTrait {
 			return null;
 		}
 		return $fileName;
+	}
+
+	/**
+	 * The source path each of this item's live 'image' rows was made from (data.source), keyed
+	 * by source - so a reload doesn't add the same scan or download twice.
+	 *
+	 * @return array<string, int>  source => xref_id
+	 */
+	protected function imageSources(): array {
+		$ret = [];
+		$rows = $this->mDb->getAll(
+			"SELECT `xref_id`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL",
+			[ $this->mContentId ]
+		);
+		foreach( $rows as $row ) {
+			$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : null;
+			if( !empty( $data['source'] ) ) {
+				$ret[$data['source']] = (int)$row['xref_id'];
+			}
+		}
+		return $ret;
+	}
+
+	/**
+	 * Copy one artwork file into this item's own image folder (storeArtworkImage()) and add it as a
+	 * new 'image' row after the existing ones, remembering where it came from.
+	 *
+	 * @param string $pSourceFile  absolute path of the image to store
+	 * @param string $pNameHint    basis for the stored file name (a relative path is flattened)
+	 * @param string $pSource      what data.source records ('Artwork/Book 01.jpg', 'caa:12345')
+	 * @param array  $pExtraData   anything else worth keeping in data (Cover Art Archive types)
+	 * @return string|null  the stored file name, or null if the image couldn't be read
+	 */
+	protected function storeArtworkXref( string $pSourceFile, string $pNameHint, string $pSource, array $pExtraData = [] ): ?string {
+		$ext = strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) );
+		$base = trim( preg_replace( '/[^A-Za-z0-9._-]+/', '-', str_replace( '/', ' - ', pathinfo( $pNameHint, PATHINFO_DIRNAME ) !== '.' ? pathinfo( $pNameHint, PATHINFO_DIRNAME ).'/'.pathinfo( $pNameHint, PATHINFO_FILENAME ) : pathinfo( $pNameHint, PATHINFO_FILENAME ) ) ), '-' );
+		$fileName = $base.'.'.( in_array( $ext, [ 'png', 'gif' ], true ) ? $ext : 'jpg' );
+		$branch = $this->getExtraImagePath( '' );
+		\Bitweaver\KernelTools::mkdir_p( $branch );
+		if( !self::storeArtworkImage( $pSourceFile, $branch.$fileName, FISHEYEMEDIA_ARTWORK_MAX ) ) {
+			return null;
+		}
+		$nextOrder = (int)$this->mDb->getOne( "SELECT MAX(`xorder`) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) + 1;
+		$xrefHash = [ 'content_id' => $this->mContentId, 'item' => 'image', 'xkey_ext' => $fileName, 'xorder' => $nextOrder,
+			'edit' => json_encode( [ 'source' => $pSource ] + $pExtraData ) ];
+		$this->storeXref( $xrefHash );
+		return $fileName;
+	}
+
+	/**
+	 * Write an image at no more than $pMax px on its longest side - first frame only (a multi-page
+	 * TIFF scan), PNG/GIF kept as they are, anything else (TIFF, BMP, WebP, JPEG) saved as JPEG,
+	 * metadata stripped. Imagick directly rather than liberty's resize function, which keeps the
+	 * source format and copies small images untouched - a TIFF would come out as an unviewable
+	 * .jpg-named TIFF.
+	 *
+	 * @return bool
+	 */
+	protected static function storeArtworkImage( string $pSourceFile, string $pDestFile, int $pMax ): bool {
+		if( !extension_loaded( 'imagick' ) ) {
+			return in_array( strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) ), [ 'jpg', 'jpeg', 'png', 'gif' ], true )
+				&& self::resizeImageFile( $pSourceFile, $pDestFile, $pMax );
+		}
+		try {
+			$im = new \Imagick();
+			$im->readImage( $pSourceFile.'[0]' );
+			if( $im->getImageWidth() > $pMax || $im->getImageHeight() > $pMax ) {
+				$im->thumbnailImage( $pMax, $pMax, true );
+			}
+			$destExt = strtolower( pathinfo( $pDestFile, PATHINFO_EXTENSION ) );
+			if( $destExt === 'jpg' ) {
+				$im->setImageBackgroundColor( 'white' );
+				$im = $im->mergeImageLayers( \Imagick::LAYERMETHOD_FLATTEN );
+				$im->setImageFormat( 'jpeg' );
+				$im->setImageCompressionQuality( 88 );
+			} else {
+				$im->setImageFormat( $destExt );
+			}
+			$im->stripImage();
+			$ok = $im->writeImage( $pDestFile );
+			$im->clear();
+			if( $ok ) {
+				@chmod( $pDestFile, 0644 );
+			}
+			return (bool)$ok;
+		} catch( \Exception $e ) {
+			return false;
+		}
 	}
 
 }

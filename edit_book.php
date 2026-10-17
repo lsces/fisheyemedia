@@ -1,8 +1,9 @@
 <?php
 /**
  * Edit page for a book (FisheyeBook) - title, description and the generic xref tabs (the same
- * list/add/edit controls every media type gets), plus delete. No reload buttons: a book has no files
- * or external source to re-read yet. Skeleton of edit_album.php.
+ * list/add/edit controls every media type gets), plus delete. 'Reload from Open Library' looks the
+ * ISBN up (FisheyeBook::reloadFromOpenLibrary()) and fills in what is blank, cover included.
+ * Skeleton of edit_album.php.
  *
  * @package fisheyemedia
  */
@@ -31,6 +32,15 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 		KernelTools::bit_redirect( $gContent->getDisplayUrl() );
 	}
 	$gContent->load();
+} elseif( !empty( $_REQUEST['fReloadOpenLibrary'] ) ) {
+	$olResult = $gContent->reloadFromOpenLibrary();
+	if( !empty( $olResult['error'] ) ) {
+		$gContent->mErrors['open_library'] = $olResult['error'];
+	} elseif( $olResult['items'] ) {
+		$olMessage = KernelTools::tra( 'Added from Open Library' );
+	} else {
+		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Open Library has this edition, but nothing it holds is missing here.' ) : KernelTools::tra( 'Open Library has no edition with this ISBN.' );
+	}
 } elseif( !empty( $_REQUEST['delete'] ) ) {
 	$gContent->hasUserPermission( 'p_fisheye_admin', true );
 
@@ -54,6 +64,8 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 }
 
 $gBitSmarty->assign( 'errors', $gContent->mErrors );
+$gBitSmarty->assign( 'olResult', $olResult ?? null );
+$gBitSmarty->assign( 'olMessage', $olMessage ?? '' );
 
 $gContent->loadXrefInfo();
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
