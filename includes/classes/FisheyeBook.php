@@ -12,7 +12,7 @@
  *   - isbn            one row: xkey = ISBN-13, xkey_ext = ISBN-10, data {entered, note}
  *   - author/editor/illustrator/translator/narrator   credit rows (name in xkey_ext, contact in xref/xkey)
  *   - publisher       one credit row;   imprint = the line as printed
- *   - plain text      format, edition, published, pages, language, copies, paid, current_price
+ *   - plain text      format, edition, published, pages, language, copies, paid
  *   - repeatable text category, subject, note
  *   - external ids    ol_edition, ol_work, wikidata_work, google_books, isfdb, gutenberg (id in xkey)
  *
@@ -31,7 +31,7 @@ use Bitweaver\Fisheye\FisheyeGallery;
 define( 'FISHEYEBOOK_CONTENT_TYPE_GUID', 'fisheyebook' );
 
 // Single-valued plain-text items - the value lives in xkey_ext, as the album's label/barcode do.
-const FISHEYEBOOK_TEXT_ITEMS = [ 'format', 'edition', 'published', 'pages', 'language', 'copies', 'paid', 'current_price', 'imprint' ];
+const FISHEYEBOOK_TEXT_ITEMS = [ 'format', 'edition', 'published', 'pages', 'language', 'copies', 'paid', 'imprint' ];
 // Repeatable plain-text items - one row per value.
 const FISHEYEBOOK_LIST_ITEMS = [ 'category', 'subject', 'note' ];
 // People - one credit row per person, name in xkey_ext, contact in xref/xkey once one exists.

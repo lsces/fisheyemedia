@@ -8,7 +8,7 @@
  * The sheet is flat, one book per row, with these header names (any order, extra columns ignored):
  *   Ref, Collection, Category, ISBN-13, ISBN-10, ISBN as entered, Authors (' | ' between people),
  *   Author role, Title, Year, Published (an ISO date, blank when only a year is known), Date precision,
- *   Copies, Paid GBP, Current price GBP, Source URL, Notes (';' between notes), Flags.
+ *   Copies, Paid GBP, Source URL, Notes (';' between notes), Flags.
  * Only Title is required.
  *
  * @package fisheyemedia
@@ -27,7 +27,7 @@ class FisheyeBookCatalogue {
 		'ISBN-10' => 'isbn10', 'ISBN as entered' => 'isbn_entered', 'Authors' => 'authors',
 		'Author role' => 'author_role', 'Title' => 'title', 'Year' => 'year', 'Published' => 'published_iso',
 		'Date precision' => 'precision', 'Copies' => 'copies', 'Paid GBP' => 'paid',
-		'Current price GBP' => 'current_price', 'Source URL' => 'source_url', 'Notes' => 'notes', 'Flags' => 'flags',
+		'Source URL' => 'source_url', 'Notes' => 'notes', 'Flags' => 'flags',
 	];
 
 	/**
@@ -183,7 +183,6 @@ class FisheyeBookCatalogue {
 			'category'     => trim( (string)( $pRaw['category'] ?? '' ) ) !== '' ? [ trim( $pRaw['category'] ) ] : [],
 			'copies'       => $copies > 1 ? (string)$copies : '',
 			'paid'         => trim( (string)( $pRaw['paid'] ?? '' ) ),
-			'current_price' => trim( (string)( $pRaw['current_price'] ?? '' ) ),
 			'note'         => $notes,
 			'external'     => $external,
 		];

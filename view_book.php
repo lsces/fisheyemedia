@@ -73,13 +73,13 @@ foreach( $lists as &$list ) {
 }
 unset( $list );
 
-// What is shown as label/value lines, in this order. Prices are private - only an editor sees them.
+// What is shown as label/value lines, in this order. The price paid is private - only an editor sees them.
 $detailLabels = [
 	'published' => 'Published', 'edition' => 'Edition', 'format' => 'Format', 'imprint' => 'Imprint',
 	'pages' => 'Pages', 'language' => 'Language', 'copies' => 'Copies',
 ];
 if( $gContent->hasUpdatePermission() ) {
-	$detailLabels += [ 'paid' => 'Paid (GBP)', 'current_price' => 'Current price (GBP)' ];
+	$detailLabels += [ 'paid' => 'Paid (GBP)' ];
 }
 $details = [];
 foreach( $detailLabels as $item => $label ) {
