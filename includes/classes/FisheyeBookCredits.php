@@ -24,10 +24,29 @@ class FisheyeBookCredits {
 	private static ?array $otherNames = null;
 	/** @var array<int,true>|null contacts that are authors: they carry an Open Library id or the writer tag */
 	private static ?array $authorContacts = null;
+	/** @var array<string,array>|null the name index again, keyed by nameKey() */
+	private static ?array $squashIndex = null;
+
+	// Credits that stand in for a person and never are one - not offered, never linked.
+	const PLACEHOLDER_NAMES = [ 'various', 'various authors', 'various artists', 'various contributors', 'anonymous', 'anon', 'unknown', 'uncredited', 'n a' ];
+
+	/**
+	 * A name reduced for comparing spellings of one name: letters and digits only, so "Reader's Digest" and
+	 * "Readers Digest", "Mc Caffrey" and "McCaffrey" are the same key. Wider than contactwiki's own
+	 * normalising, which keeps the word breaks.
+	 */
+	public static function nameKey( string $pName ): string {
+		return str_replace( ' ', '', Wiki::normaliseName( $pName ) );
+	}
+
+	/** Whether a credited name is a placeholder ("Various", "Anonymous") rather than someone. */
+	public static function isPlaceholder( string $pName ): bool {
+		return in_array( Wiki::normaliseName( $pName ), self::PLACEHOLDER_NAMES, true );
+	}
 
 	/** Forget what the contact lookups have read - after contacts have been created or changed in this request. */
 	public static function resetCache(): void {
-		self::$nameIndex = self::$otherNames = self::$authorContacts = null;
+		self::$nameIndex = self::$otherNames = self::$authorContacts = self::$squashIndex = null;
 	}
 
 	/**
@@ -39,14 +58,14 @@ class FisheyeBookCredits {
 	public static function authorContactFor( string $pName ): ?int {
 		global $gBitDb;
 		$name = trim( preg_replace( '/\s+/u', ' ', $pName ) );
-		if( $name === '' ) {
+		if( $name === '' || self::isPlaceholder( $name ) ) {
 			return null;
 		}
-		self::$nameIndex ??= Wiki::nameIndex();
+		self::squashIndex();
 		if( self::$otherNames === null ) {
 			self::$otherNames = [];
 			foreach( $gBitDb->getAll( "SELECT `content_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` IN ( 'penname', 'birthname' ) AND `end_date` IS NULL AND `xkey_ext` IS NOT NULL" ) ?: [] as $row ) {
-				self::$otherNames[mb_strtolower( trim( (string)$row['xkey_ext'] ) )][] = (int)$row['content_id'];
+				self::$otherNames[self::nameKey( (string)$row['xkey_ext'] )][] = (int)$row['content_id'];
 			}
 		}
 		if( self::$authorContacts === null ) {
@@ -56,17 +75,61 @@ class FisheyeBookCredits {
 			}
 		}
 		$found = [];
-		foreach( self::$otherNames[mb_strtolower( $name )] ?? [] as $id ) {
+		foreach( self::$otherNames[self::nameKey( $name )] ?? [] as $id ) {
 			$found[$id] = true;
 		}
 		foreach( Wiki::nameForms( $name ) as $form ) {
-			foreach( self::$nameIndex[$form] ?? [] as $contact ) {
+			foreach( self::$squashIndex[str_replace( ' ', '', $form )] ?? [] as $contact ) {
 				if( $contact['content_type_guid'] === 'contactwikiindi' && isset( self::$authorContacts[$contact['content_id']] ) ) {
 					$found[$contact['content_id']] = true;
 				}
 			}
 		}
 		return count( $found ) === 1 ? (int)array_key_first( $found ) : null;
+	}
+
+	/**
+	 * The contact name index (Wiki::nameIndex()) keyed by nameKey() form, built once per request.
+	 *
+	 * @return array<string,array<int,array>>
+	 */
+	private static function squashIndex(): array {
+		if( self::$squashIndex === null ) {
+			self::$nameIndex ??= Wiki::nameIndex();
+			self::$squashIndex = [];
+			foreach( self::$nameIndex as $form => $contacts ) {
+				foreach( $contacts as $contact ) {
+					self::$squashIndex[str_replace( ' ', '', $form )][$contact['content_id']] = $contact;
+				}
+			}
+		}
+		return self::$squashIndex;
+	}
+
+	/**
+	 * Whether two names are the same allowing for a slip or an initial - "Phillip Pullman" and "Philip
+	 * Pullman", "Todd J. McCaffrey" and "Todd McCaffrey" - by the edit distance between their nameKey()s.
+	 * Short names must match exactly.
+	 */
+	public static function similarNames( string $pA, string $pB, int $pAllowed = 2 ): bool {
+		$a = self::nameKey( $pA );
+		$b = self::nameKey( $pB );
+		return $a === $b || ( strlen( $a ) >= 8 && strlen( $b ) >= 8 && levenshtein( $a, $b ) <= $pAllowed );
+	}
+
+	/**
+	 * After a person is linked to a contact: remember each spelling they were credited under that the contact
+	 * does not already answer to as one of its pen names, so the credit finds the contact next time.
+	 */
+	public static function rememberCreditNames( object $pContact, array $pPerson ): void {
+		global $gBitDb;
+		$own = array_map( fn( $form ) => str_replace( ' ', '', $form ),
+			Wiki::nameForms( (string)$gBitDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ (int)$pContact->mContentId ] ) ) );
+		foreach( $pPerson['variants'] ?? [ $pPerson['name'] ] as $variant ) {
+			if( !in_array( self::nameKey( $variant ), $own, true ) ) {
+				$pContact->addOtherName( $variant );
+			}
+		}
 	}
 
 	/**
@@ -151,8 +214,12 @@ class FisheyeBookCredits {
 				if( $name === '' ) {
 					continue;
 				}
-				$p = &$people[mb_strtolower( $name )];
-				$p ??= [ 'name' => $name, 'roles' => [], 'books' => [], 'isbns' => [], 'xref_ids' => [] ];
+				if( self::isPlaceholder( $name ) ) {
+					continue;
+				}
+				$p = &$people[self::nameKey( $name )];
+				$p ??= [ 'name' => $name, 'variants' => [], 'roles' => [], 'books' => [], 'isbns' => [], 'xref_ids' => [] ];
+				$p['variants'][$name] = ( $p['variants'][$name] ?? 0 ) + 1;
 				$role = (string)( $row['author_role'] ?? '' ) ?: 'author';
 				$p['roles'][$role] = ( $p['roles'][$role] ?? 0 ) + 1;
 				$p['books'][$n] = (string)( $row['title'] ?? '' );
@@ -162,6 +229,12 @@ class FisheyeBookCredits {
 				unset( $p );
 			}
 		}
+		foreach( $people as &$person ) {
+			arsort( $person['variants'] );
+			$person['name'] = (string)array_key_first( $person['variants'] );
+			$person['variants'] = array_keys( $person['variants'] );
+		}
+		unset( $person );
 		$people = array_filter( $people, fn( $p ) => self::authorContactFor( $p['name'] ) === null );
 		uasort( $people, fn( $a, $b ) => [ count( $b['books'] ), $a['name'] ] <=> [ count( $a['books'] ), $b['name'] ] );
 		return $people;
@@ -171,8 +244,8 @@ class FisheyeBookCredits {
 	 * Every credited name with at least one unlinked credit row, most books first - or, given an author's
 	 * gallery, only the names credited on the books in it (and in its series).
 	 *
-	 * @return array<string,array{name:string,roles:array<string,int>,books:array<int,string>,isbns:array<string,string>,xref_ids:list<int>}>
-	 *         keyed by the lower-cased name; isbns is ISBN-13 => the book's title, for the books that have one
+	 * @return array<string,array{name:string,variants:list<string>,roles:array<string,int>,books:array<int,string>,isbns:array<string,string>,xref_ids:list<int>}>
+	 *         keyed by nameKey() (spellings of one name together, the commonest as 'name'); isbns is ISBN-13 => the book's title, for the books that have one
 	 */
 	public static function unlinkedPeople( ?int $pGalleryContentId = null ): array {
 		global $gBitDb;
@@ -200,8 +273,12 @@ class FisheyeBookCredits {
 			if( $name === '' ) {
 				continue;
 			}
-			$p = &$people[mb_strtolower( $name )];
-			$p ??= [ 'name' => $name, 'roles' => [], 'books' => [], 'isbns' => [], 'xref_ids' => [] ];
+			if( self::isPlaceholder( $name ) ) {
+				continue;
+			}
+			$p = &$people[self::nameKey( $name )];
+			$p ??= [ 'name' => $name, 'variants' => [], 'roles' => [], 'books' => [], 'isbns' => [], 'xref_ids' => [] ];
+			$p['variants'][$name] = ( $p['variants'][$name] ?? 0 ) + 1;
 			$p['roles'][$row['item']] = ( $p['roles'][$row['item']] ?? 0 ) + 1;
 			$p['books'][(int)$row['content_id']] = (string)$row['title'];
 			$p['xref_ids'][] = (int)$row['xref_id'];
@@ -223,6 +300,9 @@ class FisheyeBookCredits {
 			}
 		}
 		foreach( $people as &$person ) {
+			arsort( $person['variants'] );
+			$person['name'] = (string)array_key_first( $person['variants'] );
+			$person['variants'] = array_keys( $person['variants'] );
 			foreach( $person['books'] as $contentId => $title ) {
 				if( !empty( $isbnByBook[$contentId] ) ) {
 					$person['isbns'][$isbnByBook[$contentId]] = $title;
@@ -296,6 +376,21 @@ class FisheyeBookCredits {
 			$contacts[(int)$row['content_id']] ??= [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'], 'qid' => null, 'alias' => true ];
 		}
 
+		// Contacts with a very similar name (a slip, an initial) - offered, never chosen for you.
+		$similar = [];
+		$key = self::nameKey( $pPerson['name'] );
+		if( strlen( $key ) >= 8 ) {
+			foreach( self::squashIndex() as $squashed => $found ) {
+				if( abs( strlen( $squashed ) - strlen( $key ) ) <= 2 && $squashed !== $key && levenshtein( $squashed, $key ) <= 2 ) {
+					foreach( $found as $contact ) {
+						if( $contact['content_type_guid'] === 'contactwikiindi' && !isset( $contacts[$contact['content_id']] ) ) {
+							$similar[$contact['content_id']] = $contact + [ 'similar' => true ];
+						}
+					}
+				}
+			}
+		}
+
 		// Open Library, from the person's own books first.
 		$candidates = [];
 		foreach( array_slice( $pPerson['isbns'], 0, 3, true ) as $isbn => $title ) {
@@ -303,7 +398,8 @@ class FisheyeBookCredits {
 			$data = Wiki::fetchOpenLibraryJson( '/search.json?'.http_build_query( [ 'q' => 'isbn:'.$isbn, 'fields' => 'key,title,author_key,author_name', 'limit' => 1 ], '', '&' ) );
 			$doc = $data['docs'][0] ?? [];
 			foreach( (array)( $doc['author_key'] ?? [] ) as $n => $olid ) {
-				if( in_array( Wiki::normaliseName( (string)( $doc['author_name'][$n] ?? '' ) ), $forms, true ) ) {
+				// The ISBN already ties the book, so the name may differ by a slip or an initial.
+				if( self::similarNames( (string)( $doc['author_name'][$n] ?? '' ), $pPerson['name'] ) ) {
 					$candidates[$olid] = [ 'olid' => $olid, 'via' => 'isbn', 'book' => $title ];
 				}
 			}
@@ -311,13 +407,34 @@ class FisheyeBookCredits {
 				break;
 			}
 		}
+		$clustered = false;
 		if( !$candidates ) {
 			usleep( 300000 );
+			$named = [];
 			foreach( Wiki::searchOpenLibraryAuthors( $pPerson['name'] ) as $hit ) {
-				$names = array_map( [ Wiki::class, 'normaliseName' ], array_merge( [ $hit['name'] ], $hit['alternate_names'] ) );
-				if( $hit['work_count'] > 0 && array_intersect( $forms, $names ) && count( $candidates ) < 3 ) {
-					$candidates[$hit['olid']] = [ 'olid' => $hit['olid'], 'via' => 'name', 'book' => $hit['top_work'] ];
+				$keys = array_map( [ self::class, 'nameKey' ], array_merge( [ $hit['name'] ], $hit['alternate_names'] ) );
+				if( $hit['work_count'] > 0 && in_array( self::nameKey( $pPerson['name'] ), $keys, true ) && count( $named ) < 8 ) {
+					$named[$hit['olid']] = [ 'olid' => $hit['olid'], 'via' => 'name', 'book' => $hit['top_work'], 'works' => $hit['work_count'], 'born' => $hit['birth_date'] ];
 				}
+			}
+			// Open Library often holds several records for one author (a lower-case "hall caine", a record per
+			// spelling). Records that do not contradict the biggest one on birth date are taken as copies of it and
+			// folded into it; one that gives a different birth date is a namesake and stays a choice of its own.
+			$best = $named ? reset( $named ) : null;
+			if( $best ) {
+				$copies = [];
+				foreach( array_slice( $named, 1, null, true ) as $olid => $other ) {
+					if( $other['born'] === '' || $other['born'] === $best['born'] ) {
+						$copies[$olid] = $other;
+					}
+				}
+				$namesakes = array_diff_key( array_slice( $named, 1, null, true ), $copies );
+				$candidates[$best['olid']] = $best + [ 'copies' => array_values( $copies ) ];
+				foreach( $namesakes as $olid => $other ) {
+					$candidates[$olid] = $other + [ 'copies' => [] ];
+				}
+				// Sure enough to pre-choose: no namesakes, and the biggest record dwarfs its copies.
+				$clustered = $copies && !$namesakes && $best['works'] >= 3 * max( array_column( $copies, 'works' ) );
 			}
 		}
 		foreach( $candidates as $olid => $candidate ) {
@@ -332,14 +449,17 @@ class FisheyeBookCredits {
 		$isbnHits = array_filter( $candidates, fn( $c ) => $c['via'] === 'isbn' );
 		if( count( $isbnHits ) === 1 ) {
 			$default = 'ol:'.array_key_first( $isbnHits );
+		} elseif( $clustered ) {
+			$default = 'ol:'.array_key_first( $candidates );
 		} elseif( !$candidates && count( $contacts ) === 1 ) {
 			$default = 'contact:'.array_key_first( $contacts );
-		} elseif( !$candidates && !$contacts ) {
+		} elseif( !$candidates && !$contacts && !$similar ) {
 			$default = 'new';
 		} else {
 			$default = 'skip';
 		}
-		return $pPerson + [ 'candidates' => array_values( $candidates ), 'contacts' => array_values( $contacts ), 'default' => $default,
+		return $pPerson + [ 'candidates' => array_values( $candidates ), 'contacts' => array_values( $contacts + $similar ), 'default' => $default,
+			'olhint' => count( $isbnHits ) === 1 ? (string)array_key_first( $isbnHits ) : '',
 			'bookTitles' => array_slice( array_values( $pPerson['books'] ), 0, 6 ), 'bookCount' => count( $pPerson['books'] ) ];
 	}
 }

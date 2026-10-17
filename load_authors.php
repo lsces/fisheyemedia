@@ -19,8 +19,10 @@
  *   - a person with nothing found is offered as a name-only writer, pre-chosen, to be upgraded later.
  *
  * From an author's own gallery (gallery_id) it is that gallery's authors only - usually the one - and they
- * are looked up straight away. Nothing else is looked up until the button is pressed, and nothing is created until the list is reviewed and
- * submitted. What is linked is recomputed from the database at that moment, not taken from the form.
+ * are looked up straight away. Otherwise the page opens on a local list of the names - no requests - to tick
+ * from, and only the ticked ones (ten at a time) are looked up. Nothing is created until the proposals are
+ * reviewed and submitted, and what is linked is recomputed from the database at that moment, not taken from
+ * the form.
  *
  * @package fisheyemedia
  */
@@ -37,8 +39,10 @@ global $gBitSystem, $gBitSmarty, $gBitDb;
 $gBitSystem->verifyPackage( 'contactwiki' );
 $gBitSystem->verifyPermission( 'p_contact_update' );
 
-// People looked at per press - Open Library takes a few requests each, one at a time.
+// People looked up per press - Open Library takes a few requests each, one at a time.
 const LOAD_AUTHORS_BATCH = 10;
+// Names shown per page of the local list.
+const LOAD_AUTHORS_LIST_PAGE = 30;
 
 // detoxify() HTML-escapes every $_REQUEST value - undone here, as load_series.php does.
 $decode = fn( $pValue ) => htmlspecialchars_decode( trim( (string)$pValue ), ENT_NOQUOTES );
@@ -66,7 +70,7 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 	foreach( (array)( $_REQUEST['choice'] ?? [] ) as $i => $choice ) {
 		$name = $decode( $_REQUEST['person'][$i] ?? '' );
 		$choice = $decode( $choice );
-		$person = $people[mb_strtolower( $name )] ?? null;
+		$person = $people[FisheyeBookCredits::nameKey( $name )] ?? null;
 		if( !$person ) {
 			continue;
 		}
@@ -79,7 +83,17 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 		} elseif( str_starts_with( $choice, 'contact:' ) ) {
 			$existing = new Wiki( null, (int)substr( $choice, 8 ) );
 			$existing->load();
-			$made = $existing->isValid() ? [ 'content' => $existing ] : [ 'error' => KernelTools::tra( 'No such contact' ) ];
+			if( $existing->isValid() ) {
+				// An existing contact taken as the author: tagged as a writer, and given the Open Library id the
+				// person's books pointed to, so the name counts as done from now on.
+				$existing->markAsWriter();
+				if( preg_match( '/^OL\d+A$/', $hint = $decode( $_REQUEST['olhint'][$i] ?? '' ) ) ) {
+					$existing->applyOpenLibraryData( $hint );
+				}
+				$made = [ 'content' => $existing ];
+			} else {
+				$made = [ 'error' => KernelTools::tra( 'No such contact' ) ];
+			}
 		} else {
 			$made = Wiki::createNameOnly( $person['name'], [ 'author' ] );
 		}
@@ -88,10 +102,11 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 			continue;
 		}
 		$contact = $made['content'];
+		FisheyeBookCredits::rememberCreditNames( $contact, $person );
 		$olRow = \Bitweaver\Liberty\LibertyContent::lookupXrefByItem( $contact->mContentId, 'openlibrary', $contact->mContentTypeGuid );
 		$xkey = $contact->getWikidataQid() ?: (string)( $olRow['xkey_ext'] ?? '' );
 		// Credits on books already loaded - from the sheet, a person's credit rows are looked up here.
-		$creditIds = $fromSheet ? ( FisheyeBookCredits::unlinkedPeople()[mb_strtolower( $person['name'] )]['xref_ids'] ?? [] ) : $person['xref_ids'];
+		$creditIds = $fromSheet ? ( FisheyeBookCredits::unlinkedPeople()[FisheyeBookCredits::nameKey( $person['name'] )]['xref_ids'] ?? [] ) : $person['xref_ids'];
 		$linked = FisheyeCredits::linkRows( $creditIds, (int)$contact->mContentId, $xkey, null, [ 'fisheyebook' ] );
 		// File the contact on the author's gallery: this one when asked from a gallery, else the Library gallery
 		// of that name (as the contact's name or as the credit was written).
@@ -106,22 +121,40 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 		}
 		$result['done'][] = [ 'name' => $person['name'], 'contact' => FisheyeBookCredits::contactName( (int)$contact->mContentId ), 'url' => $contact->getDisplayUrl(), 'linked' => $linked, 'books' => count( $person['books'] ) ];
 	}
-	// Whoever is now linked drops out of the list; the ones left over are what the next batch starts after.
+	// Whoever is now linked drops out of the list; anyone left for now stays on it.
 	FisheyeBookCredits::resetCache();
-	$left = $loadPeople();
-	$submitted = array_map( fn( $i ) => mb_strtolower( $decode( $_REQUEST['person'][$i] ?? '' ) ), array_keys( (array)( $_REQUEST['choice'] ?? [] ) ) );
-	$start += count( array_intersect( $submitted, array_keys( $left ) ) );
-	$people = $left;
+	$people = $loadPeople();
 }
 
+// Who to look up: from a gallery, its people on arrival; from the list, the ones ticked.
+$pick = [];
+foreach( (array)( $_REQUEST['pick'] ?? [] ) as $pickedName ) {
+	$pick[FisheyeBookCredits::nameKey( $decode( $pickedName ) )] = true;
+}
+$toLookUp = null;
+if( $galleryContentId && !$result ) {
+	$toLookUp = array_slice( $people, 0, LOAD_AUTHORS_BATCH, true );
+} elseif( !empty( $_REQUEST['scan'] ) && $pick ) {
+	$toLookUp = array_slice( array_intersect_key( $people, $pick ), 0, LOAD_AUTHORS_BATCH, true );
+}
 $batch = null;
-if( !empty( $_REQUEST['scan'] ) || ( $galleryContentId && !$result ) ) {
+if( $toLookUp ) {
 	$index = Wiki::nameIndex();
 	$batch = [];
-	foreach( array_slice( $people, $start, LOAD_AUTHORS_BATCH, true ) as $key => $person ) {
+	foreach( $toLookUp as $key => $person ) {
 		$batch[] = FisheyeBookCredits::proposeFor( $person + [ 'key' => $key ], $index );
 	}
 }
+
+// The local list: a page of the names still without a contact, the first few ticked.
+$listPeople = [];
+foreach( array_slice( $people, $start, LOAD_AUTHORS_LIST_PAGE, true ) as $person ) {
+	$listPeople[] = [ 'name' => $person['name'], 'bookCount' => count( $person['books'] ), 'roles' => array_keys( array_diff_key( $person['roles'], [ 'author' => 1 ] ) ),
+		'also' => implode( ', ', array_diff( $person['variants'] ?? [], [ $person['name'] ] ) ), 'titles' => implode( ', ', array_slice( array_values( $person['books'] ), 0, 3 ) ), 'preticked' => count( $listPeople ) < LOAD_AUTHORS_BATCH ];
+}
+$gBitSmarty->assign( 'listPeople', $listPeople );
+$gBitSmarty->assign( 'prevStart', $start > 0 ? max( 0, $start - LOAD_AUTHORS_LIST_PAGE ) : -1 );
+$gBitSmarty->assign( 'nextStart', $start + LOAD_AUTHORS_LIST_PAGE < count( $people ) ? $start + LOAD_AUTHORS_LIST_PAGE : -1 );
 
 $gBitSmarty->assign( 'galleryId', $gallery ? $gallery->mGalleryId : 0 );
 $gBitSmarty->assign( 'galleryTitle', $gallery ? $gallery->getTitle() : '' );
