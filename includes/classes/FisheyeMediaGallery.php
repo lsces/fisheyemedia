@@ -135,7 +135,11 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			}
 			return true;
 		}
-		return self::albumIdInGallery( $pTitle, $pParentContentId, $pCategory ) !== null;
+		// A stub (an album made from a physical copy, no tracks yet) is not a loaded folder - the folder is
+		// still offered, and loading it takes the stub over (FisheyeAlbum::registerFromDisk()).
+		$albumId = self::albumIdInGallery( $pTitle, $pParentContentId, $pCategory );
+		return $albumId !== null && (int)$gBitDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'track' AND `end_date` IS NULL", [ $albumId ] ) > 0;
 	}
 
 	/**

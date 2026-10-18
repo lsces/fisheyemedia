@@ -1859,8 +1859,16 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				[ $title ]
 			);
 		}
+		// A stub - an album made from a physical copy (FisheyePhysical) before its files existed - has no
+		// tracks yet, and is taken over here, renamed to its folder, rather than a second album being made.
+		$stubId = null;
 		if( $existingContentId ) {
-			return [ 'already' => $existingContentId ];
+			if( $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'track' AND `end_date` IS NULL", [ $existingContentId ] ) ) {
+				return [ 'already' => $existingContentId ];
+			}
+			$stubId = (int)$existingContentId;
+		} elseif( $pGalleryContentId ) {
+			$stubId = FisheyePhysical::stubInGallery( $title, $pGalleryContentId );
 		}
 
 		$trackFiles = self::scanTrackFiles( $absoluteFolder );
@@ -1868,9 +1876,13 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			return [ 'error' => 'No track files found in '.$folderPath ];
 		}
 
-		$album = new FisheyeAlbum();
+		$album = $stubId ? new FisheyeAlbum( null, $stubId ) : new FisheyeAlbum();
 		[ $commonTags, $promotedTagKeys ] = self::extractCommonTags( $trackFiles );
 		$storeHash = [ 'title' => $title ];
+		if( $stubId ) {
+			$album->load();
+			$storeHash['content_id'] = $stubId;
+		}
 		if( $pDescription !== null && $pDescription !== '' ) {
 			$storeHash['edit'] = $pDescription;
 		}
@@ -1879,8 +1891,8 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		}
 		$album->load();
 
-		$linked = false;
-		if( $pGalleryContentId ) {
+		$linked = (bool)$stubId;
+		if( $pGalleryContentId && !$stubId ) {
 			$gallery = new FisheyeGallery( null, $pGalleryContentId );
 			$gallery->load();
 			$linked = $gallery->addItem( $album->mContentId );
