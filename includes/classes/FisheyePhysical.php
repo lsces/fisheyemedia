@@ -329,6 +329,33 @@ class FisheyePhysical {
 	}
 
 	/**
+	 * The one season of these shows holding an episode with this title - a serial's name (a disc of one story)
+	 * is in its episodes, not in any show or season title. Several seasons holding it, or none, gives null.
+	 *
+	 * @param list<int> $pProgramContentIds  the shows to look in (several can share a name)
+	 */
+	private static function seasonWithEpisode( array $pProgramContentIds, string $pTitle ): ?int {
+		global $gBitDb;
+		$title = trim( $pTitle );
+		$variants = array_unique( array_filter( [ $title, preg_replace( '/^(the|a|an)\s+/i', '', $title ) ], fn( $v ) => strlen( (string)$v ) >= 5 ) );
+		if( !$pProgramContentIds || !$variants ) {
+			return null;
+		}
+		$seasons = [];
+		foreach( $variants as $variant ) {
+			$found = $gBitDb->getCol(
+				"SELECT DISTINCT x.`content_id` FROM `".BIT_DB_PREFIX."liberty_xref` x
+				 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
+				 WHERE x.`item` = 'episode' AND x.`end_date` IS NULL AND m.`gallery_content_id` IN ( ".implode( ',', array_map( 'intval', $pProgramContentIds ) )." )
+				   AND x.`xkey_ext` CONTAINING ?", [ $variant ] );
+			foreach( $found as $id ) {
+				$seasons[(int)$id] = true;
+			}
+		}
+		return count( $seasons ) === 1 ? (int)array_key_first( $seasons ) : null;
+	}
+
+	/**
 	 * Work out what a row would do, writing nothing. Adds to the row:
 	 *   status  - 'applied' (already stored), 'matched' (an existing album, film, show or season), 'stub' (an
 	 *             album to create under an existing artist), 'newartist' (an album and its artist gallery to
@@ -417,6 +444,15 @@ class FisheyePhysical {
 					if( isset( $seasons[(int)$m[1]] ) ) {
 						$targetId = $seasons[(int)$m[1]];
 						$how = $manual ? 'linked by hand, season '.$m[1] : 'existing season';
+					}
+				}
+				// A disc of one story: the title is in a season's episodes, so the copy goes on that season.
+				if( !$isFilm && !$manual && $programId && $programId === $targetId && $pRow['artist'] !== ''
+					&& !preg_match( '/^(?:complete\s+)?(?:season|series)\s+\d+$/i', $pRow['title'] ) ) {
+					$sameName = array_keys( $pIndex['programs'], $pIndex['programs'][$programId], true );
+					if( $season = self::seasonWithEpisode( $sameName, $pRow['title'] ) ) {
+						$targetId = $season;
+						$how = 'the season holding "'.$pRow['title'].'"';
 					}
 				}
 				$row['target'] = $targetId;
