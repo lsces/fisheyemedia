@@ -1067,13 +1067,21 @@ class FisheyeSeason extends FisheyeMediaImage {
 
 	/** Fill an episode's data packet with TheTVDB's people when Plex gave it none (reads the show's cache file; never the API). */
 	private function tvdbFill( array &$pData, int $pEpisode ): void {
-		if( !empty( $pData['director'] ) || !empty( $pData['writer'] ) || !empty( $pData['star'] ) ) {
+		if( !empty( $pData['star'] ) ) {
 			return;
 		}
+		// Plex often lists a director and writer for an episode but no cast: then only the cast is taken from TheTVDB, the rest stays as Plex had it.
+		$castOnly = !empty( $pData['director'] ) || !empty( $pData['writer'] );
 		if( !( $programId = $this->tvdbProgramId() ) ) {
 			return;
 		}
 		if( $credits = FisheyeTvdb::creditsFor( $programId, $this->tvdbSeasonNumber(), $pEpisode ) ) {
+			if( $castOnly ) {
+				$credits = array_intersect_key( $credits, array_flip( [ 'star', 'narrator', 'roles' ] ) );
+				if( empty( $credits['star'] ) ) {
+					return;
+				}
+			}
 			$pData = array_merge( $pData, $credits, [ 'credits_source' => 'thetvdb' ] );
 		}
 	}
