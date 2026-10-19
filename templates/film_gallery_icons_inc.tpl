@@ -6,6 +6,9 @@
 			   only offered here on the top "Films" gallery itself, not on a collection gallery. *}
 			<a title="{tr}Load Collections{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_collection.php">{biticon ipackage="icons" iname="folder-new" iexplain="Load Collections"}</a>
 		{/if}
+		{if $gContent->getTitle() eq 'Local Videos'}
+			<a title="{tr}Load Local Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_local.php">{biticon ipackage="icons" iname="folder-new" iexplain="Load Local Videos"}</a>
+		{/if}
 		<a title="{tr}Load Films{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_film.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="folder-open" iexplain="Load Films"}</a>
 		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}edit.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit"  iexplain="Edit"}</a>
 		<a title="{tr}Image Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Image Order"}</a>
