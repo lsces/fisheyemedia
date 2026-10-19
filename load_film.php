@@ -105,6 +105,8 @@ if( !empty( $_REQUEST['fImport'] ) && empty( $gBitSystem->getConfig( 'fisheye_pl
 	$result = [ 'error' => KernelTools::tra( 'fisheye_plex_token is not configured - set it on the General Settings tab first (imdb/tmdb links would silently be skipped for every film in this batch otherwise).' ) ];
 } elseif( !empty( $_REQUEST['fImport'] ) ) {
 	$fetchImages = !empty( $_REQUEST['fetch_images'] );
+	// Ticked for material Plex does not know (a documentary series disc, home-made films): loaded from the file name alone.
+	$allowUnmatched = !empty( $_REQUEST['allow_unmatched'] );
 	$batchStart = microtime( true );
 	$result = [ 'imported' => [], 'already' => [], 'skipped' => [], 'errors' => [], 'fetch_images' => $fetchImages ];
 	foreach( (array)( $_REQUEST['selected'] ?? [] ) as $relativePath ) {
@@ -122,7 +124,7 @@ if( !empty( $_REQUEST['fImport'] ) && empty( $gBitSystem->getConfig( 'fisheye_pl
 		// fix Plex's own match) and a re-run picks it up. Checked here, before store(), rather than
 		// inside registerFromDisk() itself - matching needs a real absolute path, which a
 		// not-yet-registered file already has without needing a content_id first.
-		if( !FisheyeFilm::matchPlexMetadataItemForPath( realpath( $root.$relativePath ) ?: '' ) ) {
+		if( !$allowUnmatched && !FisheyeFilm::matchPlexMetadataItemForPath( realpath( $root.$relativePath ) ?: '' ) ) {
 			$result['skipped'][] = [ 'path' => $relativePath ];
 			continue;
 		}

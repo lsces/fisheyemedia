@@ -85,6 +85,9 @@
 				<div class="form-group">
 					<label><input type="checkbox" name="fetch_images" value="1" checked="checked" /> {tr}Also fetch Plex poster/backdrop images per film (slower - only text metadata is fetched otherwise){/tr}</label>
 				</div>
+				<div class="form-group">
+					<label><input type="checkbox" name="allow_unmatched" value="1" /> {tr}Also load films with no Plex match (titled from the file name){/tr}</label>
+				</div>
 				<table class="table">
 					<thead><tr>
 						<th><input type="checkbox" onclick="var cb=this.form.elements['selected[]']; if(cb.length===undefined)cb=[cb]; for(var i=0;i<cb.length;i++)cb[i].checked=this.checked;" /></th>
