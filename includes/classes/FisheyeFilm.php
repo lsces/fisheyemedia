@@ -362,6 +362,128 @@ class FisheyeFilm extends FisheyeMediaImage {
 	}
 
 	/**
+	 * The galleries this film is a member of, by title.
+	 *
+	 * @return array<int,string>  gallery content_id => title
+	 */
+	public function getGalleries(): array {
+		global $gBitDb;
+		return $gBitDb->getAssoc(
+			"SELECT lc.`content_id`, lc.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` fgim
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery` fg ON fg.`content_id` = fgim.`gallery_content_id`
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = fg.`content_id`
+			 WHERE fgim.`item_content_id` = ? ORDER BY lc.`title`", [ (int)$this->mContentId ]
+		) ?: [];
+	}
+
+	/**
+	 * Where a film can be shown: the top-level Films gallery and the collection galleries directly under it.
+	 *
+	 * @return array<int,string>  gallery content_id => title, the Films gallery first
+	 */
+	public static function collectionChoices(): array {
+		global $gBitDb;
+		$topId = FisheyeGallery::getTopGalleryId( 'Films' );
+		$topContentId = $topId ? $gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topId ] ) : null;
+		if( !$topContentId ) {
+			return [];
+		}
+		$choices = [ (int)$topContentId => (string)$gBitDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ (int)$topContentId ] ) ];
+		$children = $gBitDb->getAssoc(
+			"SELECT lc.`content_id`, lc.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` fgim
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = fgim.`item_content_id`
+			 WHERE fgim.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyegallery' ORDER BY lc.`title`", [ (int)$topContentId ]
+		) ?: [];
+		foreach( $children as $id => $title ) {
+			$choices[(int)$id] = (string)$title;
+		}
+		return $choices;
+	}
+
+	/**
+	 * Make a new, empty collection gallery under Films (film grid, as every other collection), or return the
+	 * one already there with that title.
+	 *
+	 * @return array{ok:bool, content_id?:int, error?:string}
+	 */
+	public static function createCollection( string $pTitle ): array {
+		$title = trim( $pTitle );
+		if( $title === '' ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'Give the new collection a name.' ) ];
+		}
+		$choices = self::collectionChoices();
+		if( !$choices ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'There is no top-level Films gallery.' ) ];
+		}
+		$existing = array_search( $title, $choices, true );
+		if( $existing !== false ) {
+			return [ 'ok' => true, 'content_id' => (int)$existing ];
+		}
+		$topContentId = array_key_first( $choices );
+		$gallery = new FisheyeGallery();
+		$storeHash = [ 'title' => $title, 'gallery_pagination' => FISHEYE_PAGINATION_FILM_GRID ];
+		if( !$gallery->store( $storeHash ) ) {
+			return [ 'ok' => false, 'error' => implode( '; ', $gallery->mErrors ) ];
+		}
+		$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_FILM_GRID );
+		$top = new FisheyeGallery( null, $topContentId );
+		$top->load();
+		if( !$top->addItem( $gallery->mContentId ) ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'The collection was made but could not be put under Films.' ) ];
+		}
+		return [ 'ok' => true, 'content_id' => (int)$gallery->mContentId ];
+	}
+
+	/**
+	 * Show this film in a collection (or the Films gallery itself). With $pMove it is taken out of every other
+	 * Films or collection gallery it was in - membership only, the file on disk is not touched.
+	 *
+	 * @return array{ok:bool, error?:string}
+	 */
+	public function addToCollection( int $pGalleryContentId, bool $pMove = false ): array {
+		$choices = self::collectionChoices();
+		if( !isset( $choices[$pGalleryContentId] ) ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'That is not a Films collection.' ) ];
+		}
+		$mine = $this->getGalleries();
+		if( !isset( $mine[$pGalleryContentId] ) ) {
+			$gallery = new FisheyeGallery( null, $pGalleryContentId );
+			$gallery->load();
+			if( !$gallery->addItem( (int)$this->mContentId ) ) {
+				return [ 'ok' => false, 'error' => KernelTools::tra( 'The film could not be added to that collection.' ) ];
+			}
+		}
+		if( $pMove ) {
+			foreach( array_keys( array_intersect_key( $mine, $choices ) ) as $otherId ) {
+				if( (int)$otherId !== $pGalleryContentId ) {
+					$other = new FisheyeGallery( null, (int)$otherId );
+					$other->load();
+					$other->removeItem( (int)$this->mContentId );
+				}
+			}
+		}
+		return [ 'ok' => true ];
+	}
+
+	/**
+	 * Take this film out of one gallery. It will not leave its last one, so it cannot end up in no gallery at all.
+	 *
+	 * @return array{ok:bool, error?:string}
+	 */
+	public function removeFromCollection( int $pGalleryContentId ): array {
+		$mine = $this->getGalleries();
+		if( !isset( $mine[$pGalleryContentId] ) ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'The film is not in that gallery.' ) ];
+		}
+		if( count( $mine ) < 2 ) {
+			return [ 'ok' => false, 'error' => KernelTools::tra( 'That is the only gallery the film is in - add it to another first.' ) ];
+		}
+		$gallery = new FisheyeGallery( null, $pGalleryContentId );
+		$gallery->load();
+		return $gallery->removeItem( (int)$this->mContentId ) ? [ 'ok' => true ] : [ 'ok' => false, 'error' => KernelTools::tra( 'The film could not be removed.' ) ];
+	}
+
+	/**
 	 * This film's own facts, xref data and tab content, bucketed once for view_film.php/
 	 * view_film.tpl - same "one flat pass over liveXrefs(), keyed by item name only" shape as
 	 * FisheyeSeason::getSeasonViewData(), rather than view_film.php hand-rolling its own near-

@@ -65,6 +65,39 @@
 						{/jstabs}
 					{/if}
 				{/jstab}
+				{if $gContent->hasAdminPermission()}
+				{jstab title="{tr}Collections{/tr}"}
+					{legend legend="Galleries this film is shown in"}
+						<ul>
+							{foreach from=$filmGalleries key=galleryContentId item=galleryTitle}
+								<li>{$galleryTitle|escape} <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_film.php?content_id={$gContent->mContentId}&amp;fRemoveFrom[{$galleryContentId}]=1" onclick="return confirm('{tr}Remove this film from{/tr} {$galleryTitle|escape:'javascript'}?')">{tr}remove{/tr}</a></li>
+							{/foreach}
+						</ul>
+						<div class="form-group">
+							{formlabel label="Collection" for="collection"}
+							{forminput}
+								<select name="collection" id="collection" class="form-control">
+									{foreach from=$collectionChoices key=galleryContentId item=galleryTitle}
+										<option value="{$galleryContentId}">{$galleryTitle|escape}</option>
+									{/foreach}
+								</select>
+								<input type="submit" class="btn btn-default" name="fMoveTo" value="{tr}Move to this collection{/tr}" />
+								<input type="submit" class="btn btn-default" name="fAddTo" value="{tr}Also show in it{/tr}" />
+								{formhelp note="Move takes the film out of the other Films galleries, so only this collection shows it. Only which galleries show the film changes - the file on disk is not touched."}
+							{/forminput}
+						</div>
+						<div class="form-group">
+							{formlabel label="New collection" for="new_collection"}
+							{forminput}
+								<input type="text" class="form-control" name="new_collection" id="new_collection" value="" />
+								<label><input type="checkbox" name="new_collection_move" value="y" checked="checked" /> {tr}move this film into it{/tr}</label>
+								<input type="submit" class="btn btn-default" name="fNewCollection" value="{tr}Create collection{/tr}" />
+								{formhelp note="Makes a collection under Films with that name (or uses the one already there), then puts this film in it."}
+							{/forminput}
+						</div>
+					{/legend}
+				{/jstab}
+				{/if}
 			{/jstabs}
 
 			<div class="form-group submit">

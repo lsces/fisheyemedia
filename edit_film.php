@@ -41,6 +41,21 @@ $plexResultLabel = null;
 $plexResultEmptyLabel = KernelTools::tra( 'No matching Plex entry found for this file.' );
 if( !empty( $_REQUEST['fCancel'] ) ) {
 	KernelTools::bit_redirect( $gContent->getDisplayUrl() );
+} elseif( $gContent->hasAdminPermission() && ( !empty( $_REQUEST['fMoveTo'] ) || !empty( $_REQUEST['fAddTo'] ) || !empty( $_REQUEST['fRemoveFrom'] ) || !empty( $_REQUEST['fNewCollection'] ) ) ) {
+	// Collections are membership only - which galleries show this film. The file on disk is never moved.
+	$collectionResult = [ 'ok' => true ];
+	if( !empty( $_REQUEST['fNewCollection'] ) ) {
+		$made = FisheyeFilm::createCollection( htmlspecialchars_decode( (string)( $_REQUEST['new_collection'] ?? '' ), ENT_NOQUOTES ) );
+		$collectionResult = $made['ok'] ? $gContent->addToCollection( $made['content_id'], !empty( $_REQUEST['new_collection_move'] ) ) : $made;
+	} elseif( !empty( $_REQUEST['fRemoveFrom'] ) ) {
+		$collectionResult = $gContent->removeFromCollection( (int)key( (array)$_REQUEST['fRemoveFrom'] ) );
+	} else {
+		$collectionResult = $gContent->addToCollection( (int)( $_REQUEST['collection'] ?? 0 ), !empty( $_REQUEST['fMoveTo'] ) );
+	}
+	if( !$collectionResult['ok'] ) {
+		$gContent->mErrors['collection'] = $collectionResult['error'];
+	}
+	$gContent->load();
 } elseif( !empty( $_REQUEST['fSave'] ) ) {
 	// Same "description box" tidy as edit_program.php's own fSave - the
 	// 'edit' field is what LibertyContent::verify() maps into content_store['data'], already
@@ -105,6 +120,8 @@ $gBitSmarty->assign( 'plexResult', $plexResult );
 $gBitSmarty->assign( 'plexResultLabel', $plexResultLabel );
 $gBitSmarty->assign( 'plexResultEmptyLabel', $plexResultEmptyLabel );
 
+$gBitSmarty->assign( 'filmGalleries', $gContent->getGalleries() );
+$gBitSmarty->assign( 'collectionChoices', FisheyeFilm::collectionChoices() );
 $storedFilePath = $gContent->getStoredFilePath();
 $gBitSmarty->assign( 'storedFilePath', $storedFilePath );
 $gBitSmarty->assign( 'storedFileExists', $storedFilePath !== null && is_file( \Bitweaver\Liberty\mime_film_get_storage_root().$storedFilePath ) );
