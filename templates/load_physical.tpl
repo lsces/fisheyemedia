@@ -44,13 +44,14 @@
 		{if !$catalogueFile}
 			<div class="alert alert-warning"><p>{tr}No catalogue has been uploaded yet.{/tr}</p></div>
 		{else}
-			<p>{$catalogueFile|escape}: {$counts.applied} {tr}stored{/tr}, {$counts.matched} {tr}match something in the library{/tr}, {$counts.stub} {tr}new albums{/tr}, {$counts.newartist} {tr}new albums with a new artist{/tr}, {$counts.ondisk} {tr}waiting for their folder to be loaded{/tr}, {$counts.none} {tr}films and shows not in the library{/tr}.</p>
+			<p>{$catalogueFile|escape}: {$counts.applied} {tr}stored{/tr}, {$counts.matched} {tr}match something in the library{/tr}, {$counts.stub} {tr}new albums{/tr}, {$counts.newartist} {tr}new albums with a new artist{/tr}, {$counts.ondisk} {tr}waiting for their folder to be loaded{/tr}, {$counts.torip} {tr}albums to rip{/tr}, {$counts.none} {tr}films and shows not in the library{/tr}.</p>
 
 			<p>
 				{tr}View{/tr}:
 				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view=todo&amp;kind={$kind|escape}">{tr}to do{/tr}</a> |
-				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view=unmatched&amp;kind={$kind|escape}">{tr}unmatched{/tr} ({$counts.none + $counts.ondisk})</a> |
-				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view=all&amp;kind={$kind|escape}">{tr}all not yet stored{/tr}</a>
+				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view=unmatched&amp;kind={$kind|escape}">{tr}unmatched{/tr} ({$counts.none + $counts.ondisk + $counts.torip})</a> |
+				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view=all&amp;kind={$kind|escape}">{tr}all not yet stored{/tr}</a> |
+					<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view={$view|escape}&amp;kind={$kind|escape}&amp;csv=1">{tr}download this view as CSV{/tr}</a>
 				&nbsp;&nbsp;{tr}Show{/tr}:
 				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view={$view|escape}">{tr}everything{/tr}</a> |
 				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php?view={$view|escape}&amp;kind=album">{tr}albums{/tr}</a> |
@@ -82,9 +83,9 @@
 								<tr>
 									<td>
 										<input type="hidden" name="shown[]" value="{$row.key|escape}" />
-										{if $row.status eq 'ondisk' and !$row.candidates}
+										{if ( $row.status eq 'ondisk' or $row.status eq 'torip' ) and !$row.candidates}
 											&nbsp;
-										{elseif $row.status eq 'ondisk' or $row.skipped}
+										{elseif $row.status eq 'ondisk' or $row.status eq 'torip' or $row.skipped}
 											<input type="checkbox" name="pick[]" value="{$row.key|escape}" />
 										{elseif $row.status eq 'none' or strpos($row.label, 'with this name') !== false}
 											<input type="checkbox" name="pick[]" value="{$row.key|escape}" />

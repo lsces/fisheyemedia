@@ -333,7 +333,8 @@ class FisheyePhysical {
 	 *   status  - 'applied' (already stored), 'matched' (an existing album, film, show or season), 'stub' (an
 	 *             album to create under an existing artist), 'newartist' (an album and its artist gallery to
 	 *             create), 'ondisk' (an album whose folder is on disk but not loaded - load it, then run again),
-	 *             or 'none' (a film or show that is not in the library)
+	 *             'torip' (an album not in the library, when stubs are not being made), or 'none' (a film or show that
+	 *             is not in the library)
 	 *   target  - the content_id it attaches to, when matched (or applied)
 	 *   artistId - the artist gallery, when there is one
 	 *   label   - what it matched, for the review page
@@ -372,6 +373,10 @@ class FisheyePhysical {
 				// a stub would only be in the way of loading them.
 				$row['status'] = 'ondisk';
 				$row['label'] = 'not in the library yet - load its music first, or link it by hand';
+			} elseif( empty( $pIndex['makeStubs'] ) ) {
+				// Stubs are optional: left off, a record that is not in the library is just a note of something to rip.
+				$row['status'] = 'torip';
+				$row['label'] = 'not in the library yet - to rip';
 			} else {
 				$row['status'] = $artistId ? 'stub' : 'newartist';
 				$row['label'] = $artistId ? 'new album under '.$pIndex['artists'][$artistId]['title'] : 'new album and artist gallery';
@@ -444,7 +449,7 @@ class FisheyePhysical {
 		if( $row['status'] === 'none' ) {
 			return [ 'ok' => false, 'message' => 'not in the library - choose what it belongs to', 'content_id' => null ];
 		}
-		if( $row['status'] === 'ondisk' ) {
+		if( in_array( $row['status'], [ 'ondisk', 'torip' ], true ) ) {
 			return [ 'ok' => false, 'message' => $row['label'], 'content_id' => null ];
 		}
 

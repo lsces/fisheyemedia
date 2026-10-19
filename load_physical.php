@@ -31,6 +31,7 @@ $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 // Rows listed, and applied, per press.
 const LOAD_PHYSICAL_BATCH = 20;
 const LOAD_PHYSICAL_LOCATION_CONFIG = 'fisheyemedia_physical_location';
+const LOAD_PHYSICAL_STUBS_CONFIG = 'fisheyemedia_physical_stubs';
 
 // detoxify() HTML-escapes every $_REQUEST value - undone for free text, as the other loaders do.
 $decode = fn( $pValue ) => htmlspecialchars_decode( trim( (string)$pValue ), ENT_NOQUOTES );
@@ -52,19 +53,27 @@ if( isset( $_REQUEST['location'] ) && ( !empty( $_REQUEST['apply'] ) || !empty( 
 	$gBitSystem->storeConfig( LOAD_PHYSICAL_LOCATION_CONFIG, $defaultLocation, FISHEYEMEDIA_PKG_NAME );
 }
 
+// Off by default: only copies of what is already in the library are stored, and the rest stay listed as things to rip.
+$makeStubs = $gBitSystem->isFeatureActive( LOAD_PHYSICAL_STUBS_CONFIG );
+if( !empty( $_REQUEST['apply'] ) || !empty( $_REQUEST['show'] ) ) {
+	$makeStubs = !empty( $_REQUEST['make_stubs'] );
+	$gBitSystem->storeConfig( LOAD_PHYSICAL_STUBS_CONFIG, $makeStubs ? 'y' : 'n', FISHEYEMEDIA_PKG_NAME );
+}
+
 $kind = in_array( $_REQUEST['kind'] ?? '', FisheyePhysicalCatalogue::KINDS, true ) ? $_REQUEST['kind'] : '';
 // 'todo' - rows that can be stored now; 'unmatched' - the films, shows and albums that cannot be matched yet, and
 // any row set aside, kept apart so they can be sorted out later; 'all' - everything not yet stored.
 $view = in_array( $_REQUEST['view'] ?? '', [ 'todo', 'unmatched', 'all' ], true ) ? $_REQUEST['view'] : 'todo';
-const LOAD_PHYSICAL_UNMATCHED = [ 'none', 'ondisk' ];
+const LOAD_PHYSICAL_UNMATCHED = [ 'none', 'ondisk', 'torip' ];
 $start = max( 0, (int)( $_REQUEST['start'] ?? 0 ) );
 
 $applied = null;
 $rows = [];
-$counts = [ 'applied' => 0, 'matched' => 0, 'stub' => 0, 'newartist' => 0, 'ondisk' => 0, 'none' => 0 ];
+$counts = [ 'applied' => 0, 'matched' => 0, 'stub' => 0, 'newartist' => 0, 'ondisk' => 0, 'torip' => 0, 'none' => 0 ];
 $pending = [];
 if( $catalogue['rows'] ) {
 	$index = FisheyePhysical::loadIndex();
+	$index['makeStubs'] = $makeStubs;
 
 	$byKey = [];
 	foreach( $catalogue['rows'] as $row ) {
@@ -112,6 +121,7 @@ if( $catalogue['rows'] ) {
 			// A stub or a gallery just made has to be in the index for the next row of the same album or artist.
 			if( str_starts_with( $done['message'], 'created' ) ) {
 				$index = FisheyePhysical::loadIndex();
+				$index['makeStubs'] = $makeStubs;
 			} elseif( $done['ok'] && $done['content_id'] ) {
 				$index['copies'][$done['content_id']][mb_strtolower( ( $row['box'] ).'|'.$row['format'].'|'.$row['owner'] )] = true;
 			}
@@ -132,6 +142,25 @@ if( $catalogue['rows'] ) {
 			$pending[] = $planned;
 		}
 	}
+	// The rows of the chosen view as a spreadsheet to work from, in the same columns the catalogue itself uses.
+	if( !empty( $_REQUEST['csv'] ) ) {
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="Physical '.$view.'.csv"' );
+		$out = fopen( 'php://output', 'w' );
+		fwrite( $out, "\xEF\xBB\xBF" );
+		$columns = array_keys( FisheyePhysicalCatalogue::COLUMNS );
+		fputcsv( $out, array_merge( $columns, [ 'Status' ] ), ',', '"', '' );
+		foreach( $pending as $planned ) {
+			$line = [];
+			foreach( FisheyePhysicalCatalogue::COLUMNS as $key ) {
+				$line[] = $planned[$key];
+			}
+			$line[] = $planned['skipped'] ? 'set aside' : $planned['label'];
+			fputcsv( $out, $line, ',', '"', '' );
+		}
+		fclose( $out );
+		exit;
+	}
 	$rows = array_slice( $pending, $start, LOAD_PHYSICAL_BATCH );
 }
 
@@ -147,6 +176,7 @@ $gBitSmarty->assign( 'batchSize', LOAD_PHYSICAL_BATCH );
 $gBitSmarty->assign( 'kind', $kind );
 $gBitSmarty->assign( 'view', $view );
 $gBitSmarty->assign( 'defaultLocation', $defaultLocation );
+$gBitSmarty->assign( 'makeStubs', $makeStubs );
 $gBitSmarty->assign( 'applied', $applied );
 
 $gBitSystem->display( 'bitpackage:fisheyemedia/load_physical.tpl', KernelTools::tra( 'Physical Copies' ), [ 'display_mode' => 'edit' ] );
