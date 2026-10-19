@@ -6,13 +6,15 @@
 
 <div class="admin liberty">
 	<div class="header">
-		<h1><a href="{$topGalleryUrl|escape}">{tr}TV Shows{/tr}</a>{if $scopeShow} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php">{tr}Next{/tr}</a> - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_program.php?content_id={$scopeShow.content_id}">{$scopeShow.title|escape}</a>{/if}</h1>
+		<h1><a href="{$topGalleryUrl|escape}">{if $local}{tr}Local Videos{/tr}{else}{tr}TV Shows{/tr}{/if}</a>{if $scopeShow} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php{if $local}?local=1{/if}">{tr}Next{/tr}</a> - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_program.php?content_id={$scopeShow.content_id}">{$scopeShow.title|escape}</a>{/if}</h1>
 	</div>
 
 	<div class="body">
 
 		{if $showResult.error}
 			<div class="alert alert-danger">{$showResult.error|escape}</div>
+		{elseif $showResult.local}
+			<div class="alert alert-success">{tr}Registered show{/tr} "{$scopeShow.title|escape}"</div>
 		{elseif $showResult.no_match}
 			<div class="alert alert-warning">
 				{tr}Registered show{/tr} "{$scopeShow.title|escape}" -
@@ -75,11 +77,11 @@
 			<p>{tr}Showing up to{/tr} {$candidateLimit} {tr}not-yet-loaded shows.{/tr}</p>
 			<ul>
 				{foreach from=$candidates item=show}
-					<li><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?show={$show|escape:'url'}">{$show|escape}</a></li>
+					<li><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?{if $local}local=1&amp;{/if}show={$show|escape:'url'}">{$show|escape}</a></li>
 				{/foreach}
 			</ul>
 		{elseif !$scopeShow}
-			<p>{tr}Nothing to load - every show folder is already registered.{/tr}</p>
+			<p>{tr}Nothing to load - every {if $local}series{else}show{/if} folder is already registered.{/tr}</p>
 		{/if}
 
 		{if $scopeShow && $candidates}

@@ -50,7 +50,7 @@
 			<p>
 				<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_local.php">{tr}Loose videos{/tr}</a>
 				{foreach from=$folders item=folder}
-					| {if $folder.series}{$folder.name|escape} ({$folder.files}, {tr}series - load as a show{/tr}){else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_local.php?folder={$folder.name|escape:'url'}">{$folder.name|escape}</a> ({$folder.files}){/if}
+					| {if $folder.series}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?local=1&amp;show={$folder.name|escape:'url'}">{$folder.name|escape}</a> ({$folder.files}, {tr}series - load as a show{/tr}){else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_local.php?folder={$folder.name|escape:'url'}">{$folder.name|escape}</a> ({$folder.files}){/if}
 				{/foreach}
 			</p>
 

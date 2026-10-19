@@ -34,6 +34,9 @@ require_once dirname( __DIR__, 3 ).'/liberty/plugins/mime.film.php';
 define( 'FISHEYEPROGRAM_CONTENT_TYPE_GUID', 'fisheyeprogram' );
 
 class FisheyeProgram extends FisheyeMediaGallery {
+	// The folder under the film storage root, and the title of the top-level gallery, holding shows that are not in the TV library.
+	public const LOCAL_FOLDER = 'Local Videos';
+
 
 	public function __construct( $pGalleryId = null, $pContentId = null ) {
 		parent::__construct( $pGalleryId, $pContentId );
@@ -116,7 +119,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	public function expunge(): bool {
 		if( $this->isValid() && $this->loadImages() ) {
 			foreach( $this->mItems as $season ) {
-				if( is_a( $season, '\Bitweaver\Fisheye\FisheyeSeason' ) ) {
+				if( $season instanceof FisheyeSeason ) {
 					// abort the whole show delete rather than silently skip a season that fails
 					if( !$season->expunge() ) {
 						// $season is a separate object instance - pull its own mErrors across,
@@ -225,7 +228,33 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	 * @return string empty string if the config is unset
 	 */
 	public function getImageStorageRoot(): string {
-		return \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $this->getTitle() );
+		return self::locateShowFolder( $this->getTitle() )['root'];
+	}
+
+	/**
+	 * Whether this show comes from the Local Videos library - no Plex, TMDB or TheTVDB entry to match: everything is read from the files.
+	 */
+	public function isLocal(): bool {
+		return self::locateShowFolder( $this->getTitle() )['base'] === self::LOCAL_FOLDER;
+	}
+
+	/**
+	 * Where a show's folder lives. A show in the TV library sits in 'TV Shows/<title>' under its letter-split TV root;
+	 * a show from the Local Videos library (home and one-off series with no Plex entry) sits in 'Local Videos/<title>'
+	 * under the film root. The TV library wins when both exist, and a show found in neither resolves to the TV
+	 * library, as it always did.
+	 *
+	 * @return array{root:string,base:string}  root with trailing slash, base the folder under it ('TV Shows' or 'Local Videos')
+	 */
+	public static function locateShowFolder( string $pShowTitle ): array {
+		$tvRoot = \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $pShowTitle );
+		if( $pShowTitle !== '' && ( $tvRoot === '' || !is_dir( $tvRoot.'TV Shows/'.$pShowTitle ) ) ) {
+			$localRoot = \Bitweaver\Liberty\mime_film_get_storage_root();
+			if( $localRoot !== '' && is_dir( $localRoot.self::LOCAL_FOLDER.'/'.$pShowTitle ) ) {
+				return [ 'root' => $localRoot, 'base' => self::LOCAL_FOLDER ];
+			}
+		}
+		return [ 'root' => $tvRoot, 'base' => 'TV Shows' ];
 	}
 
 	/**
@@ -367,6 +396,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	 *               'error'=>string on failure.
 	 */
 	public static function registerFromDisk( string $pShowTitle ): array {
+		$parentTitle = self::locateShowFolder( $pShowTitle )['base'];
 		global $gBitDb;
 
 		$existingContentId = $gBitDb->getOne(
@@ -395,7 +425,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 
 		$galleryContentId = $gBitDb->getOne(
 			"SELECT lc.content_id FROM liberty_content lc INNER JOIN fisheye_gallery fg ON fg.content_id = lc.content_id WHERE lc.content_type_guid = 'fisheyegallery' AND lc.title = ?",
-			[ 'TV Shows' ]
+			[ $parentTitle ]
 		);
 		$linked = false;
 		if( $galleryContentId ) {
@@ -411,6 +441,10 @@ class FisheyeProgram extends FisheyeMediaGallery {
 		// cheap, and gives searchPlexShows()/setPlexMatchOverride() (the "Search Plex" action on
 		// edit_program.php) something to attach a manually-confirmed match to - but no metadata/
 		// image fetch runs until a match is actually confirmed, automatic or manual.
+		// A Local Videos show has no Plex entry by design, so there is nothing to match or fetch.
+		if( $parentTitle === self::LOCAL_FOLDER ) {
+			return [ 'created' => $program->mContentId, 'gallery_id' => $program->mGalleryId, 'linked' => $linked, 'local' => true ];
+		}
 		if( !$program->hasPlexMatch() ) {
 			return [ 'created' => $program->mContentId, 'gallery_id' => $program->mGalleryId, 'linked' => $linked, 'no_match' => true ];
 		}
@@ -421,6 +455,26 @@ class FisheyeProgram extends FisheyeMediaGallery {
 		$plexImages = $program->reloadPlexImages();
 
 		return [ 'created' => $program->mContentId, 'gallery_id' => $program->mGalleryId, 'linked' => $linked, 'plex' => $plexMeta, 'images' => $plexImages ];
+	}
+
+	/**
+	 * A Local Videos show has no Plex poster, so give it a frame grabbed from one of its seasons as its picture - once, and only
+	 * if it has no image yet (a repeat would add another frame each time).
+	 *
+	 * @return string|null  the new image's name, or null if the show already has an image or nothing could be grabbed
+	 */
+	public function grabFrameIfNoImage(): ?string {
+		$this->loadXrefInfo();
+		foreach( $this->mXrefInfo ? $this->liveXrefs() : [] as $xref ) {
+			if( $xref['item'] === 'image' ) {
+				return null;
+			}
+		}
+		$relativePath = $this->grabVideoFrameImage();
+		if( $relativePath ) {
+			$this->attachThumbnail( $this->getExtraImagePath( $relativePath ) );
+		}
+		return $relativePath;
 	}
 
 	/**
@@ -457,7 +511,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 			return null;
 		}
 		foreach( $this->mItems as $season ) {
-			if( !is_a( $season, '\Bitweaver\Fisheye\FisheyeSeason' ) ) {
+			if( !$season instanceof FisheyeSeason ) {
 				continue;
 			}
 			$season->loadXrefInfo();

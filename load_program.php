@@ -57,6 +57,10 @@ const LOAD_PROGRAM_FLAT_SEASON = '.';
 // why (was a literal, install-order-dependent "2" here until 2026-09-03).
 $topGalleryId = FisheyeGallery::getTopGalleryId( 'TV Shows' );
 
+// ?local=1 lists the series in the Local Videos library instead of the TV library - see FisheyeProgram::locateShowFolder().
+$local = !empty( $_REQUEST['local'] );
+$localGalleryId = FisheyeGallery::getTopGalleryId( FisheyeProgram::LOCAL_FOLDER );
+
 $galleryIdParam = (int)( $_REQUEST['gallery_id'] ?? 0 );
 // See load_film.php's own comment on this same decode - detoxify() HTML-escapes every $_REQUEST
 // value, which breaks a raw filesystem lookup like this one for any show name containing &, <, or >.
@@ -88,7 +92,39 @@ if( $galleryIdParam && $galleryIdParam !== $topGalleryId ) {
 	}
 }
 
-if( $scopeShow === null ) {
+if( $scopeShow === null && $local ) {
+
+	// Local Videos: folders whose video files are mostly tagged SnnEnn are series, loaded as shows into the Local Videos gallery.
+	$localRoot = \Bitweaver\Liberty\mime_film_get_storage_root();
+	$localDir = $localRoot.FisheyeProgram::LOCAL_FOLDER.'/';
+	$entries = is_dir( $localDir ) ? scandir( $localDir ) : [];
+	natsort( $entries );
+	foreach( $entries as $entry ) {
+		if( count( $candidates ) >= LOAD_PROGRAM_LIMIT ) {
+			break;
+		}
+		if( str_starts_with( $entry, '.' ) || !is_dir( $localDir.$entry ) ) {
+			continue;
+		}
+		$files = [];
+		foreach( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $localDir.$entry, \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+			if( $file->isFile() && in_array( strtolower( $file->getExtension() ), LOAD_PROGRAM_EXTENSIONS, true ) ) {
+				$files[] = $file->getFilename();
+			}
+		}
+		if( !$files || count( array_filter( $files, fn( $f ) => preg_match( '/S\d+E\d+/i', $f ) ) ) * 2 < count( $files ) ) {
+			continue;
+		}
+		$existingContentId = $gBitDb->getOne(
+			"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeprogram' AND title = ?",
+			[ $entry ]
+		);
+		if( !$existingContentId ) {
+			$candidates[] = $entry;
+		}
+	}
+
+} elseif( $scopeShow === null ) {
 
 	// Top level: real show folders across both storage roots, not yet a FisheyeProgram. Same
 	// physical folder can only resolve from one root or the other in practice (each root's own
@@ -147,6 +183,12 @@ if( $scopeShow === null ) {
 				$seasonResult['created'][] = [ 'folder' => $seasonFolder, 'content_id' => $row['created'], 'episodes' => $row['episodes'], 'images' => $row['images'] ];
 			}
 		}
+		if( $seasonResult['created'] && FisheyeProgram::locateShowFolder( $showTitle )['base'] === FisheyeProgram::LOCAL_FOLDER ) {
+			// No Plex poster for a local show: a frame from one of its seasons stands in.
+			$showProgram = new FisheyeProgram( null, $showContentId );
+			$showProgram->load();
+			$showProgram->grabFrameIfNoImage();
+		}
 	} elseif( !empty( $_REQUEST['fReloadSeasonEpisodes'] ) ) {
 		// The show-page shortcut for a season that's picked up more episode files than are
 		// currently registered (see the $reloadCandidates detection below) - lets the common
@@ -163,8 +205,10 @@ if( $scopeShow === null ) {
 		}
 	}
 
-	$root = \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $showTitle );
-	$showDir = $root.'TV Shows/'.$showTitle.'/';
+	$location = FisheyeProgram::locateShowFolder( $showTitle );
+	$root = $location['root'];
+	$showDir = $root.$location['base'].'/'.$showTitle.'/';
+	$local = $location['base'] === FisheyeProgram::LOCAL_FOLDER;
 	if( !empty( $root ) && is_dir( $showDir ) ) {
 		$entries = scandir( $showDir );
 		natsort( $entries );
@@ -249,9 +293,10 @@ if( $scopeShow === null ) {
 // list of what was just loaded stays reachable from the gallery view too -
 // getDisplayUrlFromHash() just needs the id, no need to load the whole
 // object for a URL.
-$topGalleryUrlHash = [ 'gallery_id' => $topGalleryId ];
+$topGalleryUrlHash = [ 'gallery_id' => $local && $localGalleryId ? $localGalleryId : $topGalleryId ];
 $gBitSmarty->assign( 'topGalleryUrl', FisheyeGallery::getDisplayUrlFromHash( $topGalleryUrlHash ) );
 
+$gBitSmarty->assign( 'local', $local );
 $gBitSmarty->assign( 'candidateLimit', LOAD_PROGRAM_LIMIT );
 $gBitSmarty->assign( 'candidates', $candidates );
 $gBitSmarty->assign( 'reloadCandidates', $reloadCandidates );

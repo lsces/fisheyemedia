@@ -20,7 +20,7 @@
 					<p>{$plexResultLabel|escape}:</p>
 					<ul>{foreach from=$plexResult.items item=line}<li>{$line|escape}</li>{/foreach}</ul>
 				{else}
-					<p>{tr}No matching Plex entry found for this show.{/tr}</p>
+					<p>{$plexResultEmptyLabel|escape}</p>
 				{/if}
 			</div>
 		{/if}
@@ -100,8 +100,12 @@
 			<div class="form-group submit">
 				<input type="submit" class="btn btn-default" name="fCancel" value="{tr}Cancel{/tr}" />
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
-				<input type="submit" class="btn btn-secondary" name="fReloadMetadata" value="{tr}Reload Metadata{/tr}" />
-				<input type="submit" class="btn btn-secondary" name="fReloadImages" value="{tr}Reload Images{/tr}" />
+				{if $isLocalShow}
+					<input type="submit" class="btn btn-secondary" name="fReloadLocalEpisodes" value="{tr}Reload Episodes{/tr}" />
+				{else}
+					<input type="submit" class="btn btn-secondary" name="fReloadMetadata" value="{tr}Reload Metadata{/tr}" />
+					<input type="submit" class="btn btn-secondary" name="fReloadImages" value="{tr}Reload Images{/tr}" />
+				{/if}
 			</div>
 		{/form}
 	</div><!-- end .body -->

@@ -41,7 +41,8 @@ $plexResultLabel = null;
 // Shown when $plexResult comes back empty - overridden per action below for the disk-based
 // Featurettes/frame-grab actions, neither of which have anything to do with Plex and shouldn't
 // blame it for an empty result.
-$plexResultEmptyLabel = KernelTools::tra( 'No matching Plex entry found for this season.' );
+$plexResultEmptyLabel = $gContent->isLocal() ? KernelTools::tra( 'Nothing found to load in this season\'s folder.' ) : KernelTools::tra( 'No matching Plex entry found for this season.' );
+$gBitSmarty->assign( 'isLocalSeason', $gContent->isLocal() );
 if( !empty( $_REQUEST['fCancel'] ) ) {
 	KernelTools::bit_redirect( $gContent->getDisplayUrl() );
 } elseif( !empty( $_REQUEST['fSave'] ) ) {

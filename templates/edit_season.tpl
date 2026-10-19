@@ -62,8 +62,12 @@
 			<div class="form-group submit">
 				<input type="submit" class="btn btn-default" name="fCancel" value="{tr}Cancel{/tr}" />
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
-				<input type="submit" class="btn btn-secondary" name="fReloadImages" value="{tr}Reload Images{/tr}" />
-				<input type="submit" class="btn btn-secondary" name="fReloadEpisodes" value="{tr}Load Episodes{/tr}" title="{tr}Refreshes the episode details and cast from Plex. Thumbnails already loaded are kept; use Reload Images for artwork.{/tr}" />
+				{if $isLocalSeason}
+					<input type="submit" class="btn btn-secondary" name="fReloadEpisodes" value="{tr}Reload Episodes{/tr}" title="{tr}Re-reads the episodes from the files in this season's folder. Thumbnails already loaded are kept.{/tr}" />
+				{else}
+					<input type="submit" class="btn btn-secondary" name="fReloadImages" value="{tr}Reload Images{/tr}" />
+					<input type="submit" class="btn btn-secondary" name="fReloadEpisodes" value="{tr}Load Episodes{/tr}" title="{tr}Refreshes the episode details and cast from Plex. Thumbnails already loaded are kept; use Reload Images for artwork.{/tr}" />
+				{/if}
 			</div>
 		{/form}
 	</div><!-- end .body -->

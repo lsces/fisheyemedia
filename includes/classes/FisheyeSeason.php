@@ -149,7 +149,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 	public function getImageStorageRoot(): string {
 		$parents = $this->getParentGalleries();
 		$showTitle = $parents ? ( current( $parents )['title'] ?? '' ) : '';
-		return $showTitle ? \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $showTitle ) : '';
+		return $showTitle ? FisheyeProgram::locateShowFolder( $showTitle )['root'] : '';
 	}
 
 	/**
@@ -401,16 +401,18 @@ class FisheyeSeason extends FisheyeMediaImage {
 			// arbitrary creation order (content_id) rather than season number - derive a real
 			// position from the folder name instead ("Season 11" -> 110), counting by tens per
 			// image_order.tpl's own convention so gaps stay available for manual reordering
-			// later. A non-numbered folder (e.g. "Specials") sorts first, ahead of Season 1.
-			$position = preg_match( '/(\d+)/', $pSeasonFolderName, $m ) ? (int)$m[1] * 10 : 0;
+			// later. "Specials" sorts first, ahead of Season 1; any other non-numbered folder ("Episodes") sorts as Season 1.
+			$position = preg_match( '/(\d+)/', $pSeasonFolderName, $m ) ? (int)$m[1] * 10 : ( preg_match( '/^specials?$/i', $pSeasonFolderName ) ? 0 : 10 );
 			$showGallery->addItem( $season->mContentId, $position );
 		}
 
 		if( !$alreadySeeded ) {
-			$root = \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $pShowTitle );
+			$location = FisheyeProgram::locateShowFolder( $pShowTitle );
+			$root = $location['root'];
+			$base = $location['base'];
 			$seasonDir = $isFlatSeason
-				? $root.'TV Shows/'.$pShowTitle.'/'
-				: $root.'TV Shows/'.$pShowTitle.'/'.$pSeasonFolderName.'/';
+				? $root.$base.'/'.$pShowTitle.'/'
+				: $root.$base.'/'.$pShowTitle.'/'.$pSeasonFolderName.'/';
 			$seedFile = null;
 			if( !empty( $root ) && is_dir( $seasonDir ) ) {
 				foreach( scandir( $seasonDir ) as $file ) {
@@ -428,8 +430,8 @@ class FisheyeSeason extends FisheyeMediaImage {
 			}
 			// storeXref() also takes its param by reference - same reason as store() above.
 			$xkeyExt = $isFlatSeason
-				? 'TV Shows/'.$pShowTitle.'/'.$seedFile
-				: 'TV Shows/'.$pShowTitle.'/'.$pSeasonFolderName.'/'.$seedFile;
+				? $base.'/'.$pShowTitle.'/'.$seedFile
+				: $base.'/'.$pShowTitle.'/'.$pSeasonFolderName.'/'.$seedFile;
 			$xrefHash = [
 				'content_id' => $season->mContentId,
 				'item'       => 'episode',
@@ -468,6 +470,18 @@ class FisheyeSeason extends FisheyeMediaImage {
 		return preg_match( '/ - (S\d+E[\dE&-]+)(?: - (.+))?$/i', $stem, $m ) ? ( $m[2] ?? $m[1] ) : $stem;
 	}
 
+	/**
+	 * Whether this season belongs to a show from the Local Videos library (see FisheyeProgram::isLocal()).
+	 */
+	public function isLocal(): bool {
+		return FisheyeProgram::locateShowFolder( $this->showTitleFromParents() )['base'] === FisheyeProgram::LOCAL_FOLDER;
+	}
+
+	private function showTitleFromParents(): string {
+		$parents = $this->getParentGalleries();
+		return $parents ? ( current( $parents )['title'] ?? '' ) : '';
+	}
+
 	private function matchPlexSeasonMetadataItem(): ?array {
 		global $gBitSystem;
 
@@ -493,8 +507,9 @@ class FisheyeSeason extends FisheyeMediaImage {
 			return null;
 		}
 
-		$root = \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $showTitle );
-		if( empty( $root ) ) {
+		$location = FisheyeProgram::locateShowFolder( $showTitle );
+		$root = $location['root'];
+		if( empty( $root ) || $location['base'] !== 'TV Shows' ) {
 			return null;
 		}
 
@@ -578,7 +593,8 @@ class FisheyeSeason extends FisheyeMediaImage {
 		if( empty( $showTitle ) ) {
 			return null;
 		}
-		$root = \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $showTitle );
+		$location = FisheyeProgram::locateShowFolder( $showTitle );
+		$root = $location['root'];
 		if( empty( $root ) ) {
 			return null;
 		}
@@ -605,12 +621,12 @@ class FisheyeSeason extends FisheyeMediaImage {
 		}
 		$seasonFolderNameGuess = substr( $title, strlen( $prefix ) );
 
-		$subfolderRelative = 'TV Shows/'.$showTitle.'/'.$seasonFolderNameGuess;
+		$subfolderRelative = $location['base'].'/'.$showTitle.'/'.$seasonFolderNameGuess;
 		if( is_dir( $root.$subfolderRelative.'/' ) ) {
 			return [ 'dir' => $root.$subfolderRelative.'/', 'relative' => $subfolderRelative ];
 		}
 		if( $seasonFolderNameGuess === 'Season 1' ) {
-			$flatRelative = 'TV Shows/'.$showTitle;
+			$flatRelative = $location['base'].'/'.$showTitle;
 			if( is_dir( $root.$flatRelative.'/' ) ) {
 				return [ 'dir' => $root.$flatRelative.'/', 'relative' => $flatRelative ];
 			}
@@ -735,7 +751,13 @@ class FisheyeSeason extends FisheyeMediaImage {
 
 		$existingEpisodes = $pDataOnly ? $this->liveEpisodeData() : [];
 		$xorder = 1;
+		// A Local Videos show is numbered by its file names (gaps and all), not 1..n - there is no Plex list to renumber it from.
+		$numberByFile = $this->isLocal();
 		foreach( $files as $file ) {
+			$fileNumber = $numberByFile && preg_match( '/S\d+E(\d+)/i', $file, $numMatch ) ? (int)$numMatch[1] : 0;
+			if( $fileNumber > 0 ) {
+				$xorder = $fileNumber;
+			}
 			// Data-only: nothing here comes from Plex, so an episode already registered is left exactly as it is.
 			if( $pDataOnly && isset( $existingEpisodes[$relativeSeasonDir.'/'.$file] ) ) {
 				$wantedEpisodes[] = [
@@ -839,7 +861,8 @@ class FisheyeSeason extends FisheyeMediaImage {
 		global $gBitSystem;
 		$summary = [ 'matched' => false, 'items' => [] ];
 
-		$plexMatch = $this->matchPlexSeasonMetadataItem();
+		// A local season is never looked up in Plex.
+		$plexMatch = $this->isLocal() ? null : $this->matchPlexSeasonMetadataItem();
 		if( !$plexMatch ) {
 			// No Plex/TVDB match at all (e.g. a manually-curated documentary series) - fall back
 			// to registering every real episode file already sitting in the season's own folder,

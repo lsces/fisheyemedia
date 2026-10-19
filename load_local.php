@@ -108,7 +108,12 @@ if( !empty( $_REQUEST['fImport'] ) && $topGallery ) {
 	}
 }
 
-// The folders: collections of one-off videos, and series (SnnEnn-tagged) that load as shows.
+// The folders: collections of one-off videos, and series (SnnEnn-tagged) that load as shows. A collection
+// drops off the list once every video in it is registered.
+$registered = array_flip( $gBitDb->getCol(
+	"SELECT lf.file_name FROM liberty_attachments la INNER JOIN liberty_files lf ON lf.file_id = la.foreign_id WHERE la.attachment_plugin_guid = 'mimefilm' AND lf.file_name LIKE ?",
+	[ LOAD_LOCAL_FOLDER.'/%' ]
+) );
 $folders = [];
 if( is_dir( $localDir ) ) {
 	$entries = scandir( $localDir );
@@ -118,16 +123,26 @@ if( is_dir( $localDir ) ) {
 			continue;
 		}
 		$files = [];
+		$unloaded = 0;
 		foreach( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $localDir.$entry, \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
 			if( $file->isFile() && in_array( strtolower( $file->getExtension() ), LOAD_LOCAL_EXTENSIONS, true ) ) {
 				$files[] = $file->getFilename();
+				if( !isset( $registered[ LOAD_LOCAL_FOLDER.'/'.substr( $file->getPathname(), strlen( $localDir ) ) ] ) ) {
+					$unloaded++;
+				}
 			}
 		}
 		if( !$files ) {
 			continue;
 		}
 		$tagged = count( array_filter( $files, fn( $f ) => preg_match( '/S\d+E\d+/i', $f ) ) );
-		$folders[] = [ 'name' => $entry, 'files' => count( $files ), 'series' => $tagged * 2 >= count( $files ) ];
+		$series = $tagged * 2 >= count( $files );
+		if( $series && $gBitDb->getOne( "SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeprogram' AND title = ?", [ $entry ] ) ) {
+			continue;
+		}
+		if( $unloaded ) {
+			$folders[] = [ 'name' => $entry, 'files' => $unloaded, 'series' => $series ];
+		}
 	}
 }
 

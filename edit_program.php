@@ -47,6 +47,22 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 		KernelTools::bit_redirect( $gContent->getDisplayUrl() );
 	}
 	$gContent->load();
+} elseif( !empty( $_REQUEST['fReloadLocalEpisodes'] ) ) {
+	// A Local Videos show has no Plex to reload from: re-read every season's episodes from the files, then give the show a picture if it has none.
+	$lines = [];
+	$listHash = [ 'max_records' => -1 ];
+	$gContent->loadImages( $listHash );
+	foreach( (array)$gContent->mItems as $season ) {
+		if( $season instanceof FisheyeSeason ) {
+			$season->load();
+			$lines[] = $season->getTitle().': '.count( $season->reloadPlexEpisodes( true )['items'] ).' '.KernelTools::tra( 'entries' );
+		}
+	}
+	if( $frame = $gContent->grabFrameIfNoImage() ) {
+		$lines[] = KernelTools::tra( 'frame grab' ).": $frame";
+	}
+	$plexResult = [ 'items' => $lines ];
+	$plexResultLabel = KernelTools::tra( 'Episodes reloaded from the files' );
 } elseif( !empty( $_REQUEST['fReloadMetadata'] ) ) {
 	$plexResult = $gContent->reloadPlexMetadata();
 	$plexResultLabel = KernelTools::tra( 'Metadata reloaded from Plex' );
@@ -145,6 +161,9 @@ $gBitSmarty->assign( 'plexResult', $plexResult );
 $gBitSmarty->assign( 'plexResultLabel', $plexResultLabel );
 $gBitSmarty->assign( 'plexSearchQuery', $plexSearchQuery );
 $gBitSmarty->assign( 'plexSearchResults', $plexSearchResults );
-$gBitSmarty->assign( 'plexHasMatch', $gContent->hasPlexMatch() );
+// A Local Videos show has no Plex entry by design, so the "no match" prompt is never shown for it.
+$gBitSmarty->assign( 'isLocalShow', $gContent->isLocal() );
+$gBitSmarty->assign( 'plexHasMatch', $gContent->isLocal() || $gContent->hasPlexMatch() );
+$gBitSmarty->assign( 'plexResultEmptyLabel', $gContent->isLocal() ? KernelTools::tra( 'Nothing found to load in this show\'s folder.' ) : KernelTools::tra( 'No matching Plex entry found for this show.' ) );
 
 $gBitSystem->display( 'bitpackage:fisheyemedia/edit_program.tpl', KernelTools::tra( 'Edit Show: ' ).$gContent->getTitle(), [ 'display_mode' => 'edit' ] );
