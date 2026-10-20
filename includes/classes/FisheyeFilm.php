@@ -185,6 +185,37 @@ class FisheyeFilm extends FisheyeMediaImage {
 	}
 
 	/**
+	 * Replace this film's displayed thumbnail with a fresh frame grabbed from its own video file - the no-Plex
+	 * counterpart to taking Plex's selected poster, and the way to rebuild a thumbnail made from a file whose aspect
+	 * flag was wrong at the time (the grab honours the file's current pixel aspect ratio). One working file is kept in
+	 * the branch ('frame-grab.jpg', overwritten each time) so repeated rebuilds do not pile up alternates.
+	 *
+	 * @param array $pSummary  reloadPlexImages()'s own summary array, appended to in place
+	 */
+	private function regrabFrameThumbnail( array &$pSummary ): void {
+		$this->load();
+		$sourceFile = $this->mStorage[$this->mContentId]['source_file'] ?? null;
+		if( empty( $sourceFile ) || !is_file( $sourceFile ) ) {
+			$pSummary['items'][] = 'frame grab: the video file was not found';
+			return;
+		}
+		$branchPath = $this->getImageStorageBranchPath();
+		\Bitweaver\KernelTools::mkdir_p( $branchPath );
+		$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_frame_' );
+		if( \Bitweaver\Liberty\mime_film_grab_video_frame( $sourceFile, $tmpFile ) ) {
+			$fileName = 'frame-grab.jpg';
+			if( self::resizeImageFile( $tmpFile, $branchPath.$fileName, 800 ) && $this->promoteImageToThumbnail( $fileName ) ) {
+				$pSummary['items'][] = 'thumbnail: rebuilt from a frame grabbed from the video file';
+			} else {
+				$pSummary['items'][] = 'frame grab: the frame could not be stored as the thumbnail';
+			}
+		} else {
+			$pSummary['items'][] = 'frame grab: no frame could be read from the video file';
+		}
+		@unlink( $tmpFile );
+	}
+
+	/**
 	 * Locate this film in the local Plex library, matched by its real absolute file path
 	 * (Plex's own media_parts.file, not fisheye's root-relative convention — realpath() bridges
 	 * the fisheye_disk_storage_root symlink back to whatever real path Plex actually stored,
@@ -927,6 +958,8 @@ class FisheyeFilm extends FisheyeMediaImage {
 
 		$plexMatch = $this->matchPlexMetadataItem();
 		if( !$plexMatch ) {
+			// No Plex entry to take artwork from: rebuild the thumbnail from the video file itself.
+			$this->regrabFrameThumbnail( $summary );
 			return $summary;
 		}
 		$summary['matched'] = true;

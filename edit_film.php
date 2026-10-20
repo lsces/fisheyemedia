@@ -79,7 +79,7 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	$plexResultLabel = KernelTools::tra( 'Metadata reloaded from Plex' );
 } elseif( !empty( $_REQUEST['fReloadImages'] ) ) {
 	$plexResult = $gContent->reloadPlexImages();
-	$plexResultLabel = KernelTools::tra( 'Images reloaded from Plex' );
+	$plexResultLabel = KernelTools::tra( !empty( $plexResult['matched'] ) ? 'Images reloaded from Plex' : 'No Plex match - thumbnail from the video file' );
 } elseif( !empty( $_REQUEST['fReloadFeaturettes'] ) ) {
 	$relativeFilePath = $gContent->getRelativeFilePath();
 	$plexResult = $relativeFilePath !== null ? $gContent->registerFeaturettesFromDisk( $relativeFilePath ) : [ 'items' => [] ];
