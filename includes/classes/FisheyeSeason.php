@@ -999,7 +999,9 @@ class FisheyeSeason extends FisheyeMediaImage {
 					if( !empty( $imageData ) ) {
 						$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_ep_thumb_' );
 						file_put_contents( $tmpFile, $imageData );
-						$fileName = $this->getTitle().' - episode-'.(int)$row['index'].'.jpg';
+						// $order, not the bare index: a decade folder repeats the index every year, so the index alone gave
+						// every year's episode 1 the same file. $order equals the index in an ordinary season.
+						$fileName = $this->getTitle().' - episode-'.$order.'.jpg';
 						if( self::resizeImageFile( $tmpFile, $imagesDir.$fileName, 400 ) ) {
 							$episodeData['thumb'] = $fileName;
 						}
