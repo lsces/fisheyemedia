@@ -749,7 +749,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		$imagesDir = $this->getImageStorageBranchPath();
 		KernelTools::mkdir_p( $imagesDir );
 
-		$existingEpisodes = $pDataOnly ? $this->liveEpisodeData() : [];
+		$existingEpisodes = $pDataOnly ? $this->keptEpisodeData() : [];
 		$xorder = 1;
 		// A Local Videos show is numbered by its file names (gaps and all), not 1..n - there is no Plex list to renumber it from.
 		$numberByFile = $this->isLocal();
@@ -916,7 +916,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// Data-only reload: what is already stored for an episode that Plex does not supply (its thumbnail, the
 		// ffprobe resolution/audio) is kept, and no thumbnail is fetched or overwritten - a thumbnail replaced by hand
 		// stays. Only a new episode takes the full path below.
-		$existingEpisodes = $pDataOnly ? $this->liveEpisodeData() : [];
+		$existingEpisodes = $pDataOnly ? $this->keptEpisodeData() : [];
 
 		foreach( $episodeRows as $row ) {
 			if( !str_starts_with( $row['file'], $realRoot ) || !is_file( $row['file'] ) ) {
@@ -1264,6 +1264,20 @@ class FisheyeSeason extends FisheyeMediaImage {
 			$ret[(string)$row['xkey_ext']] = !empty( $row['data'] ) ? ( json_decode( $row['data'], true ) ?: [] ) : [];
 		}
 		return $ret;
+	}
+
+	/**
+	 * The already-registered episodes a data-only reload leaves exactly as they are: liveEpisodeData() less any whose
+	 * thumbnail file is also another episode's. Two episodes never share a still, so a shared one is a bad load (a decade
+	 * season used to name every year's episode 1 alike); those take the full path again, which fetches or grabs their own.
+	 * A thumbnail only one episode uses - including one replaced by hand - is kept.
+	 *
+	 * @return array  xkey_ext => stored episode packet
+	 */
+	private function keptEpisodeData(): array {
+		$episodes = $this->liveEpisodeData();
+		$uses = array_count_values( array_filter( array_column( $episodes, 'thumb' ) ) );
+		return array_filter( $episodes, fn( $data ) => empty( $data['thumb'] ) || $uses[$data['thumb']] < 2 );
 	}
 
 	/** One summary line for a reconcile result, e.g. "episodes: 12 unchanged, 0 inserted, 0 archived". */
