@@ -70,6 +70,15 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 		require_once SEARCH_PKG_INCLUDE_PATH.'refresh_functions.php';
 		\Bitweaver\Liberty\refresh_index( $gContent );
 	}
+} elseif( !empty( $_REQUEST['fRefreshThumbs'] ) ) {
+	// Every episode's thumbnail is fetched or grabbed again - the fix for a bad one that only one episode uses, which
+	// Load Episodes deliberately keeps. The episode rows keep their ids; only their packets are rewritten.
+	$plexResult = $gContent->reloadPlexEpisodes( true, true );
+	$plexResultLabel = KernelTools::tra( 'Episodes loaded and every thumbnail refreshed' );
+	if( $gBitSystem->isPackageActive( 'search' ) ) {
+		require_once SEARCH_PKG_INCLUDE_PATH.'refresh_functions.php';
+		\Bitweaver\Liberty\refresh_index( $gContent );
+	}
 } elseif( !empty( $_REQUEST['fReloadFeaturettes'] ) ) {
 	$plexResult = $gContent->registerFeaturettesFromDisk();
 	$plexResultLabel = KernelTools::tra( 'Featurettes reloaded' );

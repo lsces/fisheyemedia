@@ -723,7 +723,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 	 *
 	 * @return array Same shape as the Plex-match branch: matched=>bool, items=>episode titles.
 	 */
-	private function registerEpisodesFromFilesystem( bool $pDataOnly = false ): array {
+	private function registerEpisodesFromFilesystem( bool $pDataOnly = false, bool $pRefreshThumbs = false ): array {
 		$summary = [ 'matched' => false, 'items' => [] ];
 
 		$dirInfo = $this->resolveSeasonDirectoryFromDisk();
@@ -749,7 +749,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		$imagesDir = $this->getImageStorageBranchPath();
 		KernelTools::mkdir_p( $imagesDir );
 
-		$existingEpisodes = $pDataOnly ? $this->keptEpisodeData() : [];
+		$existingEpisodes = $pDataOnly && !$pRefreshThumbs ? $this->keptEpisodeData() : [];
 		$xorder = 1;
 		// A Local Videos show is numbered by its file names (gaps and all), not 1..n - there is no Plex list to renumber it from.
 		$numberByFile = $this->isLocal();
@@ -797,7 +797,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 			// position-based name mis-attaches an old thumb the moment episode numbering shifts,
 			// and forces an expensive re-grab on every reload even when nothing changed.
 			$fileName = $stem.'.jpg';
-			if( is_file( $imagesDir.$fileName ) ) {
+			if( !$pRefreshThumbs && is_file( $imagesDir.$fileName ) ) {
 				$episodeData['thumb'] = $fileName;
 			} else {
 				$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_ep_thumb_' );
@@ -855,9 +855,11 @@ class FisheyeSeason extends FisheyeMediaImage {
 	 *                         tags are refreshed, but an episode already registered keeps its thumbnail, resolution and
 	 *                         audio untouched and nothing is fetched from Plex over HTTP - so a thumbnail replaced by hand
 	 *                         survives, and a reload is a database read, not a download.
+	 * @param bool $pRefreshThumbs  take every episode through the full path whatever is stored, so each thumbnail is fetched or
+	 *                              grabbed again (the season page's Refresh Thumbnails). Rows are still reconciled by file path.
 	 * @return array Summary of what was found/stored, for the calling page's result display.
 	 */
-	public function reloadPlexEpisodes( bool $pDataOnly = false ): array {
+	public function reloadPlexEpisodes( bool $pDataOnly = false, bool $pRefreshThumbs = false ): array {
 		global $gBitSystem;
 		$summary = [ 'matched' => false, 'items' => [] ];
 
@@ -868,7 +870,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 			// to registering every real episode file already sitting in the season's own folder,
 			// rather than leaving the season stuck at the single seed episode registerFromDisk()
 			// planted. Without this, any non-catalogued show silently shows only its first episode.
-			return $this->registerEpisodesFromFilesystem( $pDataOnly );
+			return $this->registerEpisodesFromFilesystem( $pDataOnly, $pRefreshThumbs );
 		}
 		$plexDb = $plexMatch['db'];
 		$seasonMetadataItemId = $plexMatch['id'];
@@ -916,7 +918,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// Data-only reload: what is already stored for an episode that Plex does not supply (its thumbnail, the
 		// ffprobe resolution/audio) is kept, and no thumbnail is fetched or overwritten - a thumbnail replaced by hand
 		// stays. Only a new episode takes the full path below.
-		$existingEpisodes = $pDataOnly ? $this->keptEpisodeData() : [];
+		$existingEpisodes = $pDataOnly && !$pRefreshThumbs ? $this->keptEpisodeData() : [];
 
 		foreach( $episodeRows as $row ) {
 			if( !str_starts_with( $row['file'], $realRoot ) || !is_file( $row['file'] ) ) {
@@ -1019,7 +1021,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 				// independent of Plex's own naming.
 				\Bitweaver\KernelTools::mkdir_p( $imagesDir );
 				$fallbackFileName = pathinfo( $row['file'], PATHINFO_FILENAME ).'.jpg';
-				if( is_file( $imagesDir.$fallbackFileName ) ) {
+				if( !$pRefreshThumbs && is_file( $imagesDir.$fallbackFileName ) ) {
 					$episodeData['thumb'] = $fallbackFileName;
 				} else {
 					$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_ep_thumb_' );
