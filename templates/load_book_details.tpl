@@ -24,6 +24,30 @@
 			</div>
 		{/if}
 
+		{if $replaced !== null}
+			<div class="alert alert-info">
+				<p>{$replaced|@count} {tr}placeholder covers removed and looked for again{/tr}:</p>
+				<ul>
+					{foreach from=$replaced item=made}
+						<li><a href="{$made.url|escape}">{$made.title|escape}</a>:
+							{if $made.error}{$made.error|escape}
+							{elseif $made.items}{foreach from=$made.items item=line name=lines}{$line|escape}{if !$smarty.foreach.lines.last}; {/if}{/foreach}
+							{else}{tr}no real cover found - left without one{/tr}{/if}
+						</li>
+					{/foreach}
+				</ul>
+			</div>
+		{/if}
+
+		{if $blankCount}
+			{form legend="Placeholder covers" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php"}
+				<p>{$blankCount} {tr}books have a Google Books cover that is only the grey "image not available" picture. This removes the next{/tr} {$batchSize} {tr}of them (image, file and thumbnail) and looks for a real cover - Open Library first, then Google at a smaller size. A book with no real cover anywhere is left without one, ready for your own scan.{/tr}</p>
+				<div class="form-group submit">
+					<input type="submit" class="btn btn-default" name="replace_blank" value="{tr}Replace placeholder covers{/tr}" />
+				</div>
+			{/form}
+		{/if}
+
 		{if !$pendingCount}
 			<div class="alert alert-success"><p>{tr}Every book with an ISBN has an Open Library edition and an image.{/tr}</p></div>
 		{else}

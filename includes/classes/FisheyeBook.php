@@ -271,6 +271,11 @@ class FisheyeBook extends FisheyeMediaImage {
 		if( $title === '' ) {
 			return [ 'error' => 'A book needs a title.' ];
 		}
+		global $gBitDb;
+		if( !$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref_item` WHERE `content_type_guid` IN ( 'fisheyebook', 'fisheyemedia' ) AND `item` = 'isbn'" ) ) {
+			// Checked before anything is created, so an unapplied scheme leaves no half-made books behind.
+			return [ 'error' => 'The book xref scheme is not applied to this site - apply it from liberty/admin/admin_local_scheme.php first.' ];
+		}
 		if( $existing = self::findContentId( $pRow ) ) {
 			return [ 'already' => $existing ];
 		}
@@ -297,6 +302,10 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 
 		$counts = $book->reconcileBookXrefs( $pRow );
+		if( $book->mErrors ) {
+			// The xref scheme is not applied (or a restore wiped it): the book exists but holds none of its rows.
+			return [ 'error' => $pRow['title'].' - '.implode( '; ', array_unique( $book->mErrors ) ) ];
+		}
 		// An author who already has a contact (by name, pen name or birth name) is linked at once.
 		$counts['credits_linked'] = FisheyeBookCredits::linkBookCredits( (int)$book->mContentId );
 		return [ 'created' => $book->mContentId, 'linked' => $linked, 'counts' => $counts ];
@@ -414,6 +423,18 @@ class FisheyeBook extends FisheyeMediaImage {
 	}
 
 	/**
+	 * Called after an xref row is added by hand: the first image added to a book with no thumbnail yet becomes its thumbnail,
+	 * so there is no separate Set as Thumbnail press (the tile copy is made then and there). A book that already has one is
+	 * left alone - a later image only adds to the Images tab.
+	 */
+	public function xrefAdded( string $pItem, string $pXkeyExt ): void {
+		if( $pItem === 'image' && $pXkeyExt !== ''
+			&& !$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] ) ) {
+			$this->promoteImageToThumbnail( $pXkeyExt );
+		}
+	}
+
+	/**
 	 * Make one of the book's stored images its thumbnail (the Images tab's Set as Thumbnail) -
 	 * regenerates thumbs/ from the chosen file, as FisheyeAlbum::promoteImageToThumbnail() does.
 	 */
@@ -421,6 +442,11 @@ class FisheyeBook extends FisheyeMediaImage {
 		$branchPath = $this->getImageStorageBranchPath();
 		if( basename( $pRelativePath ) !== $pRelativePath || !is_file( $branchPath.$pRelativePath ) ) {
 			return false;
+		}
+		// No thumbnail attachment yet (a first attempt that failed, or a book with no Open Library cover): there is nothing
+		// to regenerate, so make it - attachThumbnail() stores the attachment and renders the thumbs from this file.
+		if( !$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] ) ) {
+			return $this->attachThumbnail( $branchPath.$pRelativePath );
 		}
 		foreach( glob( $branchPath.'thumbs/*' ) ?: [] as $oldThumb ) {
 			@unlink( $oldThumb );
@@ -441,6 +467,107 @@ class FisheyeBook extends FisheyeMediaImage {
 	 *
 	 * @return array{matched:bool, items:list<string>, error?:string}
 	 */
+	/** @var bool set when the cover server gave no response - the rest of the request skips covers */
+	private static bool $coversDown = false;
+
+	/**
+	 * A Google Books cover by ISBN, the largest real one: zoom 0 (about 600px), then 2 (300px), then 1 (128px). Where Google
+	 * has no picture at a size it answers with a stand-in instead of an error - a grey "image not available" page, a
+	 * different size at each zoom - so each answer is checked (isBlankCover()) and a stand-in passed over for the next
+	 * size. Zoom 3 is not asked for: it answers with a plain blank-book picture. Null when there is no real cover.
+	 */
+	private static function fetchGoogleCover( string $pWiki, string $pIsbn ): ?string {
+		foreach( [ 0, 2, 1 ] as $zoom ) {
+			$bytes = $pWiki::fetchOpenLibraryImage( 'https://books.google.com/books/content?vid=ISBN'.rawurlencode( $pIsbn ).'&printsec=frontcover&img=1&zoom='.$zoom );
+			if( $bytes !== null && !self::isBlankCover( $bytes ) ) {
+				return $bytes;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The books whose stored Google Books cover is a "no cover" stand-in (isBlankCover()) - covers fetched before the check
+	 * existed. Reads each stored file, so only ever the few books whose cover came from Google.
+	 *
+	 * @return list<int>
+	 */
+	public static function booksWithBlankGoogleCover(): array {
+		global $gBitDb;
+		$blank = [];
+		foreach( $gBitDb->getAll( "SELECT `content_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'image' AND `end_date` IS NULL AND `data` LIKE '%googlebooks:%' ORDER BY `content_id`" ) ?: [] as $row ) {
+			$book = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => (int)$row['content_id'] ] );
+			if( $book && $book->isValid() && method_exists( $book, 'dropBlankGoogleCover' ) ) {
+				$file = $book->getExtraImagePath( '' ).$row['xkey_ext'];
+				if( is_file( $file ) && self::isBlankCover( (string)file_get_contents( $file ) ) ) {
+					$blank[(int)$row['content_id']] = (int)$row['content_id'];
+				}
+			}
+		}
+		return array_values( $blank );
+	}
+
+	/**
+	 * Remove this book's Google Books cover if it is a "no cover" stand-in: the image row, its file and the thumbnail made from it,
+	 * so the tile shows a plain name tile (and the book counts as having no cover) until a real one is found. False if
+	 * there was nothing blank to remove.
+	 */
+	public function dropBlankGoogleCover(): bool {
+		$dropped = false;
+		foreach( $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) ?: [] as $row ) {
+			if( !str_contains( (string)$row['data'], 'googlebooks:' ) ) {
+				continue;
+			}
+			$file = $this->getExtraImagePath( '' ).$row['xkey_ext'];
+			if( !is_file( $file ) || !self::isBlankCover( (string)file_get_contents( $file ) ) ) {
+				continue;
+			}
+			$stepHash = [ 'xref_id' => (int)$row['xref_id'], 'expunge' => 3 ];
+			if( $this->stepXref( $stepHash ) ) {
+				@unlink( $file );
+				$dropped = true;
+			}
+		}
+		if( $dropped ) {
+			\Bitweaver\Liberty\LibertyMime::load();
+			foreach( array_keys( (array)$this->mStorage ) as $attachmentId ) {
+				$this->expungeAttachment( $attachmentId );
+			}
+		}
+		return $dropped;
+	}
+
+	/**
+	 * Whether an image is a "no cover" stand-in rather than a cover: shrunk to a small grid, almost every cell is white (the
+	 * grey "image not available" page) or none has any colour at all (a flat grey one). A real cover has colour or ink.
+	 */
+	private static function isBlankCover( string $pBytes ): bool {
+		if( !function_exists( 'imagecreatefromstring' ) || !( $im = @imagecreatefromstring( $pBytes ) ) ) {
+			return false;
+		}
+		$small = imagescale( $im, 24, 24 );
+		if( !$small ) {
+			return false;
+		}
+		$white = 0;
+		$colourful = 0;
+		for( $y = 0; $y < 24; $y++ ) {
+			for( $x = 0; $x < 24; $x++ ) {
+				$rgb = imagecolorat( $small, $x, $y );
+				$r = ( $rgb >> 16 ) & 255;
+				$g = ( $rgb >> 8 ) & 255;
+				$b = $rgb & 255;
+				if( min( $r, $g, $b ) >= 225 ) {
+					$white++;
+				}
+				if( max( $r, $g, $b ) - min( $r, $g, $b ) > 45 ) {
+					$colourful++;
+				}
+			}
+		}
+		return $white / 576 > 0.78 || $colourful === 0;
+	}
+
 	public function reloadFromOpenLibrary(): array {
 		$summary = [ 'matched' => false, 'items' => [] ];
 		$wiki = '\Bitweaver\Contactwiki\ContactWikiIndividual';
@@ -483,28 +610,67 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 		}
 
-		// A cover - by ISBN, then by the edition's own cover id. Only for a book with no image yet.
-		if( !$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) ) {
-			$urls = array_map( fn( $isbn ) => 'https://covers.openlibrary.org/b/isbn/'.$isbn.'-L.jpg?default=false', $isbns );
+		// A cover, for a book with no image yet. Open Library by the edition's own cover id first (not rate limited, unlike
+		// the by-ISBN route), then Open Library by ISBN, then Google Books by ISBN (zoom=0 is the large one) - a second
+		// source for when archive.org, which serves the Open Library covers, is not answering. covers.openlibrary.org goes
+		// quiet now and then (the connection just hangs): the first Open Library cover to get no response at all marks
+		// it down for a few minutes - here and on the next presses - so ten books do not each wait out several timeouts.
+		// Google can answer an unknown ISBN with another book's cover, so it is the last resort and the row says it came from there.
+		$hasImage = (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] );
+		if( !$hasImage ) {
+			$candidates = [];
 			foreach( (array)( $edition['covers'] ?? [] ) as $coverId ) {
 				if( (int)$coverId > 0 ) {
-					$urls[] = 'https://covers.openlibrary.org/b/id/'.(int)$coverId.'-L.jpg?default=false';
+					$candidates[] = [ 'url' => 'https://covers.openlibrary.org/b/id/'.(int)$coverId.'-L.jpg?default=false', 'source' => 'openlibrary:'.$isbns[0], 'ol' => true ];
 					break;
 				}
 			}
-			foreach( $urls as $url ) {
+			foreach( $isbns as $isbn ) {
+				$candidates[] = [ 'url' => 'https://covers.openlibrary.org/b/isbn/'.$isbn.'-L.jpg?default=false', 'source' => 'openlibrary:'.$isbn, 'ol' => true ];
+			}
+			foreach( $isbns as $isbn ) {
+				$candidates[] = [ 'url' => '', 'isbn' => $isbn, 'source' => 'googlebooks:'.$isbn, 'ol' => false ];
+			}
+			$olDown = self::$coversDown || ( function_exists( 'apcu_fetch' ) && apcu_fetch( 'fm_ol_covers_down' ) );
+			$olSkipped = false;
+			foreach( $candidates as $candidate ) {
+				if( $candidate['ol'] && $olDown ) {
+					$olSkipped = true;
+					continue;
+				}
 				usleep( 300000 );
-				$bytes = $wiki::fetchOpenLibraryImage( $url );
+				$bytes = $candidate['ol'] ? $wiki::fetchOpenLibraryImage( $candidate['url'] ) : self::fetchGoogleCover( $wiki, $candidate['isbn'] );
 				if( $bytes === null ) {
+					if( $candidate['ol'] && str_contains( (string)$wiki::getLastFetchError(), 'no response' ) ) {
+						$olDown = self::$coversDown = true;
+						$olSkipped = true;
+						if( function_exists( 'apcu_store' ) ) {
+							apcu_store( 'fm_ol_covers_down', 1, 300 );
+						}
+					}
 					continue;
 				}
 				$tmp = tempnam( sys_get_temp_dir(), 'olcover_' );
 				file_put_contents( $tmp, $bytes );
-				if( $this->storeArtworkXref( $tmp, 'openlibrary-cover', 'openlibrary:'.$isbns[0], [ 'types' => [ 'Front' ] ] ) ) {
-					$summary['items'][] = 'image: Open Library cover'.( $this->attachThumbnail( $tmp ) ? ' (thumbnail)' : '' );
+				if( $this->storeArtworkXref( $tmp, 'openlibrary-cover', $candidate['source'], [ 'types' => [ 'Front' ] ] ) ) {
+					$summary['items'][] = 'image: '.( $candidate['ol'] ? 'Open Library' : 'Google Books' ).' cover'.( $this->attachThumbnail( $tmp ) ? ' (thumbnail)' : ' - no thumbnail: '.$this->mThumbnailError );
+					$hasImage = true;
 				}
 				@unlink( $tmp );
 				break;
+			}
+			if( !$hasImage && $olSkipped ) {
+				$summary['items'][] = 'image: Open Library covers are not answering and Google Books had none - left for the Book Details page';
+			}
+		} elseif( !$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] ) ) {
+			// The cover is stored but the tile's thumbnail never attached (a failed first attempt) - tried again from the
+			// stored file, so a Reload fixes it rather than skipping because an image row exists.
+			$stored = $this->mDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] );
+			$file = $stored ? $this->getExtraImagePath( '' ).$stored : '';
+			if( $file !== '' && is_file( $file ) ) {
+				$summary['items'][] = 'image: thumbnail'.( $this->attachThumbnail( $file ) ? ' attached' : ' not attached: '.$this->mThumbnailError );
+			} else {
+				$summary['items'][] = 'image: thumbnail not attached: the stored cover file is missing';
 			}
 		}
 		return $summary;

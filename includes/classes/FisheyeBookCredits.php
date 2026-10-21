@@ -206,7 +206,7 @@ class FisheyeBookCredits {
 	 * @param list<array> $pRows  FisheyeBookCatalogue::cached()['rows']
 	 * @return array<string,array{name:string,roles:array<string,int>,books:array<int,string>,isbns:array<string,string>,xref_ids:list<int>}>
 	 */
-	public static function sheetPeople( array $pRows ): array {
+	public static function sheetPeople( array $pRows, bool $pIncludeLinked = false ): array {
 		$people = [];
 		foreach( $pRows as $n => $row ) {
 			foreach( (array)( $row['authors'] ?? [] ) as $name ) {
@@ -235,7 +235,9 @@ class FisheyeBookCredits {
 			$person['variants'] = array_keys( $person['variants'] );
 		}
 		unset( $person );
-		$people = array_filter( $people, fn( $p ) => self::authorContactFor( $p['name'] ) === null );
+		if( !$pIncludeLinked ) {
+			$people = array_filter( $people, fn( $p ) => self::authorContactFor( $p['name'] ) === null );
+		}
 		uasort( $people, fn( $a, $b ) => [ count( $b['books'] ), $a['name'] ] <=> [ count( $a['books'] ), $b['name'] ] );
 		return $people;
 	}
@@ -315,6 +317,15 @@ class FisheyeBookCredits {
 	}
 
 	/**
+	 * The Wikidata id of the contact an author name belongs to, or '' when there is no (certain) contact or it has none.
+	 */
+	public static function authorQid( string $pName ): string {
+		global $gBitDb;
+		$contactId = self::authorContactFor( $pName );
+		return $contactId ? (string)$gBitDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'wikidata' AND `end_date` IS NULL", [ $contactId ] ) : '';
+	}
+
+	/**
 	 * Record on an author's gallery which contact is the author: the contact's content_id, kept as the gallery's
 	 * 'author_contact_id' preference, so the gallery's title can link straight to the contact page with no lookup
 	 * (FisheyeMediaGallery::getAuthorContactUrl()). Idempotent.
@@ -344,6 +355,118 @@ class FisheyeBookCredits {
 			[ $topContentId, $pTitle ]
 		);
 		return $id ? (int)$id : null;
+	}
+
+	/**
+	 * The Library gallery with this title, made (library layout, directly under the top-level Library gallery)
+	 * when it is not there yet.
+	 *
+	 * @return array{content_id:?int,created:bool,error:?string}
+	 */
+	public static function findOrCreateLibraryGallery( string $pTitle ): array {
+		$existing = self::libraryGalleryFor( $pTitle );
+		if( $existing ) {
+			return [ 'content_id' => $existing, 'created' => false, 'error' => null ];
+		}
+		$topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
+		if( !$topGalleryId ) {
+			return [ 'content_id' => null, 'created' => false, 'error' => \Bitweaver\KernelTools::tra( 'There is no top-level Library gallery to file books under.' ) ];
+		}
+		$gallery = new FisheyeMediaGallery();
+		$storeHash = [ 'title' => $pTitle, 'gallery_pagination' => FISHEYE_PAGINATION_LIBRARY_GRID ];
+		if( !$gallery->store( $storeHash ) ) {
+			return [ 'content_id' => null, 'created' => false, 'error' => $pTitle.' - '.implode( '; ', $gallery->mErrors ) ];
+		}
+		$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_LIBRARY_GRID );
+		$gallery->addToGalleries( [ $topGalleryId ] );
+		return [ 'content_id' => (int)$gallery->mContentId, 'created' => true, 'error' => null ];
+	}
+
+	/**
+	 * File a book in the Library gallery of every author credited on it who has one - a co-author's gallery
+	 * carries the book beside the primary author's. Adding is idempotent, so it can be run over any book again.
+	 *
+	 * @param list<string> $pAuthorNames  the names as credited
+	 * @return int  galleries the book was added to
+	 */
+	public static function fileInAuthorGalleries( int $pBookContentId, array $pAuthorNames ): int {
+		$added = 0;
+		$seen = [];
+		foreach( $pAuthorNames as $name ) {
+			$title = self::canonicalName( (string)$name );
+			if( $title === '' || isset( $seen[mb_strtolower( $title )] ) ) {
+				continue;
+			}
+			$seen[mb_strtolower( $title )] = true;
+			if( !( $galleryContentId = self::libraryGalleryFor( $title ) ) ) {
+				continue;
+			}
+			$gallery = new FisheyeGallery( null, $galleryContentId );
+			$gallery->load();
+			if( !self::isInSeriesOf( $pBookContentId, $galleryContentId ) && $gallery->addItem( $pBookContentId ) ) {
+				$added++;
+			}
+		}
+		return $added;
+	}
+
+	/**
+	 * Whether a book already sits in one of the series galleries under this author's gallery. Filing it in the author's
+	 * own list as well would put it at the top level again beside its series.
+	 */
+	public static function isInSeriesOf( int $pBookContentId, int $pGalleryContentId ): bool {
+		global $gBitDb;
+		return (bool)(int)$gBitDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` inSeries
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` underGallery ON underGallery.`item_content_id` = inSeries.`gallery_content_id`
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` series ON series.`content_id` = inSeries.`gallery_content_id`
+			 WHERE inSeries.`item_content_id` = ? AND underGallery.`gallery_content_id` = ? AND series.`content_type_guid` = 'fisheyeseries'",
+			[ $pBookContentId, $pGalleryContentId ]
+		);
+	}
+
+	/**
+	 * File every book already loaded that credits this author (as primary author or co-author) in the
+	 * author's gallery - used when the gallery is made, or when a co-author's gallery is opened, so books
+	 * loaded earlier under another author's name turn up here too.
+	 *
+	 * @param list<array> $pRows  catalogue rows
+	 * @return int  books added
+	 */
+	public static function fileCreditedBooks( array $pRows, int $pGalleryContentId, string $pAuthorName ): int {
+		$gallery = new FisheyeGallery( null, $pGalleryContentId );
+		$gallery->load();
+		$key = mb_strtolower( self::canonicalName( $pAuthorName ) );
+		$added = 0;
+		foreach( $pRows as $row ) {
+			$credited = array_filter( (array)( $row['authors'] ?? [] ), fn( $n ) => mb_strtolower( self::canonicalName( (string)$n ) ) === $key );
+			if( !$credited || !( $bookId = FisheyeBook::findContentId( $row ) ) ) {
+				continue;
+			}
+			// A book already in one of this author's series stays there, not in the author's own list as well.
+			if( !self::isInSeriesOf( (int)$bookId, $pGalleryContentId ) && $gallery->addItem( $bookId ) ) {
+				$added++;
+			}
+		}
+		return $added;
+	}
+
+	/**
+	 * Authors on the catalogue that already have a contact but no Library gallery, and enough credited books
+	 * to deserve one - the ones made before the authors pass filed a gallery with the contact.
+	 *
+	 * @return array<string,array{name:string,contact_id:int,books:int}>  keyed by gallery title
+	 */
+	public static function authorsWithoutGallery( array $pRows ): array {
+		$out = [];
+		foreach( self::sheetPeople( $pRows, true ) as $person ) {
+			$contactId = self::authorContactFor( $person['name'] );
+			$title = self::canonicalName( $person['name'] );
+			if( $contactId && count( $person['books'] ) >= FisheyeBookCatalogue::MIN_AUTHOR_BOOKS && !self::libraryGalleryFor( $title ) ) {
+				$out[$title] = [ 'name' => $title, 'contact_id' => $contactId, 'books' => count( $person['books'] ) ];
+			}
+		}
+		return $out;
 	}
 
 	/**

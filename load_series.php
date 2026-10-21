@@ -106,46 +106,72 @@ if( !empty( $_REQUEST['move_books'] ) ) {
 	$childIds = array_column( load_series_children( $authorContentId ), 'content_id' );
 	$containers = array_merge( [ $authorContentId ], $childIds );
 	$touched = [];
-	foreach( (array)( $_REQUEST['move'] ?? [] ) as $bookId => $target ) {
-		$bookId = (int)$bookId;
-		$target = $decode( $target );
-		if( $target === '' ) {
-			continue;
+	// move[<group the book is listed under>][<book>] = where to send it - keyed by group because a book that sits in the
+	// author's own list AND a series is listed under both, and one field name for it let the unchanged second select
+	// override the choice made on the first.
+	$moves = [];
+	foreach( (array)( $_REQUEST['move'] ?? [] ) as $fromKey => $byBook ) {
+		foreach( (array)$byBook as $bookId => $target ) {
+			if( $decode( $target ) !== '' ) {
+				$moves[] = [ $decode( $fromKey ), (int)$bookId, $decode( $target ) ];
+			}
+		}
+	}
+	foreach( $moves as [ $fromKey, $bookId, $target ] ) {
+		if( $target === 'new' ) {
+			// A series started from here: the name typed beside the choices, made once and reused for every book sent to it.
+			$newName = $decode( $_REQUEST['new_series_name'] ?? '' );
+			if( $newName === '' ) {
+				$moveResult['errors'][] = $bookId.' - '.KernelTools::tra( 'give the new series a name' );
+				continue;
+			}
+			if( !isset( $newSeries ) ) {
+				$into = FisheyeSeries::findOrCreateUnder( $newName, $authorContentId );
+				if( !$into['series'] ) {
+					$moveResult['errors'][] = $newName.' - '.$into['error'];
+					continue;
+				}
+				$newSeries = (int)$into['series']->mContentId;
+				$containers[] = $newSeries;
+			}
+			$target = (string)$newSeries;
 		}
 		$targetId = $target === 'author' ? $authorContentId : (int)$target;
-		if( !in_array( $targetId, $containers, true ) ) {
+		$currentId = $fromKey === 'author' ? $authorContentId : (int)$fromKey;
+		if( !in_array( $targetId, $containers, true ) || !in_array( $currentId, $containers, true ) ) {
 			$moveResult['errors'][] = $bookId.' - '.KernelTools::tra( 'not a series of this author' );
 			continue;
 		}
-		// Where the book is now, among this author's own list and series (it may also be filed elsewhere,
-		// which is left alone).
-		$currentId = null;
-		foreach( $containers as $containerId ) {
-			if( $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `gallery_content_id` = ? AND `item_content_id` = ?", [ $containerId, $bookId ] ) ) {
-				$currentId = $containerId;
-				break;
-			}
+		if( $currentId === $targetId ) {
+			continue;
 		}
-		if( $currentId === null || $currentId === $targetId ) {
+		// The book must really be in the place it is being moved out of (it may also be filed elsewhere, which is left alone).
+		if( !$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `gallery_content_id` = ? AND `item_content_id` = ?", [ $currentId, $bookId ] ) ) {
 			continue;
 		}
 		$to = $targetId === $authorContentId ? $gContent : new FisheyeSeries( null, $targetId );
 		$from = $currentId === $authorContentId ? $gContent : new FisheyeSeries( null, $currentId );
+		// Loaded whatever isValid() says: isInGallery() needs the gallery id load() fills in, and answers false without it.
 		foreach( [ $to, $from ] as $gallery ) {
-			if( !$gallery->isValid() ) {
+			if( !is_numeric( $gallery->mGalleryId ) ) {
 				$gallery->load();
 			}
 		}
+		// A book already in the target (listed twice, in the author's list and its series) is only taken out of where it
+		// is leaving - nothing is added, so the target's order is left as it is.
+		$wasThere = $to->isInGallery( $targetId, $bookId );
 		$to->addItem( $bookId );
 		if( $to->isInGallery( $targetId, $bookId ) ) {
 			$from->removeItem( $bookId );
 			$moveResult['moved']++;
-			$touched[$targetId] = $touched[$currentId] = true;
+			if( !$wasThere ) {
+				$touched[$targetId] = true;
+			}
 		} else {
 			$moveResult['errors'][] = $bookId.' - '.KernelTools::tra( 'could not be added to that series' );
 		}
 	}
-	// Publication order again in every series a book left or joined.
+	// Publication order again in every series that gained a book (one only losing a book keeps its order).
 	foreach( array_keys( $touched ) as $containerId ) {
 		if( $containerId !== $authorContentId ) {
 			$series = new FisheyeSeries( null, $containerId );
@@ -171,13 +197,22 @@ if( $folder !== '' && !empty( $_REQUEST['create_series'] ) ) {
 			continue;
 		}
 		$name = $decode( $_REQUEST['series_name'][$i] ?? '' ) ?: $entry['name'];
-		$made = FisheyeMediaGallery::findOrCreateNestedGallery( $name, $authorContentId, FISHEYE_PAGINATION_LIBRARY_GRID, FisheyeSeries::class );
-		if( !empty( $made['error'] ) ) {
-			$result['errors'][] = $name.' - '.$made['error'];
-			continue;
+		// "Put in": an existing series of this author, or (blank) a series of the name given.
+		$targetId = (int)( $_REQUEST['series_target'][$i] ?? 0 );
+		if( $targetId && in_array( $targetId, array_column( load_series_children( $authorContentId ), 'content_id' ), true ) ) {
+			$series = new FisheyeSeries( null, $targetId );
+			$series->load();
+			$name = $series->getTitle();
+			$made = [ 'already' => true ];
+		} else {
+			$into = FisheyeSeries::findOrCreateUnder( $name, $authorContentId );
+			if( !$into['series'] ) {
+				$result['errors'][] = $name.' - '.$into['error'];
+				continue;
+			}
+			$series = $into['series'];
+			$made = [ 'already' => !$into['created'] ];
 		}
-		$series = new FisheyeSeries( null, (int)$made['content_id'] );
-		$series->load();
 		$moved = 0;
 		foreach( $entry['books'] as $book ) {
 			$series->addItem( $book['content_id'] );
@@ -204,6 +239,29 @@ if( $proposal ) {
 
 // Every book under this author and where it is now, for the rearrange form.
 $seriesTargets = load_series_children( $authorContentId );
+foreach( $seriesTargets as $i => $target ) {
+	$seriesTargets[$i]['count'] = (int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `gallery_content_id` = ?", [ $target['content_id'] ] );
+}
+// Each proposed series against what exists: the series of the same name is preselected as where to put it, else one the
+// name starts with ("Acorna's Children" for "Acorna") - flagged as only similar. A new series is the fallback.
+if( $proposal ) {
+	foreach( $proposal['series'] as $i => $entry ) {
+		$key = FisheyeSeries::seriesKey( $entry['name'] );
+		$proposal['series'][$i]['target'] = 0;
+		$proposal['series'][$i]['similar'] = false;
+		foreach( $seriesTargets as $target ) {
+			if( FisheyeSeries::seriesKey( $target['title'] ) === $key ) {
+				$proposal['series'][$i]['target'] = $target['content_id'];
+				$proposal['series'][$i]['similar'] = false;
+				break;
+			}
+			if( !$proposal['series'][$i]['target'] && $key !== '' && FisheyeSeries::seriesKey( $target['title'] ) !== '' && str_starts_with( $key, FisheyeSeries::seriesKey( $target['title'] ) ) ) {
+				$proposal['series'][$i]['target'] = $target['content_id'];
+				$proposal['series'][$i]['similar'] = true;
+			}
+		}
+	}
+}
 $rearrange = [ [ 'key' => 'author', 'title' => KernelTools::tra( 'Not in a series' ), 'books' => load_series_books_in( $authorContentId ) ] ];
 foreach( $seriesTargets as $child ) {
 	$rearrange[] = [ 'key' => (string)$child['content_id'], 'title' => $child['title'], 'books' => load_series_books_in( $child['content_id'] ) ];

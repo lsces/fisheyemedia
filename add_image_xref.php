@@ -55,6 +55,9 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 				);
 				$xrefHash = [ 'content_id' => $gContent->mContentId, 'item' => 'image', 'xkey_ext' => $relativePath, 'xorder' => $nextXorder ];
 				if( $gContent->storeXref( $xrefHash ) ) {
+					if( method_exists( $gContent, 'xrefAdded' ) ) {
+						$gContent->xrefAdded( 'image', $relativePath );
+					}
 					KernelTools::bit_redirect( $gContent->getEditUrl() );
 				}
 			}

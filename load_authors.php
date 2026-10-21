@@ -53,6 +53,8 @@ if( $gallery && !$gallery->isValid() ) {
 	$gallery = null;
 }
 $galleryContentId = $gallery ? (int)$gallery->mContentId : null;
+// A catalogue uploaded here is read straight away, so the authors pass does not need the book loader first.
+$import = $galleryContentId ? null : FisheyeBookCatalogue::importUploaded();
 // The spreadsheet when there is one and no single gallery was asked for; else the credits of the loaded books.
 $catalogue = $galleryContentId ? [ 'rows' => [], 'file' => null ] : FisheyeBookCatalogue::cached();
 $fromSheet = !empty( $catalogue['rows'] );
@@ -63,6 +65,20 @@ if( $gallery && ( $existingContactId = FisheyeBookCredits::authorContactFor( $ga
 	FisheyeBookCredits::linkGalleryToContact( $galleryContentId, $existingContactId );
 }
 $start = max( 0, (int)( $_REQUEST['start'] ?? 0 ) );
+
+// Authors made earlier have a contact but no gallery: one press makes them, with the books already loaded.
+$galleriesMade = [];
+if( $fromSheet && !empty( $_REQUEST['make_galleries'] ) ) {
+	foreach( FisheyeBookCredits::authorsWithoutGallery( $catalogue['rows'] ) as $author ) {
+		$made = FisheyeBookCredits::findOrCreateLibraryGallery( $author['name'] );
+		if( $made['content_id'] ) {
+			FisheyeBookCredits::linkGalleryToContact( $made['content_id'], $author['contact_id'] );
+			$filed = FisheyeBookCredits::fileCreditedBooks( $catalogue['rows'], $made['content_id'], $author['name'] );
+			$galleriesMade[] = [ 'name' => $author['name'], 'filed' => $filed ];
+		}
+	}
+}
+$withoutGallery = $fromSheet ? FisheyeBookCredits::authorsWithoutGallery( $catalogue['rows'] ) : [];
 
 $result = null;
 if( !empty( $_REQUEST['create_authors'] ) ) {
@@ -119,7 +135,25 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 				}
 			}
 		}
-		$result['done'][] = [ 'name' => $person['name'], 'contact' => FisheyeBookCredits::contactName( (int)$contact->mContentId ), 'url' => $contact->getDisplayUrl(), 'linked' => $linked, 'books' => count( $person['books'] ) ];
+		// A new author with enough books credited on the catalogue (as author or co-author) gets a Library gallery
+		// now, with the books already loaded that credit them, so the books can be loaded from it (its Add Books
+		// icon) straight after.
+		$galleryUrl = '';
+		if( $fromSheet && count( $person['books'] ) >= FisheyeBookCatalogue::MIN_AUTHOR_BOOKS ) {
+			FisheyeBookCredits::resetCache();
+			$galleryTitle = FisheyeBookCredits::canonicalName( $person['name'] );
+			$made = FisheyeBookCredits::findOrCreateLibraryGallery( $galleryTitle );
+			if( $made['content_id'] ) {
+				FisheyeBookCredits::linkGalleryToContact( $made['content_id'], (int)$contact->mContentId );
+				FisheyeBookCredits::fileCreditedBooks( $catalogue['rows'], $made['content_id'], $galleryTitle );
+				$libraryGallery = new \Bitweaver\Fisheye\FisheyeGallery( null, $made['content_id'] );
+				$libraryGallery->load();
+				$galleryUrl = $libraryGallery->getDisplayUrl();
+			} elseif( $made['error'] ) {
+				$result['errors'][] = $made['error'];
+			}
+		}
+		$result['done'][] = [ 'name' => $person['name'], 'contact' => FisheyeBookCredits::contactName( (int)$contact->mContentId ), 'url' => $contact->getDisplayUrl(), 'linked' => $linked, 'books' => count( $person['books'] ), 'gallery' => $galleryUrl ];
 	}
 	// Whoever is now linked drops out of the list; anyone left for now stays on it.
 	FisheyeBookCredits::resetCache();
@@ -159,6 +193,9 @@ $gBitSmarty->assign( 'nextStart', $start + LOAD_AUTHORS_LIST_PAGE < count( $peop
 $gBitSmarty->assign( 'galleryId', $gallery ? $gallery->mGalleryId : 0 );
 $gBitSmarty->assign( 'galleryTitle', $gallery ? $gallery->getTitle() : '' );
 $gBitSmarty->assign( 'galleryUrl', $gallery ? $gallery->getDisplayUrl() : '' );
+$gBitSmarty->assign( 'import', $import );
+$gBitSmarty->assign( 'galleriesMade', $galleriesMade );
+$gBitSmarty->assign( 'withoutGallery', $withoutGallery );
 $gBitSmarty->assign( 'fromSheet', $fromSheet );
 $gBitSmarty->assign( 'sheetFile', $catalogue['file'] );
 $gBitSmarty->assign( 'unlinkedCount', count( $people ) );

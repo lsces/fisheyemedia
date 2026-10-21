@@ -16,6 +16,9 @@
 namespace Bitweaver\Fisheyemedia;
 
 class FisheyeBookCatalogue {
+	/** An author needs at least this many books in the catalogue to get a gallery of their own. */
+	public const MIN_AUTHOR_BOOKS = 2;
+
 
 	const NS_TABLE  = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
 	const NS_TEXT   = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
@@ -65,6 +68,54 @@ class FisheyeBookCatalogue {
 	}
 
 	/**
+	 * Split the catalogue rows into the groups they are filed under - 'a|<author>' galleries for
+	 * authors with enough books, 'c|<category>' galleries for the rest.
+	 *
+	 * @return array<string,array{kind:string,name:string,rows:list<array>}>
+	 */
+	public static function plan( array $pRows ): array {
+		$perAuthor = [];
+		foreach( $pRows as $row ) {
+			$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
+			if( $author !== '' ) {
+				$perAuthor[mb_strtolower( $author )] = ( $perAuthor[mb_strtolower( $author )] ?? 0 ) + 1;
+			}
+		}
+		$groups = [];
+		foreach( $pRows as $row ) {
+			$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
+			if( $author !== '' && $perAuthor[mb_strtolower( $author )] >= self::MIN_AUTHOR_BOOKS ) {
+				$key = 'a|'.mb_strtolower( $author );
+				$groups[$key] ??= [ 'kind' => 'author', 'name' => $author, 'rows' => [] ];
+			} else {
+				$category = $row['category'][0] ?? '';
+				$name = $category !== '' ? $category : \Bitweaver\KernelTools::tra( 'Uncategorised' );
+				$key = 'c|'.mb_strtolower( $name );
+				$groups[$key] ??= [ 'kind' => 'category', 'name' => $name, 'rows' => [] ];
+			}
+			$groups[$key]['rows'][] = $row;
+		}
+		// Authors before categories, the biggest first so the main authors come up top.
+		uasort( $groups, fn( $a, $b ) => [ $a['kind'], -count( $a['rows'] ), mb_strtolower( $a['name'] ) ] <=> [ $b['kind'], -count( $b['rows'] ), mb_strtolower( $b['name'] ) ] );
+		return $groups;
+	}
+
+	/**
+	 * Handle a catalogue upload posted by either loader page ('catalogue_file'), or null when none was sent.
+	 *
+	 * @return array{rows:int,error:?string,file:?string}|null
+	 */
+	public static function importUploaded(): ?array {
+		if( empty( $_FILES['catalogue_file']['tmp_name'] ) ) {
+			return null;
+		}
+		if( !is_uploaded_file( $_FILES['catalogue_file']['tmp_name'] ) || strtolower( pathinfo( (string)$_FILES['catalogue_file']['name'], PATHINFO_EXTENSION ) ) !== 'ods' ) {
+			return [ 'rows' => 0, 'error' => \Bitweaver\KernelTools::tra( 'Please choose an .ods spreadsheet.' ), 'file' => null ];
+		}
+		return self::importFile( $_FILES['catalogue_file']['tmp_name'] );
+	}
+
+	/**
 	 * The newest archived sheet's rows, or none when nothing has been uploaded yet.
 	 *
 	 * @return array{imported:int,file:?string,rows:list<array>}
@@ -104,6 +155,7 @@ class FisheyeBookCatalogue {
 
 		$header = null;
 		$rows = [];
+		$seen = [];
 		foreach( $sheet->getElementsByTagNameNS( self::NS_TABLE, 'table-row' ) as $tableRow ) {
 			$cells = [];
 			foreach( $tableRow->childNodes as $cell ) {
@@ -139,7 +191,13 @@ class FisheyeBookCatalogue {
 				$raw[$key] = $cells[$i] ?? '';
 			}
 			if( ( $raw['title'] ?? '' ) !== '' ) {
-				$rows[] = self::toRegisterRow( $raw );
+				$row = self::toRegisterRow( $raw );
+				// The same edition listed under two collections is one book: keep the first row.
+				$key = $row['isbn13'] !== '' ? $row['isbn13'] : mb_strtolower( $row['title'].'|'.( $row['authors'][0] ?? '' ) );
+				if( !isset( $seen[$key] ) ) {
+					$seen[$key] = true;
+					$rows[] = $row;
+				}
 			}
 		}
 		return [ 'rows' => $rows ];
@@ -221,6 +279,10 @@ class FisheyeBookCatalogue {
 			if( trim( (string)( $pEdition[$field] ?? '' ) ) !== '' ) {
 				$ret[$item] = [ 'xkey_ext' => trim( (string)$pEdition[$field] ) ];
 			}
+		}
+		// "Dragonriders of Pern (5)" - the series text as Open Library holds it, split later by FisheyeSeries::parseSeriesText().
+		if( trim( (string)( $pEdition['series'][0] ?? '' ) ) !== '' ) {
+			$ret['series'] = [ 'xkey_ext' => trim( (string)$pEdition['series'][0] ) ];
 		}
 		$code = basename( (string)( $pEdition['languages'][0]['key'] ?? '' ) );
 		if( $code !== '' ) {

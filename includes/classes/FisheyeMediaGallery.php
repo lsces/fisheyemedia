@@ -303,14 +303,37 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * The Edit page ticks a gallery's parents from a list that does not reliably include an author's gallery, and
+	 * addToGalleries() deletes every parent left unticked - so saving a library author or series gallery (to rename it,
+	 * say) quietly detached it from its place. Those galleries only ever sit where the load pages put them, so their
+	 * existing parents are always kept; moving is done from the series Rearrange form, not the Edit page.
+	 *
+	 * @param array|null $pGalleryArray
+	 */
+	public function addToGalleries( $pGalleryArray ) {
+		if( $this->isValid() && $this->getLayout() === FISHEYE_PAGINATION_LIBRARY_GRID ) {
+			$keep = $this->mDb->getCol(
+				"SELECT fg.`gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` fgim
+				 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery` fg ON fg.`content_id` = fgim.`gallery_content_id`
+				 WHERE fgim.`item_content_id` = ?", [ $this->mContentId ] );
+			$pGalleryArray = array_values( array_unique( array_merge( is_array( $pGalleryArray ) ? $pGalleryArray : [], $keep ) ) );
+		}
+		return parent::addToGalleries( $pGalleryArray );
+	}
+
+	/**
 	 * An artist/composer page (music_grid, anything but the top-level "Music" pool - same split as
-	 * fisheye_music_grid_inc.tpl) shows every item in strips, never a grid page - so load them all
-	 * up front rather than the 4*8 first page, which silently dropped everything past the 32nd.
+	 * fisheye_music_grid_inc.tpl) or a library author/series page (library_grid, anything but the top-level
+	 * "Library" pool) shows every item in strips, never a grid page - so load them all up front rather than
+	 * the 4*8 first page, which silently dropped everything past the 32nd.
 	 *
 	 * @param array $pListHash
 	 */
 	public function prepDisplayList( array &$pListHash ): void {
-		if( $this->getLayout() === FISHEYE_PAGINATION_MUSIC_GRID && $this->getTitle() !== 'Music' ) {
+		// An artist's, author's or series' page lays every item out in strips, so it loads them all; only the top-level
+		// 'Music' and 'Library' pools are paged grids.
+		if( ( $this->getLayout() === FISHEYE_PAGINATION_MUSIC_GRID && $this->getTitle() !== 'Music' )
+			|| ( $this->getLayout() === FISHEYE_PAGINATION_LIBRARY_GRID && $this->getTitle() !== 'Library' ) ) {
 			$pListHash['page'] = -1;
 			$pListHash['offset'] = 0;
 			$pListHash['max_records'] = -1;

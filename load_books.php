@@ -23,6 +23,7 @@ namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\KernelTools;
 use Bitweaver\Fisheye\FisheyeGallery;
+use Bitweaver\Fisheye\FisheyeImage;
 
 require_once '../kernel/includes/setup_inc.php';
 
@@ -32,74 +33,32 @@ $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 
 const LOAD_BOOKS_BATCH = 10;
 const LOAD_BOOKS_GROUPS_SHOWN = 30;
-// An author needs at least this many books in the catalogue to get a gallery of their own.
-const LOAD_BOOKS_MIN_AUTHOR_BOOKS = 2;
-
-/**
- * Split the catalogue rows into the groups they are filed under - 'a|<author>' galleries for
- * authors with enough books, 'c|<category>' galleries for the rest.
- *
- * @return array<string,array{kind:string,name:string,rows:list<array>}>
- */
-function load_books_plan( array $pRows ): array {
-	$perAuthor = [];
-	foreach( $pRows as $row ) {
-		$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
-		if( $author !== '' ) {
-			$perAuthor[mb_strtolower( $author )] = ( $perAuthor[mb_strtolower( $author )] ?? 0 ) + 1;
-		}
-	}
-	$groups = [];
-	foreach( $pRows as $row ) {
-		$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
-		if( $author !== '' && $perAuthor[mb_strtolower( $author )] >= LOAD_BOOKS_MIN_AUTHOR_BOOKS ) {
-			$key = 'a|'.mb_strtolower( $author );
-			$groups[$key] ??= [ 'kind' => 'author', 'name' => $author, 'rows' => [] ];
-		} else {
-			$category = $row['category'][0] ?? '';
-			$name = $category !== '' ? $category : KernelTools::tra( 'Uncategorised' );
-			$key = 'c|'.mb_strtolower( $name );
-			$groups[$key] ??= [ 'kind' => 'category', 'name' => $name, 'rows' => [] ];
-		}
-		$groups[$key]['rows'][] = $row;
-	}
-	uasort( $groups, fn( $a, $b ) => [ $a['kind'], mb_strtolower( $a['name'] ) ] <=> [ $b['kind'], mb_strtolower( $b['name'] ) ] );
-	return $groups;
-}
-
-/**
- * The gallery with this title directly under the top-level Library gallery, if there is one.
- */
-function load_books_gallery_content_id( string $pTitle, int $pTopContentId ): ?int {
-	global $gBitDb;
-	$id = $gBitDb->getOne(
-		"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` fgim
-		 INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = fgim.`item_content_id`
-		 WHERE fgim.`gallery_content_id` = ? AND lc.`title` = ? AND lc.`content_type_guid` IN ( 'fisheyemediagal', 'fisheyegallery' )",
-		[ $pTopContentId, $pTitle ]
-	);
-	return $id ? (int)$id : null;
-}
 
 $topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
 $topContentId = $topGalleryId ? (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topGalleryId ] ) : 0;
 
-$import = null;
+$import = FisheyeBookCatalogue::importUploaded();
 $result = null;
 
-if( !empty( $_FILES['catalogue_file']['tmp_name'] ) ) {
-	if( !is_uploaded_file( $_FILES['catalogue_file']['tmp_name'] ) || strtolower( pathinfo( (string)$_FILES['catalogue_file']['name'], PATHINFO_EXTENSION ) ) !== 'ods' ) {
-		$import = [ 'rows' => 0, 'error' => KernelTools::tra( 'Please choose an .ods spreadsheet.' ) ];
-	} else {
-		$import = FisheyeBookCatalogue::importFile( $_FILES['catalogue_file']['tmp_name'] );
-	}
-}
+// Series grouping: on by default, with the umbrella choices (FisheyeSeries::umbrellas()) the page last posted, or their
+// defaults. Posted back by the "Series" form and carried through every Process press.
+$seriesForm = isset( $_REQUEST['series_form'] );
+$useSeries = !$seriesForm || !empty( $_REQUEST['use_series'] );
+$splitChosen = $seriesForm ? array_map( 'strval', array_keys( (array)( $_REQUEST['split'] ?? [] ) ) ) : null;
 
 $catalogue = FisheyeBookCatalogue::cached();
-$groups = load_books_plan( $catalogue['rows'] );
+$groups = FisheyeBookCatalogue::plan( $catalogue['rows'] );
+
+// From an author's gallery (gallery_id): only that author's books are offered, and the group is the one
+// named for the gallery.
+$authorGallery = !empty( $_REQUEST['gallery_id'] ) ? FisheyeGallery::lookup( [ 'gallery_id' => (int)$_REQUEST['gallery_id'] ] ) : null;
+if( $authorGallery && !$authorGallery->isValid() ) {
+	$authorGallery = null;
+}
+$onlyKey = $authorGallery ? 'a|'.mb_strtolower( FisheyeBookCredits::canonicalName( $authorGallery->getTitle() ) ) : null;
 
 if( !empty( $_REQUEST['process_group'] ) ) {
-	$result = [ 'created' => 0, 'already' => 0, 'errors' => [], 'group' => '' ];
+	$result = [ 'created' => 0, 'already' => 0, 'errors' => [], 'group' => '', 'details' => [] ];
 	// detoxify() HTML-escapes every $_REQUEST value - undone here, as load_music.php does, since a
 	// name can hold &, < or >.
 	$groupKey = htmlspecialchars_decode( trim( (string)$_REQUEST['process_group'] ), ENT_NOQUOTES );
@@ -110,25 +69,20 @@ if( !empty( $_REQUEST['process_group'] ) ) {
 	} else {
 		$group = $groups[$groupKey];
 		$result['group'] = $group['name'];
-		$galleryContentId = load_books_gallery_content_id( $group['name'], $topContentId );
-		if( !$galleryContentId ) {
-			// The library layout: strips per category on an author's page.
-			$gallery = new FisheyeMediaGallery();
-			$storeHash = [ 'title' => $group['name'], 'gallery_pagination' => FISHEYE_PAGINATION_LIBRARY_GRID ];
-			if( $gallery->store( $storeHash ) ) {
-				$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_LIBRARY_GRID );
-				$gallery->addToGalleries( [ $topGalleryId ] );
-				$galleryContentId = (int)$gallery->mContentId;
-			} else {
-				$result['errors'][] = $group['name'].' - '.implode( '; ', $gallery->mErrors );
-			}
+		$gallery = FisheyeBookCredits::findOrCreateLibraryGallery( $group['name'] );
+		$galleryContentId = $gallery['content_id'];
+		if( $gallery['error'] ) {
+			$result['errors'][] = $gallery['error'];
 		}
 		if( $galleryContentId && $group['kind'] === 'author' && ( $authorContactId = FisheyeBookCredits::authorContactFor( $group['name'] ) ) ) {
 			FisheyeBookCredits::linkGalleryToContact( $galleryContentId, $authorContactId );
 		}
+		$newBooks = [];
+		$seriesPlan = $useSeries && $group['kind'] === 'author' ? FisheyeSeries::planForRows( $group['rows'], FisheyeBookCredits::authorQid( $group['name'] ), $splitChosen ) : null;
+		$touchedSeries = [];
 		if( $galleryContentId ) {
 			$done = 0;
-			foreach( $group['rows'] as $row ) {
+			foreach( $group['rows'] as $rowIndex => $row ) {
 				if( $done >= LOAD_BOOKS_BATCH ) {
 					break;
 				}
@@ -138,6 +92,26 @@ if( !empty( $_REQUEST['process_group'] ) ) {
 				$one = FisheyeBook::registerFromRow( $row, $galleryContentId );
 				if( !empty( $one['created'] ) ) {
 					$result['created']++;
+					$newBooks[] = (int)$one['created'];
+					// Beside the primary author's gallery, in the galleries of any co-author that has one.
+					FisheyeBookCredits::fileInAuthorGalleries( (int)$one['created'], (array)( $row['authors'] ?? [] ) );
+					// Straight into its series when Wikidata names one - it leaves the author's own list.
+					if( $seriesPlan && isset( $seriesPlan['assign'][$rowIndex] ) ) {
+						$seriesName = $seriesPlan['assign'][$rowIndex];
+						$into = FisheyeSeries::findOrCreateUnder( $seriesName, $galleryContentId );
+						if( $into['series'] ) {
+							$into['series']->addItem( (int)$one['created'] );
+							if( $into['series']->isInGallery( $into['series']->mContentId, (int)$one['created'] ) ) {
+								$authorOwn = new FisheyeGallery( null, $galleryContentId );
+								$authorOwn->load();
+								$authorOwn->removeItem( (int)$one['created'] );
+								$touchedSeries[$seriesName] = $into['series'];
+								$result['series'][$seriesName] = ( $result['series'][$seriesName] ?? 0 ) + 1;
+							}
+						} else {
+							$result['errors'][] = $row['title'].' - '.$into['error'];
+						}
+					}
 				} elseif( !empty( $one['already'] ) ) {
 					$result['already']++;
 				} else {
@@ -145,13 +119,46 @@ if( !empty( $_REQUEST['process_group'] ) ) {
 				}
 				$done++;
 			}
+			// Each series touched is put in the catalogue's order again, counting books loaded on earlier presses.
+			$groupRows = array_values( $group['rows'] );
+			foreach( $touchedSeries as $seriesName => $seriesGallery ) {
+				foreach( $seriesPlan['series'] as $planned ) {
+					if( $planned['name'] === $seriesName ) {
+						$ids = [];
+						foreach( $planned['rows'] as $i ) {
+							if( $id = FisheyeBook::findContentId( $groupRows[$i] ) ) {
+								$ids[] = (int)$id;
+							}
+						}
+						$seriesGallery->setOrder( $ids );
+					}
+				}
+			}
+			// Details and the cover for the books just loaded, as the Book Details page does - so a press leaves
+			// them complete rather than needing a second trip.
+			foreach( $newBooks as $bookContentId ) {
+				$book = FisheyeImage::lookup( [ 'content_id' => $bookContentId ] );
+				if( $book && $book->isValid() && method_exists( $book, 'reloadFromOpenLibrary' ) ) {
+					$found = $book->reloadFromOpenLibrary();
+					$result['details'][] = [ 'title' => $book->getTitle(), 'matched' => !empty( $found['matched'] ), 'items' => $found['items'] ?? [], 'error' => $found['error'] ?? '' ];
+				}
+			}
 		}
 	}
+}
+
+// Opening an author's gallery files the books already loaded that credit them (a co-author's, mostly).
+$filedHere = 0;
+if( $authorGallery ) {
+	$filedHere = FisheyeBookCredits::fileCreditedBooks( $catalogue['rows'], (int)$authorGallery->mContentId, $authorGallery->getTitle() );
 }
 
 // What is still to do per group - recounted after any processing above.
 $pending = [];
 foreach( $groups as $key => $group ) {
+	if( $onlyKey !== null && $key !== $onlyKey ) {
+		continue;
+	}
 	$loaded = 0;
 	foreach( $group['rows'] as $row ) {
 		if( FisheyeBook::findContentId( $row ) ) {
@@ -160,6 +167,35 @@ foreach( $groups as $key => $group ) {
 	}
 	if( $loaded < count( $group['rows'] ) ) {
 		$pending[] = [ 'key' => $key, 'kind' => $group['kind'], 'name' => $group['name'], 'total' => count( $group['rows'] ), 'loaded' => $loaded ];
+	}
+}
+
+// From an author's gallery: the books this press would load (this author as primary author, in catalogue order, the
+// next batch marked), and those they only co-wrote - filed here when the primary author's books are loaded, so they
+// are listed for information, not processed from this page.
+$bookList = [];
+$coCredited = [];
+$seriesPlanView = null;
+if( $authorGallery ) {
+	$seriesPlanView = $useSeries && isset( $groups[$onlyKey] ) ? FisheyeSeries::planForRows( $groups[$onlyKey]['rows'], FisheyeBookCredits::authorQid( $groups[$onlyKey]['name'] ), $splitChosen ) : null;
+	$seriesPosition = [];
+	foreach( $seriesPlanView['series'] ?? [] as $planned ) {
+		foreach( $planned['rows'] as $position => $i ) {
+			$seriesPosition[$i] = $planned['name'].' #'.( $position + 1 );
+		}
+	}
+	$nextBatch = LOAD_BOOKS_BATCH;
+	foreach( $groups[$onlyKey]['rows'] ?? [] as $rowIndex => $row ) {
+		$loaded = (bool)FisheyeBook::findContentId( $row );
+		$bookList[] = [ 'title' => $row['title'], 'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ), 'isbn' => $row['isbn'] ?? '',
+			'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => $seriesPosition[$rowIndex] ?? '', 'loaded' => $loaded, 'next' => !$loaded && $nextBatch-- > 0 ];
+	}
+	$thisAuthor = mb_strtolower( FisheyeBookCredits::canonicalName( $authorGallery->getTitle() ) );
+	foreach( $catalogue['rows'] as $row ) {
+		$names = array_map( fn( $n ) => mb_strtolower( FisheyeBookCredits::canonicalName( (string)$n ) ), (array)( $row['authors'] ?? [] ) );
+		if( ( $names[0] ?? '' ) !== $thisAuthor && in_array( $thisAuthor, $names, true ) ) {
+			$coCredited[] = [ 'title' => $row['title'], 'primary' => FisheyeBookCatalogue::primaryAuthor( $row ), 'loaded' => (bool)FisheyeBook::findContentId( $row ) ];
+		}
 	}
 }
 
@@ -173,9 +209,19 @@ $gBitSmarty->assign( 'pending', array_slice( $pending, 0, LOAD_BOOKS_GROUPS_SHOW
 $gBitSmarty->assign( 'pendingTotal', count( $pending ) );
 $gBitSmarty->assign( 'groupsShown', LOAD_BOOKS_GROUPS_SHOWN );
 $gBitSmarty->assign( 'batchSize', LOAD_BOOKS_BATCH );
-$gBitSmarty->assign( 'minAuthorBooks', LOAD_BOOKS_MIN_AUTHOR_BOOKS );
+$gBitSmarty->assign( 'minAuthorBooks', FisheyeBookCatalogue::MIN_AUTHOR_BOOKS );
 $gBitSmarty->assign( 'hasTopGallery', (bool)$topContentId );
 $gBitSmarty->assign( 'import', $import );
+$gBitSmarty->assign( 'authorGalleryId', $authorGallery ? $authorGallery->mGalleryId : 0 );
+$gBitSmarty->assign( 'authorGalleryTitle', $authorGallery ? $authorGallery->getTitle() : '' );
+$gBitSmarty->assign( 'authorGalleryUrl', $authorGallery ? $authorGallery->getDisplayUrl() : '' );
+$gBitSmarty->assign( 'filedHere', $filedHere );
+$gBitSmarty->assign( 'bookList', $bookList );
+$gBitSmarty->assign( 'useSeries', $useSeries );
+$gBitSmarty->assign( 'seriesPlan', $seriesPlanView );
+$gBitSmarty->assign( 'seriesWikidataFailed', $authorGallery && $useSeries && isset( $groups[$onlyKey] ) && $seriesPlanView === null );
+$gBitSmarty->assign( 'coCredited', $coCredited );
+$gBitSmarty->assign( 'authorInCatalogue', $onlyKey !== null && isset( $groups[$onlyKey] ) );
 $gBitSmarty->assign( 'result', $result );
 
 $gBitSystem->display( 'bitpackage:fisheyemedia/load_books.tpl', KernelTools::tra( 'Load Books' ), [ 'display_mode' => 'edit' ] );

@@ -63,11 +63,10 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	}
 }
 
+$gContent->loadXrefInfo();
 $gBitSmarty->assign( 'errors', $gContent->mErrors );
 $gBitSmarty->assign( 'olResult', $olResult ?? null );
 $gBitSmarty->assign( 'olMessage', $olMessage ?? '' );
-
-$gContent->loadXrefInfo();
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gBitSmarty->assign( 'gContent', $gContent );
 

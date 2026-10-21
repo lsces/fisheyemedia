@@ -13,6 +13,7 @@
 
 	<div class="body">
 		{formfeedback error=$errors}
+		{include file="bitpackage:liberty/xref_scheme_error_inc.tpl" xrefInfo=$gXrefInfo xrefTypeGuid=$gContent->mContentTypeGuid}
 
 		{if $olMessage}
 			<div class="alert alert-info">

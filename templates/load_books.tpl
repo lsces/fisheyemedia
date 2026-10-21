@@ -14,14 +14,6 @@
 			<div class="alert alert-danger"><p>{tr}There is no top-level Library gallery yet - apply the media xref scheme so it is created.{/tr}</p></div>
 		{/if}
 
-		{if $import}
-			{if $import.error}
-				<div class="alert alert-danger"><p>{$import.error|escape}</p></div>
-			{else}
-				<div class="alert alert-success"><p>{tr}Catalogue read{/tr}: {$import.rows} {tr}books{/tr}.</p></div>
-			{/if}
-		{/if}
-
 		{if $result}
 			{if $result.errors}
 				<div class="alert alert-danger">
@@ -31,27 +23,74 @@
 			{/if}
 			{if $result.group}
 				<div class="alert alert-info"><p>{$result.group|escape}: {$result.created} {tr}loaded{/tr}{if $result.already}, {$result.already} {tr}already there{/tr}{/if}.</p></div>
+				{if $result.series}<p>{tr}Filed in series{/tr}: {foreach from=$result.series key=seriesName item=count name=sr}{$seriesName|escape} ({$count}){if !$smarty.foreach.sr.last}, {/if}{/foreach}.</p>{/if}
+				{if $result.details}
+					<ul class="list-unstyled">{foreach from=$result.details item=detail}<li>{$detail.title|escape} - {if $detail.matched}{tr}details from Open Library{/tr}{else}{tr}no Open Library record{/tr}{/if}{if $detail.error}: {$detail.error|escape}{/if}</li>{/foreach}</ul>
+				{/if}
 			{/if}
 		{/if}
 
-		{form legend="Catalogue spreadsheet" enctype="multipart/form-data"}
-			<div class="form-group">
-				{formlabel label="Spreadsheet (.ods)" for="catalogue_file"}
-				{forminput}
-					<input type="file" name="catalogue_file" id="catalogue_file" accept=".ods" />
-					{formhelp note="A 'Books' sheet with one row per book - Title is the only required column. Each upload is archived and the newest is the one loaded from; books already loaded are recognised and not loaded twice."}
-				{/forminput}
-			</div>
-			<div class="form-group submit">
-				<input type="submit" class="btn btn-default" name="upload" value="{tr}Read Catalogue{/tr}" />
-			</div>
-		{/form}
+		{if $authorGalleryId}
+			<p><a href="{$authorGalleryUrl|escape}">&laquo; {$authorGalleryTitle|escape}</a></p>
+			{if $filedHere}<div class="alert alert-info"><p>{$filedHere} {tr}books already loaded under another author's name were filed in this gallery too.{/tr}</p></div>{/if}
+		{else}
+			{include file="bitpackage:fisheyemedia/catalogue_upload.tpl"}
+		{/if}
 
 		{if $catalogueRows}
 			<p>{tr}Catalogue{/tr}: {$catalogueRows} {tr}books in{/tr} {$groupCount} {tr}groups{/tr} ({$catalogueFile|escape}, {tr}uploaded{/tr} {$catalogueImported|bit_short_datetime}). {tr}An author with{/tr} {$minAuthorBooks}+ {tr}books gets a gallery of their own; everyone else is filed under the book's Category.{/tr}</p>
 
+			{if $authorGalleryId}
+				{form legend="Series" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
+					<input type="hidden" name="gallery_id" value="{$authorGalleryId}" />
+					<input type="hidden" name="series_form" value="1" />
+					<div class="form-group">
+						<label><input type="checkbox" name="use_series" value="1"{if $useSeries} checked="checked"{/if} /> {tr}File books into their series as they are loaded (series from Wikidata){/tr}</label>
+					</div>
+					{if $seriesPlan}
+						{foreach from=$seriesPlan.umbrellas item=umbrella}
+							<div class="form-group">
+								<label><input type="checkbox" name="split[{$umbrella.key|escape}]" value="1"{if in_array($umbrella.key, $seriesPlan.split)} checked="checked"{/if} /> {tr}Keep the sub-series of{/tr} {$umbrella.name|escape} {tr}separate{/tr}</label>
+								<span class="help-block">{foreach from=$umbrella.children item=child name=ch}{$child|escape}{if !$smarty.foreach.ch.last}, {/if}{/foreach}. {tr}Left unticked they are folded into{/tr} {$umbrella.name|escape}.</span>
+							</div>
+						{/foreach}
+					{elseif $seriesWikidataFailed}
+						<p class="help-block">{tr}Wikidata could not be asked, or the author's contact has no Wikidata id - books are filed in the author's own list.{/tr}</p>
+					{/if}
+					<div class="form-group submit">
+						<input type="submit" class="btn btn-default" name="series_update" value="{tr}Update{/tr}" />
+					</div>
+				{/form}
+			{/if}
+			{if $authorGalleryId && $bookList}
+				<h3>{tr}This author's books{/tr}</h3>
+				<table class="table table-condensed">
+					<thead><tr><th>{tr}Title{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th><th></th></tr></thead>
+					<tbody>
+						{foreach from=$bookList item=book}
+							<tr>
+								<td>{$book.title|escape}</td>
+								<td>{$book.year|escape}</td>
+								<td>{foreach from=$book.coauthors item=other name=co}{$other|escape}{if !$smarty.foreach.co.last}, {/if}{/foreach}</td>
+								<td>{$book.series|escape}</td>
+								<td>{if $book.loaded}{tr}loaded{/tr}{elseif $book.next}<strong>{tr}next press{/tr}</strong>{else}{tr}waiting{/tr}{/if}</td>
+							</tr>
+						{/foreach}
+					</tbody>
+				</table>
+			{/if}
+			{if $authorGalleryId && $coCredited}
+				<h3>{tr}Co-written - filed here from the primary author's page{/tr}</h3>
+				<ul class="list-unstyled">{foreach from=$coCredited item=book}<li>{$book.title|escape} ({tr}primary author{/tr}: {$book.primary|escape}) - {if $book.loaded}{tr}loaded{/tr}{else}{tr}not loaded yet{/tr}{/if}</li>{/foreach}</ul>
+			{/if}
+
 			{if $pending}
 				{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
+					{if $authorGalleryId}<input type="hidden" name="gallery_id" value="{$authorGalleryId}" />
+						<input type="hidden" name="series_form" value="1" />
+						{if $useSeries}<input type="hidden" name="use_series" value="1" />{/if}
+						{if $seriesPlan}{foreach from=$seriesPlan.split item=splitKey}<input type="hidden" name="split[{$splitKey|escape}]" value="1" />{/foreach}{/if}
+					{/if}
 					<p>{tr}Process one group at a time - it finds or creates the gallery under Library and loads up to{/tr} {$batchSize} {tr}of its books per press; press again to carry on.{/tr}{if $pendingTotal > $groupsShown} {tr}Showing the first{/tr} {$groupsShown} {tr}of{/tr} {$pendingTotal}.{/if}</p>
 					<ul class="list-unstyled">
 						{foreach from=$pending item=group}
@@ -62,6 +101,8 @@
 						{/foreach}
 					</ul>
 				{/form}
+			{elseif $authorGalleryId}
+				<p>{if $authorInCatalogue}{tr}Every book on the catalogue for this author is already loaded.{/tr}{else}{tr}This author has no books of their own as primary author - books they co-wrote are filed here when the primary author's books are loaded.{/tr}{/if}</p>
 			{else}
 				<p>{tr}Nothing left to load - every book in the catalogue is already there.{/tr}</p>
 			{/if}

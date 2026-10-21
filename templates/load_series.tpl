@@ -56,6 +56,10 @@
 				</div>
 			{/form}
 
+			{if $seriesTargets}
+				<p>{tr}Series already under this author{/tr}: {foreach from=$seriesTargets item=target name=existing}<strong>{$target.title|escape}</strong> ({$target.count}){if !$smarty.foreach.existing.last}, {/if}{/foreach}.</p>
+			{/if}
+
 			{if $proposal}
 				{if $proposal.series}
 					{form legend="Proposed series" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_series.php"}
@@ -70,6 +74,12 @@
 									{tr}Create{/tr}
 								</label>
 								<input type="text" class="form-control" name="series_name[{$smarty.foreach.series.index}]" value="{$entry.name|escape}" size="40" />
+								<select name="series_target[{$smarty.foreach.series.index}]">
+									<option value="">{tr}a new series with that name{/tr}</option>
+									{foreach from=$seriesTargets item=target}
+										<option value="{$target.content_id}"{if $entry.target eq $target.content_id} selected="selected"{/if}>{tr}put in{/tr} {$target.title|escape} ({$target.count}){if $entry.target eq $target.content_id && $entry.similar} - {tr}similar name{/tr}{/if}</option>
+									{/foreach}
+								</select>
 								<span class="help-block">{tr}from folder{/tr} {$entry.folder|escape} - {$entry.books|@count} {tr}books{/tr}{if $entry.collection} ({tr}a collection folder - it names{/tr} {$entry.named} {tr}of this author's books across series, so not preticked{/tr}){/if}:
 									{foreach from=$entry.books item=book name=books}{$book.title|escape}{if $book.year} ({$book.year}){/if}{if !$smarty.foreach.books.last}, {/if}{/foreach}
 								</span>
@@ -108,9 +118,10 @@
 									<tr>
 										<td>{$book.title|escape}{if $book.year} ({$book.year}){/if}</td>
 										<td>
-											<select name="move[{$book.content_id}]">
+											<select name="move[{$group.key|escape}][{$book.content_id}]">
 												<option value="">{tr}leave here{/tr}</option>
 												{if $group.key ne 'author'}<option value="author">{tr}Not in a series{/tr}</option>{/if}
+												<option value="new">{tr}A new series (named below){/tr}</option>
 												{foreach from=$seriesTargets item=target}
 													{if $target.content_id ne $group.key}<option value="{$target.content_id}">{$target.title|escape}</option>{/if}
 												{/foreach}
@@ -124,6 +135,13 @@
 						<p>{tr}Empty.{/tr}</p>
 					{/if}
 				{/foreach}
+				<div class="form-group">
+					{formlabel label="New series name" for="new_series_name"}
+					{forminput}
+						<input type="text" class="form-control" name="new_series_name" id="new_series_name" size="40" />
+						{formhelp note="Used for every book above sent to 'A new series'."}
+					{/forminput}
+				</div>
 				<div class="form-group submit">
 					<input type="submit" class="btn btn-primary" name="move_books" value="{tr}Move selected books{/tr}" />
 				</div>

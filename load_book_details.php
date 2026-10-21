@@ -29,7 +29,7 @@ $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 const LOAD_BOOK_DETAILS_BATCH = 10;
 
 /**
- * The books with an ISBN that are missing an Open Library edition id or an image, in content_id order.
+ * The books with an ISBN that are missing an Open Library edition id, an image or the thumbnail attachment that shows it, in content_id order.
  *
  * @return list<int>
  */
@@ -41,7 +41,8 @@ function load_book_details_pending(): array {
 		 WHERE lc.`content_type_guid` = 'fisheyebook'
 		 AND EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'isbn' AND $live )
 		 AND ( NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'ol_edition' AND $live )
-		    OR NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'image' AND $live ) )
+		    OR NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'image' AND $live )
+		    OR NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) )
 		 ORDER BY lc.`content_id`"
 	) ?: [];
 	return array_map( 'intval', $rows );
@@ -68,6 +69,26 @@ if( !empty( $_REQUEST['fetch'] ) ) {
 	$pending = $stillPending;
 }
 
+// Google Books covers that turned out to be the grey "image not available" stand-in: each press removes the next batch of
+// them (image row, file, thumbnail) and asks again, which now passes stand-ins over for a smaller size or another source.
+$blankBooks = FisheyeBook::booksWithBlankGoogleCover();
+$replaced = null;
+if( !empty( $_REQUEST['replace_blank'] ) ) {
+	$replaced = [];
+	foreach( array_slice( $blankBooks, 0, LOAD_BOOK_DETAILS_BATCH ) as $contentId ) {
+		$book = FisheyeImage::lookup( [ 'content_id' => $contentId ] );
+		if( !$book || !$book->isValid() || !$book->dropBlankGoogleCover() ) {
+			continue;
+		}
+		$found = $book->reloadFromOpenLibrary();
+		$replaced[] = [ 'title' => $book->getTitle(), 'url' => $book->getDisplayUrl(), 'items' => $found['items'] ?? [], 'error' => $found['error'] ?? '' ];
+	}
+	$blankBooks = FisheyeBook::booksWithBlankGoogleCover();
+	$pending = load_book_details_pending();
+}
+
+$gBitSmarty->assign( 'blankCount', count( $blankBooks ) );
+$gBitSmarty->assign( 'replaced', $replaced );
 $gBitSmarty->assign( 'pendingCount', count( $pending ) );
 $gBitSmarty->assign( 'start', $start );
 $gBitSmarty->assign( 'batchSize', LOAD_BOOK_DETAILS_BATCH );

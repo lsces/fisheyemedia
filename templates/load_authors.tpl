@@ -19,9 +19,26 @@
 			{/if}
 			{if $result.done}
 				<div class="alert alert-success">
-					<ul>{foreach from=$result.done item=made}<li>{$made.name|escape} - <a href="{$made.url|escape}">{$made.contact|escape}</a>: {$made.linked} {tr}of{/tr} {$made.books} {tr}books linked{/tr}</li>{/foreach}</ul>
+					<ul>{foreach from=$result.done item=made}<li>{$made.name|escape} - <a href="{$made.url|escape}">{$made.contact|escape}</a>: {$made.linked} {tr}of{/tr} {$made.books} {tr}books linked{/tr}{if $made.gallery} - <a href="{$made.gallery|escape}">{tr}Library gallery{/tr}</a>{/if}</li>{/foreach}</ul>
 				</div>
 			{/if}
+		{/if}
+
+		{if !$galleryId}
+			{if !$fromSheet}
+				<div class="alert alert-info"><p>{tr}No catalogue spreadsheet has been read yet - choose one below to list its authors here before any books are loaded.{/tr}</p></div>
+			{/if}
+			{include file="bitpackage:fisheyemedia/catalogue_upload.tpl"}
+		{/if}
+
+		{if $galleriesMade}
+			<div class="alert alert-success"><ul>{foreach from=$galleriesMade item=made}<li>{$made.name|escape} - {tr}gallery made{/tr}{if $made.filed}, {$made.filed} {tr}books already loaded filed in it{/tr}{/if}</li>{/foreach}</ul></div>
+		{/if}
+		{if $withoutGallery}
+			{form legend="Authors without a gallery" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_authors.php"}
+				<p>{tr}These authors have a contact but no Library gallery yet:{/tr} {foreach from=$withoutGallery item=author name=wg}{$author.name|escape} ({$author.books}){if !$smarty.foreach.wg.last}, {/if}{/foreach}</p>
+				<div class="form-group submit"><input type="submit" class="btn btn-default" name="make_galleries" value="{tr}Make their galleries{/tr}" /></div>
+			{/form}
 		{/if}
 
 		{if !$unlinkedCount}
