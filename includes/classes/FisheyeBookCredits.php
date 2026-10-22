@@ -64,7 +64,7 @@ class FisheyeBookCredits {
 		self::squashIndex();
 		if( self::$otherNames === null ) {
 			self::$otherNames = [];
-			foreach( $gBitDb->getAll( "SELECT `content_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` IN ( 'penname', 'birthname' ) AND `end_date` IS NULL AND `xkey_ext` IS NOT NULL" ) ?: [] as $row ) {
+			foreach( $gBitDb->getAll( "SELECT `content_id`, COALESCE( NULLIF( `xkey_ext`, '' ), `xkey` ) AS `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` IN ( 'penname', 'birthname' ) AND `end_date` IS NULL AND COALESCE( NULLIF( `xkey_ext`, '' ), `xkey` ) IS NOT NULL" ) ?: [] as $row ) {
 				self::$otherNames[self::nameKey( (string)$row['xkey_ext'] )][] = (int)$row['content_id'];
 			}
 		}
@@ -510,7 +510,7 @@ class FisheyeBookCredits {
 		}
 		$other = $gBitDb->getAll(
 			"SELECT lc.`content_id`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_xref` x JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
-			 WHERE x.`item` IN ( 'penname', 'birthname' ) AND x.`end_date` IS NULL AND LOWER( x.`xkey_ext` ) = ? AND lc.`content_type_guid` = 'contactwikiindi'", [ mb_strtolower( $pPerson['name'] ) ] ) ?: [];
+			 WHERE x.`item` IN ( 'penname', 'birthname' ) AND x.`end_date` IS NULL AND LOWER( COALESCE( NULLIF( x.`xkey_ext`, '' ), x.`xkey` ) ) = ? AND lc.`content_type_guid` = 'contactwikiindi'", [ mb_strtolower( $pPerson['name'] ) ] ) ?: [];
 		foreach( $other as $row ) {
 			$contacts[(int)$row['content_id']] ??= [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'], 'qid' => null, 'alias' => true ];
 		}
