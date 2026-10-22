@@ -52,8 +52,8 @@ class FisheyeBookCredits {
 	/**
 	 * The author contact a credited name belongs to, or null when there is none or it is not certain.
 	 * A pen name or birth name a contact carries is decisive; otherwise the name must be the contact's own
-	 * and the contact an author (an Open Library id or the book author tag), so a namesake who is an actor
-	 * is left alone. Two different contacts answering to the name is no answer.
+	 * and the contact an author (an Open Library id or the book author tag; for an organisation credited as author,
+	 * the Publisher tag), so a namesake who is an actor is left alone. Two different contacts answering to the name is no answer.
 	 */
 	public static function authorContactFor( string $pName ): ?int {
 		global $gBitDb;
@@ -70,7 +70,7 @@ class FisheyeBookCredits {
 		}
 		if( self::$authorContacts === null ) {
 			self::$authorContacts = [];
-			foreach( $gBitDb->getCol( "SELECT DISTINCT `content_id` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` IN ( 'openlibrary', 'WP14' ) AND `end_date` IS NULL" ) ?: [] as $id ) {
+			foreach( $gBitDb->getCol( "SELECT DISTINCT `content_id` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` IN ( 'openlibrary', 'WP14', 'WB07' ) AND `end_date` IS NULL" ) ?: [] as $id ) {
 				self::$authorContacts[(int)$id] = true;
 			}
 		}
@@ -80,7 +80,7 @@ class FisheyeBookCredits {
 		}
 		foreach( Wiki::nameForms( $name ) as $form ) {
 			foreach( self::$squashIndex[str_replace( ' ', '', $form )] ?? [] as $contact ) {
-				if( $contact['content_type_guid'] === 'contactwikiindi' && isset( self::$authorContacts[$contact['content_id']] ) ) {
+				if( isset( self::$authorContacts[$contact['content_id']] ) ) {
 					$found[$contact['content_id']] = true;
 				}
 			}
