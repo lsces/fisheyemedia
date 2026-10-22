@@ -48,6 +48,25 @@
 			{/form}
 		{/if}
 
+		{if $noCoverCount}
+			<h3>{tr}Books without a cover{/tr} ({$noCoverCount})</h3>
+			<p class="help-block">{tr}No image at all - add your own photograph or scan from the book's edit page; the first image added becomes its tile.{/tr}{if $noCoverCount > $noCoverShown} {tr}Showing the first{/tr} {$noCoverShown}.{/if}</p>
+			<table class="table table-condensed">
+				<thead><tr><th>{tr}Title{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}ISBN{/tr}</th><th></th></tr></thead>
+				<tbody>
+					{foreach from=$noCover item=book}
+						<tr>
+							<td><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_book.php?content_id={$book.content_id}">{$book.title|escape}</a></td>
+							<td>{foreach from=$book.authors item=author name=au}{$author|escape}{if !$smarty.foreach.au.last}, {/if}{/foreach}</td>
+							<td>{$book.year|escape}</td>
+							<td>{$book.isbn|escape}</td>
+							<td><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_book.php?content_id={$book.content_id}">{tr}Edit{/tr}</a></td>
+						</tr>
+					{/foreach}
+				</tbody>
+			</table>
+		{/if}
+
 		{if !$pendingCount}
 			<div class="alert alert-success"><p>{tr}Every book with an ISBN has an Open Library edition and an image.{/tr}</p></div>
 		{else}

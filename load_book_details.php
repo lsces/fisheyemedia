@@ -7,6 +7,8 @@
  * book can be run again without harm. The same action as 'Reload from Open Library' on a book's own
  * edit page, over the books that still lack an Open Library edition id or an image.
  *
+ * Below the buttons, a list of the books with no image at all - the ones to photograph or scan.
+ *
  * Nothing is looked up until the button is pressed. Books Open Library has no record of stay in the
  * list; the start position moves past them so the next press goes on to the next ten.
  *
@@ -27,6 +29,8 @@ $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 
 // Books per press - Open Library takes a few requests each, one at a time.
 const LOAD_BOOK_DETAILS_BATCH = 10;
+// Rows of the no-cover list shown.
+const LOAD_BOOK_DETAILS_NOCOVER_SHOWN = 100;
 
 /**
  * The books with an ISBN that are missing an Open Library edition id, an image or the thumbnail attachment that shows it, in content_id order.
@@ -87,6 +91,31 @@ if( !empty( $_REQUEST['replace_blank'] ) ) {
 	$pending = load_book_details_pending();
 }
 
+// Books with no image at all (no thumbnail attachment): the ones that need a cover of your own - a photograph or a scan. Title
+// order, with the author, year and ISBN so the right copy is picked up. The first image added to a book becomes its tile.
+$noCover = [];
+foreach( $gBitDb->getAll(
+	"SELECT lc.`content_id`, lc.`title`, lc.`event_time` FROM `".BIT_DB_PREFIX."liberty_content` lc
+	 WHERE lc.`content_type_guid` = 'fisheyebook'
+	 AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` )
+	 ORDER BY lc.`title`"
+) ?: [] as $row ) {
+	$noCover[(int)$row['content_id']] = [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'], 'year' => $row['event_time'] ? gmdate( 'Y', (int)$row['event_time'] ) : '', 'authors' => [], 'isbn' => '' ];
+}
+if( $noCover ) {
+	$ids = implode( ',', array_keys( $noCover ) );
+	foreach( $gBitDb->getAll( "SELECT `content_id`, `item`, `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` IN ( $ids ) AND `end_date` IS NULL AND `item` IN ( 'author', 'isbn' ) ORDER BY `xorder`" ) ?: [] as $x ) {
+		if( $x['item'] === 'author' && (string)$x['xkey_ext'] !== '' ) {
+			$noCover[(int)$x['content_id']]['authors'][] = (string)$x['xkey_ext'];
+		} elseif( $x['item'] === 'isbn' ) {
+			$noCover[(int)$x['content_id']]['isbn'] = (string)$x['xkey'];
+		}
+	}
+}
+
+$gBitSmarty->assign( 'noCover', array_slice( array_values( $noCover ), 0, LOAD_BOOK_DETAILS_NOCOVER_SHOWN ) );
+$gBitSmarty->assign( 'noCoverCount', count( $noCover ) );
+$gBitSmarty->assign( 'noCoverShown', min( count( $noCover ), LOAD_BOOK_DETAILS_NOCOVER_SHOWN ) );
 $gBitSmarty->assign( 'blankCount', count( $blankBooks ) );
 $gBitSmarty->assign( 'replaced', $replaced );
 $gBitSmarty->assign( 'pendingCount', count( $pending ) );
