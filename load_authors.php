@@ -24,6 +24,11 @@
  * reviewed and submitted, and what is linked is recomputed from the database at that moment, not taken from
  * the form.
  *
+ * "Also load their books" (on by default when working from the sheet) loads the books of each author made
+ * who has only one or two of their own as primary author, in the same press: a one-book author's book is
+ * filed under its Category gallery, a two-book author's under their own Library gallery, as the book loader
+ * would. Bigger authors keep the book loader's tick-list and series choices.
+ *
  * @package fisheyemedia
  */
 
@@ -41,6 +46,10 @@ $gBitSystem->verifyPermission( 'p_contact_update' );
 
 // People looked up per press - Open Library takes a few requests each, one at a time.
 const LOAD_AUTHORS_BATCH = 10;
+// Books loaded per press of "Create selected" for authors with at most LOAD_AUTHORS_BOOKS_MAX of their own
+// (as primary author): every one is an Open Library request or two, so the rest wait for the book loader.
+const LOAD_AUTHORS_BOOKS_PER_PRESS = 10;
+const LOAD_AUTHORS_BOOKS_MAX = 2;
 // Names shown per page of the local list.
 const LOAD_AUTHORS_LIST_PAGE = 30;
 
@@ -83,6 +92,8 @@ $withoutGallery = $fromSheet ? FisheyeBookCredits::authorsWithoutGallery( $catal
 $result = null;
 if( !empty( $_REQUEST['create_authors'] ) ) {
 	$result = [ 'done' => [], 'errors' => [], 'skipped' => 0 ];
+	$loadBooks = $fromSheet && !empty( $_REQUEST['load_books'] );
+	$bookBudget = LOAD_AUTHORS_BOOKS_PER_PRESS;
 	foreach( (array)( $_REQUEST['choice'] ?? [] ) as $i => $choice ) {
 		$name = $decode( $_REQUEST['person'][$i] ?? '' );
 		$choice = $decode( $choice );
@@ -153,7 +164,28 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 				$result['errors'][] = $made['error'];
 			}
 		}
-		$result['done'][] = [ 'name' => $person['name'], 'contact' => FisheyeBookCredits::contactName( (int)$contact->mContentId ), 'url' => $contact->getDisplayUrl(), 'linked' => $linked, 'books' => count( $person['books'] ), 'gallery' => $galleryUrl ];
+		// Their own books, when there are only a few: loaded now, filed as the book loader would file them.
+		$booksLoaded = 0;
+		if( $loadBooks && $bookBudget > 0 ) {
+			FisheyeBookCredits::resetCache();
+			$mineKey = mb_strtolower( FisheyeBookCredits::canonicalName( $person['name'] ) );
+			$mine = array_filter( $catalogue['rows'], fn( $row ) => mb_strtolower( FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) ) ) === $mineKey );
+			if( $mine && count( $mine ) <= LOAD_AUTHORS_BOOKS_MAX ) {
+				if( count( $mine ) >= FisheyeBookCatalogue::MIN_AUTHOR_BOOKS ) {
+					$group = [ 'kind' => 'author', 'name' => FisheyeBookCredits::canonicalName( $person['name'] ), 'rows' => $mine ];
+				} else {
+					$category = reset( $mine )['category'][0] ?? '';
+					$group = [ 'kind' => 'category', 'name' => $category !== '' ? $category : KernelTools::tra( 'Uncategorised' ), 'rows' => $mine ];
+				}
+				$loaded = FisheyeBookLoader::loadGroup( $group, null, false, null, $bookBudget );
+				$booksLoaded = $loaded['created'];
+				$bookBudget -= $booksLoaded;
+				foreach( $loaded['errors'] as $error ) {
+					$result['errors'][] = $error;
+				}
+			}
+		}
+		$result['done'][] = [ 'name' => $person['name'], 'booksLoaded' => $booksLoaded, 'contact' => FisheyeBookCredits::contactName( (int)$contact->mContentId ), 'url' => $contact->getDisplayUrl(), 'linked' => $linked, 'books' => count( $person['books'] ), 'gallery' => $galleryUrl ];
 	}
 	// Whoever is now linked drops out of the list; anyone left for now stays on it.
 	FisheyeBookCredits::resetCache();
@@ -201,6 +233,7 @@ $gBitSmarty->assign( 'sheetFile', $catalogue['file'] );
 $gBitSmarty->assign( 'unlinkedCount', count( $people ) );
 $gBitSmarty->assign( 'start', $start );
 $gBitSmarty->assign( 'batchSize', LOAD_AUTHORS_BATCH );
+$gBitSmarty->assign( 'booksPerPress', LOAD_AUTHORS_BOOKS_PER_PRESS );
 $gBitSmarty->assign( 'batch', $batch );
 $gBitSmarty->assign( 'result', $result );
 

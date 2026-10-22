@@ -19,7 +19,7 @@
 			{/if}
 			{if $result.done}
 				<div class="alert alert-success">
-					<ul>{foreach from=$result.done item=made}<li>{$made.name|escape} - <a href="{$made.url|escape}">{$made.contact|escape}</a>: {$made.linked} {tr}of{/tr} {$made.books} {tr}books linked{/tr}{if $made.gallery} - <a href="{$made.gallery|escape}">{tr}Library gallery{/tr}</a>{/if}</li>{/foreach}</ul>
+					<ul>{foreach from=$result.done item=made}<li>{$made.name|escape} - <a href="{$made.url|escape}">{$made.contact|escape}</a>: {$made.linked} {tr}of{/tr} {$made.books} {tr}books linked{/tr}{if $made.booksLoaded}, {$made.booksLoaded} {tr}loaded{/tr}{/if}{if $made.gallery} - <a href="{$made.gallery|escape}">{tr}Library gallery{/tr}</a>{/if}</li>{/foreach}</ul>
 				</div>
 			{/if}
 		{/if}
@@ -105,6 +105,11 @@
 						</label></div>
 					</div>
 				{/foreach}
+				{if $fromSheet}
+					<div class="form-group">
+						<label><input type="checkbox" name="load_books" value="1" checked="checked" /> {tr}Also load their books - for authors with one or two of their own as primary author, up to{/tr} {$booksPerPress} {tr}books per press; the rest wait for the book loader{/tr}</label>
+					</div>
+				{/if}
 				<div class="form-group submit">
 					<input type="submit" class="btn btn-primary" name="create_authors" value="{tr}Create selected{/tr}" />
 				</div>

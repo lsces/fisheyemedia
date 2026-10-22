@@ -25,7 +25,6 @@ namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\KernelTools;
 use Bitweaver\Fisheye\FisheyeGallery;
-use Bitweaver\Fisheye\FisheyeImage;
 
 require_once '../kernel/includes/setup_inc.php';
 
@@ -63,95 +62,15 @@ $onlyKey = $authorGallery ? 'a|'.mb_strtolower( FisheyeBookCredits::canonicalNam
 $pickedRows = !empty( $_REQUEST['picked_form'] ) ? array_map( 'intval', (array)( $_REQUEST['book'] ?? [] ) ) : null;
 
 if( !empty( $_REQUEST['process_group'] ) ) {
-	$result = [ 'created' => 0, 'already' => 0, 'errors' => [], 'group' => '', 'details' => [] ];
 	// detoxify() HTML-escapes every $_REQUEST value - undone here, as load_music.php does, since a
 	// name can hold &, < or >.
 	$groupKey = htmlspecialchars_decode( trim( (string)$_REQUEST['process_group'] ), ENT_NOQUOTES );
 	if( !$topContentId ) {
-		$result['errors'][] = KernelTools::tra( 'There is no top-level Library gallery to file books under.' );
+		$result = [ 'created' => 0, 'already' => 0, 'errors' => [ KernelTools::tra( 'There is no top-level Library gallery to file books under.' ) ], 'group' => '', 'details' => [] ];
 	} elseif( !isset( $groups[$groupKey] ) ) {
-		$result['errors'][] = KernelTools::tra( 'That group is not in the loaded catalogue.' );
+		$result = [ 'created' => 0, 'already' => 0, 'errors' => [ KernelTools::tra( 'That group is not in the loaded catalogue.' ) ], 'group' => '', 'details' => [] ];
 	} else {
-		$group = $groups[$groupKey];
-		$result['group'] = $group['name'];
-		$gallery = FisheyeBookCredits::findOrCreateLibraryGallery( $group['name'] );
-		$galleryContentId = $gallery['content_id'];
-		if( $gallery['error'] ) {
-			$result['errors'][] = $gallery['error'];
-		}
-		if( $galleryContentId && $group['kind'] === 'author' && ( $authorContactId = FisheyeBookCredits::authorContactFor( $group['name'] ) ) ) {
-			FisheyeBookCredits::linkGalleryToContact( $galleryContentId, $authorContactId );
-		}
-		$newBooks = [];
-		$seriesPlan = $useSeries && $group['kind'] === 'author' ? FisheyeSeries::planForRows( $group['rows'], FisheyeBookCredits::authorQid( $group['name'] ), $splitChosen ) : null;
-		$touchedSeries = [];
-		if( $galleryContentId ) {
-			$done = 0;
-			foreach( $group['rows'] as $rowIndex => $row ) {
-				if( $done >= LOAD_BOOKS_BATCH ) {
-					break;
-				}
-				if( $pickedRows !== null && !in_array( $rowIndex, $pickedRows, true ) ) {
-					continue;
-				}
-				if( FisheyeBook::findContentId( $row ) ) {
-					continue;
-				}
-				$one = FisheyeBook::registerFromRow( $row, $galleryContentId );
-				if( !empty( $one['created'] ) ) {
-					$result['created']++;
-					$newBooks[] = (int)$one['created'];
-					// Beside the primary author's gallery, in the galleries of any co-author that has one.
-					FisheyeBookCredits::fileInAuthorGalleries( (int)$one['created'], (array)( $row['authors'] ?? [] ) );
-					// Straight into its series when Wikidata names one - it leaves the author's own list.
-					if( $seriesPlan && isset( $seriesPlan['assign'][$rowIndex] ) ) {
-						$seriesName = $seriesPlan['assign'][$rowIndex];
-						$into = FisheyeSeries::findOrCreateUnder( $seriesName, $galleryContentId );
-						if( $into['series'] ) {
-							$into['series']->addItem( (int)$one['created'] );
-							if( $into['series']->isInGallery( $into['series']->mContentId, (int)$one['created'] ) ) {
-								$authorOwn = new FisheyeGallery( null, $galleryContentId );
-								$authorOwn->load();
-								$authorOwn->removeItem( (int)$one['created'] );
-								$touchedSeries[$seriesName] = $into['series'];
-								$result['series'][$seriesName] = ( $result['series'][$seriesName] ?? 0 ) + 1;
-							}
-						} else {
-							$result['errors'][] = $row['title'].' - '.$into['error'];
-						}
-					}
-				} elseif( !empty( $one['already'] ) ) {
-					$result['already']++;
-				} else {
-					$result['errors'][] = $row['title'].' - '.( $one['error'] ?? KernelTools::tra( 'not loaded' ) );
-				}
-				$done++;
-			}
-			// Each series touched is put in the catalogue's order again, counting books loaded on earlier presses.
-			$groupRows = array_values( $group['rows'] );
-			foreach( $touchedSeries as $seriesName => $seriesGallery ) {
-				foreach( $seriesPlan['series'] as $planned ) {
-					if( $planned['name'] === $seriesName ) {
-						$ids = [];
-						foreach( $planned['rows'] as $i ) {
-							if( $id = FisheyeBook::findContentId( $groupRows[$i] ) ) {
-								$ids[] = (int)$id;
-							}
-						}
-						$seriesGallery->setOrder( $ids );
-					}
-				}
-			}
-			// Details and the cover for the books just loaded, as the Book Details page does - so a press leaves
-			// them complete rather than needing a second trip.
-			foreach( $newBooks as $bookContentId ) {
-				$book = FisheyeImage::lookup( [ 'content_id' => $bookContentId ] );
-				if( $book && $book->isValid() && method_exists( $book, 'reloadFromOpenLibrary' ) ) {
-					$found = $book->reloadFromOpenLibrary();
-					$result['details'][] = [ 'title' => $book->getTitle(), 'matched' => !empty( $found['matched'] ), 'items' => $found['items'] ?? [], 'error' => $found['error'] ?? '' ];
-				}
-			}
-		}
+		$result = FisheyeBookLoader::loadGroup( $groups[$groupKey], $pickedRows, $useSeries, $splitChosen, LOAD_BOOKS_BATCH );
 	}
 }
 
