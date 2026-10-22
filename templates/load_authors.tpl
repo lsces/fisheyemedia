@@ -32,7 +32,7 @@
 		{/if}
 
 		{if $galleriesMade}
-			<div class="alert alert-success"><ul>{foreach from=$galleriesMade item=made}<li>{$made.name|escape} - {tr}gallery made{/tr}{if $made.filed}, {$made.filed} {tr}books already loaded filed in it{/tr}{/if}</li>{/foreach}</ul></div>
+			<div class="alert alert-success"><ul>{foreach from=$galleriesMade item=made}<li>{$made.name|escape} - {if $made.contactUrl}<a href="{$made.contactUrl|escape}">{$made.contact|escape}</a>{else}{$made.contact|escape}{/if}: {tr}gallery made{/tr}{if $made.filed}, {$made.filed} {tr}books already loaded filed in it{/tr}{/if} - <a href="{$made.galleryUrl|escape}">{tr}Library gallery{/tr}</a></li>{/foreach}</ul></div>
 		{/if}
 		{if $withoutGallery}
 			{form legend="Authors without a gallery" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_authors.php"}

@@ -83,7 +83,12 @@ if( $fromSheet && !empty( $_REQUEST['make_galleries'] ) ) {
 		if( $made['content_id'] ) {
 			FisheyeBookCredits::linkGalleryToContact( $made['content_id'], $author['contact_id'] );
 			$filed = FisheyeBookCredits::fileCreditedBooks( $catalogue['rows'], $made['content_id'], $author['name'] );
-			$galleriesMade[] = [ 'name' => $author['name'], 'filed' => $filed ];
+			$authorContact = new Wiki( null, $author['contact_id'] );
+			$authorContact->load();
+			$authorGallery = new \Bitweaver\Fisheye\FisheyeGallery( null, $made['content_id'] );
+			$authorGallery->load();
+			$galleriesMade[] = [ 'name' => $author['name'], 'filed' => $filed, 'contact' => FisheyeBookCredits::contactName( $author['contact_id'] ),
+				'contactUrl' => $authorContact->isValid() ? $authorContact->getDisplayUrl() : '', 'galleryUrl' => $authorGallery->getDisplayUrl() ];
 		}
 	}
 }
