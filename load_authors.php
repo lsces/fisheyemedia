@@ -100,10 +100,9 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 			$existing = new Wiki( null, (int)substr( $choice, 8 ) );
 			$existing->load();
 			if( $existing->isValid() ) {
-				// An existing contact taken as the author: tagged as a writer, and given the Open Library id the
+				// An existing contact taken as the author: tagged as a book author, and given the Open Library id the
 				// person's books pointed to, so the name counts as done from now on.
-				$existing->markAsWriter();
-				if( preg_match( '/^OL\d+A$/', $hint = $decode( $_REQUEST['olhint'][$i] ?? '' ) ) ) {
+								if( preg_match( '/^OL\d+A$/', $hint = $decode( $_REQUEST['olhint'][$i] ?? '' ) ) ) {
 					$existing->applyOpenLibraryData( $hint );
 				}
 				$made = [ 'content' => $existing ];
@@ -118,6 +117,7 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 			continue;
 		}
 		$contact = $made['content'];
+		$contact->markAsBookAuthor();
 		FisheyeBookCredits::rememberCreditNames( $contact, $person );
 		$olRow = \Bitweaver\Liberty\LibertyContent::lookupXrefByItem( $contact->mContentId, 'openlibrary', $contact->mContentTypeGuid );
 		$xkey = $contact->getWikidataQid() ?: (string)( $olRow['xkey_ext'] ?? '' );

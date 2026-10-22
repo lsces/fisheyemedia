@@ -28,7 +28,7 @@ class FisheyeBookCatalogue {
 	const COLUMNS = [
 		'Ref' => 'ref', 'Collection' => 'collection', 'Category' => 'category', 'ISBN-13' => 'isbn13',
 		'ISBN-10' => 'isbn10', 'ISBN as entered' => 'isbn_entered', 'Authors' => 'authors',
-		'Author role' => 'author_role', 'Title' => 'title', 'Year' => 'year', 'Published' => 'published_iso',
+		'Author role' => 'author_role', 'Publisher' => 'publisher', 'Title' => 'title', 'Year' => 'year', 'Published' => 'published_iso',
 		'Date precision' => 'precision', 'Copies' => 'copies', 'Paid GBP' => 'paid',
 		'Source URL' => 'source_url', 'Notes' => 'notes', 'Flags' => 'flags',
 	];
@@ -233,6 +233,7 @@ class FisheyeBookCatalogue {
 			'title'        => trim( (string)$pRaw['title'] ),
 			'authors'      => $authors,
 			'author_role'  => trim( (string)( $pRaw['author_role'] ?? '' ) ),
+			'publisher'    => trim( (string)( $pRaw['publisher'] ?? '' ) ),
 			'isbn13'       => trim( (string)( $pRaw['isbn13'] ?? '' ) ),
 			'isbn10'       => trim( (string)( $pRaw['isbn10'] ?? '' ) ),
 			'isbn_entered' => trim( (string)( $pRaw['isbn_entered'] ?? '' ) ),
