@@ -9,8 +9,6 @@
  */
 namespace Bitweaver\Fisheyemedia;
 
-use Bitweaver\Contactwiki\ContactWikiIndividual as Wiki;
-
 require_once '../kernel/includes/setup_inc.php';
 
 global $gBitSystem, $gBitDb;
@@ -30,9 +28,8 @@ $ids = $gBitDb->getCol(
 
 $tagged = 0;
 foreach( $ids as $id ) {
-	$contact = new Wiki( null, (int)$id );
-	$contact->load();
-	if( !$contact->isValid() || $contact->mContentTypeGuid !== 'contactwikiindi' ) {
+	$contact = FisheyeBookCredits::loadContact( (int)$id );
+	if( !$contact || $contact->mContentTypeGuid !== 'contactwikiindi' ) {
 		continue;
 	}
 	if( in_array( 'WP14', $contact->getSetTypeItems(), true ) ) {

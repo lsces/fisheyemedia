@@ -140,6 +140,22 @@ class FisheyeBookCredits {
 	}
 
 	/**
+	 * A wiki contact loaded as its own class - an individual or an organisation (group) - or null when the id is neither.
+	 * Loading an organisation as an individual fatals, so anything that holds a contact_id of either kind goes through here.
+	 */
+	public static function loadContact( int $pContentId ): ?object {
+		global $gBitDb;
+		$guid = $gBitDb->getOne( "SELECT `content_type_guid` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $pContentId ] );
+		$class = $guid === 'contactwikigroup' ? \Bitweaver\Contactwiki\ContactWikiGroup::class : ( $guid === 'contactwikiindi' ? Wiki::class : null );
+		if( !$class ) {
+			return null;
+		}
+		$contact = new $class( null, $pContentId );
+		$contact->load();
+		return $contact->isValid() ? $contact : null;
+	}
+
+	/**
 	 * A contact's name as it reads on a book, from its stored title (not getTitle(), which a contact
 	 * overrides to "Contact - <name>").
 	 */

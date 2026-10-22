@@ -83,12 +83,11 @@ if( $fromSheet && !empty( $_REQUEST['make_galleries'] ) ) {
 		if( $made['content_id'] ) {
 			FisheyeBookCredits::linkGalleryToContact( $made['content_id'], $author['contact_id'] );
 			$filed = FisheyeBookCredits::fileCreditedBooks( $catalogue['rows'], $made['content_id'], $author['name'] );
-			$authorContact = new Wiki( null, $author['contact_id'] );
-			$authorContact->load();
+			$authorContact = FisheyeBookCredits::loadContact( (int)$author['contact_id'] );
 			$authorGallery = new \Bitweaver\Fisheye\FisheyeGallery( null, $made['content_id'] );
 			$authorGallery->load();
 			$galleriesMade[] = [ 'name' => $author['name'], 'filed' => $filed, 'contact' => FisheyeBookCredits::contactName( $author['contact_id'] ),
-				'contactUrl' => $authorContact->isValid() ? $authorContact->getDisplayUrl() : '', 'galleryUrl' => $authorGallery->getDisplayUrl() ];
+				'contactUrl' => $authorContact ? $authorContact->getDisplayUrl() : '', 'galleryUrl' => $authorGallery->getDisplayUrl() ];
 		}
 	}
 }
@@ -113,9 +112,8 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 		if( str_starts_with( $choice, 'ol:' ) ) {
 			$made = Wiki::createFromOpenLibrary( substr( $choice, 3 ) );
 		} elseif( str_starts_with( $choice, 'contact:' ) ) {
-			$existing = new Wiki( null, (int)substr( $choice, 8 ) );
-			$existing->load();
-			if( $existing->isValid() ) {
+			$existing = FisheyeBookCredits::loadContact( (int)substr( $choice, 8 ) );
+			if( $existing ) {
 				// An existing contact taken as the author: tagged as a book author, and given the Open Library id the
 				// person's books pointed to, so the name counts as done from now on.
 								if( preg_match( '/^OL\d+A$/', $hint = $decode( $_REQUEST['olhint'][$i] ?? '' ) ) ) {
