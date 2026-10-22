@@ -63,28 +63,43 @@
 				{/form}
 			{/if}
 			{if $authorGalleryId && $bookList}
-				<h3>{tr}This author's books{/tr}</h3>
-				<table class="table table-condensed">
-					<thead><tr><th>{tr}Title{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th><th></th></tr></thead>
-					<tbody>
-						{foreach from=$bookList item=book}
-							<tr>
-								<td>{$book.title|escape}</td>
-								<td>{$book.year|escape}</td>
-								<td>{foreach from=$book.coauthors item=other name=co}{$other|escape}{if !$smarty.foreach.co.last}, {/if}{/foreach}</td>
-								<td>{$book.series|escape}</td>
-								<td>{if $book.loaded}{tr}loaded{/tr}{elseif $book.next}<strong>{tr}next press{/tr}</strong>{else}{tr}waiting{/tr}{/if}</td>
-							</tr>
-						{/foreach}
-					</tbody>
-				</table>
+				{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
+					<input type="hidden" name="gallery_id" value="{$authorGalleryId}" />
+					<input type="hidden" name="series_form" value="1" />
+					<input type="hidden" name="picked_form" value="1" />
+					{if $useSeries}<input type="hidden" name="use_series" value="1" />{/if}
+					{if $seriesPlan}{foreach from=$seriesPlan.split item=splitKey}<input type="hidden" name="split[{$splitKey|escape}]" value="1" />{/foreach}{/if}
+					<h3>{tr}This author's books still to load{/tr}</h3>
+					<p class="help-block">{$booksLoaded}/{$booksTotal} {tr}loaded. The next{/tr} {$batchSize} {tr}are ticked - untick any to leave out; at most{/tr} {$batchSize} {tr}are loaded per press, and loaded books drop off this list.{/tr}</p>
+					<table class="table table-condensed">
+						<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th></tr></thead>
+						<tbody>
+							{foreach from=$bookList item=book}
+								<tr>
+									<td><input type="checkbox" name="book[]" value="{$book.index}"{if $book.ticked} checked="checked"{/if} /></td>
+									<td>{$book.title|escape}</td>
+									<td>{$book.year|escape}</td>
+									<td>{foreach from=$book.coauthors item=other name=co}{$other|escape}{if !$smarty.foreach.co.last}, {/if}{/foreach}</td>
+									<td>{$book.series|escape}</td>
+								</tr>
+							{/foreach}
+						</tbody>
+					</table>
+					<div class="form-group submit">
+						<button type="submit" class="btn btn-primary" name="process_group" value="{$onlyKey|escape}"{if !$hasTopGallery} disabled="disabled"{/if}>{tr}Load the ticked books{/tr}</button>
+					</div>
+				{/form}
 			{/if}
 			{if $authorGalleryId && $coCredited}
 				<h3>{tr}Co-written - filed here from the primary author's page{/tr}</h3>
 				<ul class="list-unstyled">{foreach from=$coCredited item=book}<li>{$book.title|escape} ({tr}primary author{/tr}: {$book.primary|escape}) - {if $book.loaded}{tr}loaded{/tr}{else}{tr}not loaded yet{/tr}{/if}</li>{/foreach}</ul>
 			{/if}
 
-			{if $pending}
+			{if $authorGalleryId}
+				{if !$bookList}
+					<p>{if $authorInCatalogue}{tr}Every book on the catalogue for this author is already loaded.{/tr}{else}{tr}This author has no books of their own as primary author - books they co-wrote are filed here when the primary author's books are loaded.{/tr}{/if}</p>
+				{/if}
+			{elseif $pending}
 				{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
 					{if $authorGalleryId}<input type="hidden" name="gallery_id" value="{$authorGalleryId}" />
 						<input type="hidden" name="series_form" value="1" />
@@ -101,8 +116,6 @@
 						{/foreach}
 					</ul>
 				{/form}
-			{elseif $authorGalleryId}
-				<p>{if $authorInCatalogue}{tr}Every book on the catalogue for this author is already loaded.{/tr}{else}{tr}This author has no books of their own as primary author - books they co-wrote are filed here when the primary author's books are loaded.{/tr}{/if}</p>
 			{else}
 				<p>{tr}Nothing left to load - every book in the catalogue is already there.{/tr}</p>
 			{/if}

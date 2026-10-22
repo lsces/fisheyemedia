@@ -14,7 +14,9 @@
  *
  * A group is loaded a few books per submit (LOAD_BOOKS_BATCH) and the page comes straight back, so a
  * long author never runs one request long; running it again carries on, and a book already loaded
- * is recognised (FisheyeBook::findContentId()) and skipped, so repeating it is harmless.
+ * is recognised (FisheyeBook::findContentId()) and skipped, so repeating it is harmless. From an
+ * author's gallery the books still to load are a tick-list (the first batch pre-ticked, untick to
+ * leave one out); loaded books drop off it.
  *
  * @package fisheyemedia
  */
@@ -57,6 +59,9 @@ if( $authorGallery && !$authorGallery->isValid() ) {
 }
 $onlyKey = $authorGallery ? 'a|'.mb_strtolower( FisheyeBookCredits::canonicalName( $authorGallery->getTitle() ) ) : null;
 
+// The tick-list's row numbers when it was posted (an empty list is a real answer, so the form marks itself).
+$pickedRows = !empty( $_REQUEST['picked_form'] ) ? array_map( 'intval', (array)( $_REQUEST['book'] ?? [] ) ) : null;
+
 if( !empty( $_REQUEST['process_group'] ) ) {
 	$result = [ 'created' => 0, 'already' => 0, 'errors' => [], 'group' => '', 'details' => [] ];
 	// detoxify() HTML-escapes every $_REQUEST value - undone here, as load_music.php does, since a
@@ -85,6 +90,9 @@ if( !empty( $_REQUEST['process_group'] ) ) {
 			foreach( $group['rows'] as $rowIndex => $row ) {
 				if( $done >= LOAD_BOOKS_BATCH ) {
 					break;
+				}
+				if( $pickedRows !== null && !in_array( $rowIndex, $pickedRows, true ) ) {
+					continue;
 				}
 				if( FisheyeBook::findContentId( $row ) ) {
 					continue;
@@ -170,10 +178,11 @@ foreach( $groups as $key => $group ) {
 	}
 }
 
-// From an author's gallery: the books this press would load (this author as primary author, in catalogue order, the
-// next batch marked), and those they only co-wrote - filed here when the primary author's books are loaded, so they
+// From an author's gallery: the books still to load (this author as primary author, in catalogue order, the
+// next batch pre-ticked; loaded ones are left off), and those they only co-wrote - filed here when the primary author's books are loaded, so they
 // are listed for information, not processed from this page.
 $bookList = [];
+$booksTotal = $booksLoaded = 0;
 $coCredited = [];
 $seriesPlanView = null;
 if( $authorGallery ) {
@@ -186,9 +195,13 @@ if( $authorGallery ) {
 	}
 	$nextBatch = LOAD_BOOKS_BATCH;
 	foreach( $groups[$onlyKey]['rows'] ?? [] as $rowIndex => $row ) {
-		$loaded = (bool)FisheyeBook::findContentId( $row );
-		$bookList[] = [ 'title' => $row['title'], 'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ), 'isbn' => $row['isbn'] ?? '',
-			'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => $seriesPosition[$rowIndex] ?? '', 'loaded' => $loaded, 'next' => !$loaded && $nextBatch-- > 0 ];
+		$booksTotal++;
+		if( FisheyeBook::findContentId( $row ) ) {
+			$booksLoaded++;
+			continue;
+		}
+		$bookList[] = [ 'index' => $rowIndex, 'title' => $row['title'], 'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ), 'isbn' => $row['isbn'] ?? '',
+			'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => $seriesPosition[$rowIndex] ?? '', 'ticked' => $nextBatch-- > 0 ];
 	}
 	$thisAuthor = mb_strtolower( FisheyeBookCredits::canonicalName( $authorGallery->getTitle() ) );
 	foreach( $catalogue['rows'] as $row ) {
@@ -217,6 +230,9 @@ $gBitSmarty->assign( 'authorGalleryTitle', $authorGallery ? $authorGallery->getT
 $gBitSmarty->assign( 'authorGalleryUrl', $authorGallery ? $authorGallery->getDisplayUrl() : '' );
 $gBitSmarty->assign( 'filedHere', $filedHere );
 $gBitSmarty->assign( 'bookList', $bookList );
+$gBitSmarty->assign( 'booksTotal', $booksTotal );
+$gBitSmarty->assign( 'booksLoaded', $booksLoaded );
+$gBitSmarty->assign( 'onlyKey', $onlyKey );
 $gBitSmarty->assign( 'useSeries', $useSeries );
 $gBitSmarty->assign( 'seriesPlan', $seriesPlanView );
 $gBitSmarty->assign( 'seriesWikidataFailed', $authorGallery && $useSeries && isset( $groups[$onlyKey] ) && $seriesPlanView === null );
