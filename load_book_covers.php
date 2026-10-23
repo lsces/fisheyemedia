@@ -3,8 +3,8 @@
  * Brings book covers in from another bitweaver site's fisheye gallery whose images are titled with the book's
  * ISBN-13 (hyphens allowed, e.g. 978-0711031517). The gallery's pages are read over HTTP, each image is matched to
  * the Library book with that ISBN, and the ones ticked have the book's front cover and tile replaced by the
- * picture, fetched at original size (liberty's download route) and stored at no more than 400px, the size the Library
- * shows (a smaller one is kept as it is). Spine, back and other images a book holds stay.
+ * picture, fetched as the source site's 400px 'medium' size (liberty's download route, ?size=medium; a site that has not got
+ * that route yet answers with the original) and stored at no more than 400px, the size the Library shows (a smaller one is kept as it is). Spine, back and other images a book holds stay.
  *
  * Nothing is written until Replace is pressed; the list shows the current cover beside the new one, with sizes, so
  * a smaller picture can be unticked. A cover brought in this way is marked, and the list shows it as done.
@@ -107,7 +107,7 @@ foreach( $listing['items'] as $item ) {
 			}
 			if( !$row['done'] ) {
 				// Only the matched ones are fetched here, to show the size of what would arrive beside what is there.
-				$bytes = load_book_covers_fetch( $site.'/liberty/download/file/'.$item['id'].'?size=original' );
+				$bytes = load_book_covers_fetch( $site.'/liberty/download/file/'.$item['id'].'?size=medium' );
 				$info = $bytes !== null ? @getimagesizefromstring( $bytes ) : false;
 				$row['newSize'] = $info ? $info[0].'x'.$info[1] : '';
 				if( $info && max( $info[0], $info[1] ) > FISHEYEBOOK_COVER_MAX ) {
@@ -133,7 +133,7 @@ if( !empty( $_REQUEST['replace'] ) && !empty( $_REQUEST['pick'] ) && is_array( $
 		if( count( $results ) >= LOAD_BOOK_COVERS_BATCH ) {
 			break;
 		}
-		$bytes = load_book_covers_fetch( $site.'/liberty/download/file/'.$row['id'].'?size=original' );
+		$bytes = load_book_covers_fetch( $site.'/liberty/download/file/'.$row['id'].'?size=medium' );
 		$line = [ 'title' => $row['book']['title'], 'url' => $row['book']['url'], 'isbn' => $row['isbn'], 'error' => '', 'size' => '' ];
 		if( $bytes === null || !( $info = @getimagesizefromstring( $bytes ) ) ) {
 			$line['error'] = 'the picture could not be fetched';
