@@ -12,8 +12,8 @@
  * skipping anything unmatched) - Plex almost never scans Music/<Artist>/Videos/, so that gate would
  * block everything here. registerFromDisk() already degrades gracefully with no Plex match (same
  * as a Featurette), so every selected video registers regardless; Plex metadata still gets fetched
- * opportunistically when a match does exist (Lester: "a lot of the material will eventually be
- * linked to tv and film programs... need plex info to marry up with existing copies"). Detecting
+ * opportunistically when a match does exist (much of this material is expected to be linked to TV and film
+ * programs later, which needs the Plex info to marry up with existing copies). Detecting
  * and linking to an existing Film/TV copy of the same content instead of creating a fresh
  * registration is a real follow-on, not built yet - this always registers a new FisheyeFilm.
  *

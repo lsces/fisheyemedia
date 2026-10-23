@@ -56,14 +56,14 @@ const FISHEYEALBUM_ARTWORK_EXTENSIONS = [ 'jpg', 'jpeg', 'png', 'gif', 'bmp', 't
 // ("CD Pool - Dance Hits...", "100 Hits Christmas") - the required digit immediately after CD/Vol
 // keeps this from false-firing on ordinary prose.
 const FISHEYEALBUM_DISC_FOLDER_PATTERN = '/(CD|Vol(ume)?\.?)\s*\d+/i';
-// An artist/composer's own discography split by release type (Lester moving away from one flat
+// An artist/composer's own discography split by release type (instead of one flat
 // "Discography" dumping-ground folder) - Studio/Live/Compilation/Remaster/Single etc.
 // sit directly under the artist folder and themselves contain the real album folders, same
 // "container, not an album itself" shape as a box set folder but not disc-numbered so
 // FISHEYEALBUM_DISC_FOLDER_PATTERN doesn't (and shouldn't) match them. Fixed list rather than
 // generic "any subfolder with no tracks of its own but real album subfolders inside" detection -
 // deliberately chosen since a name-based list is simpler to reason about than a content-shape
-// heuristic. Singular only, standardised naming going forward (Lester) - no
+// heuristic. Singular only, standardised naming going forward - no
 // "Albums"/plurals, and no separate EP category, EPs file under Single. Case-insensitive exact
 // match against the whole folder name (see isCategoryFolder()) - not a substring/prefix match, so
 // a real album title that happens to start with one of these words never false-fires.
@@ -1699,7 +1699,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * instant" step load_music.php's own top-level version already establishes for an artist/
 	 * composer gallery. Populating it with real albums (or, for a box set, per-disc albums) is then
 	 * just a normal load_album.php visit pointed at this new gallery - its own contents show up as
-	 * ordinary candidates there, letting Lester pick a handful at a time rather than everything
+	 * ordinary candidates there, letting the user pick a handful at a time rather than everything
 	 * inside importing (and every track of it) in one single request.
 	 *
 	 * @param string $pRelativeFolderPath  the container's own folder, relative to
@@ -1821,7 +1821,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * @param string|null $pCategory        the discography-category folder (Studio/Live/
 	 *                                      Compilation/...) this album's own folder sits directly
 	 *                                      inside, if any - stored as a plain 'category' xref for
-	 *                                      display-side grouping (Lester, 2026-09-24: deliberately
+	 *                                      display-side grouping (deliberately
 	 *                                      NOT a nested gallery per category - load_album.php just
 	 *                                      flattens straight through into this artist's own gallery
 	 *                                      instead, one xref per album rather than a whole gallery
@@ -1924,14 +1924,14 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * Look up this album's own MusicBrainz release (via its already-stored 'mbid' xref) for a
 	 * linked Discogs release, and store it the same way FisheyeFilm stores 'imdb'/'tmdb' - a plain
 	 * 'discogs' xref item whose xkey is the bare Discogs release id, rendered as a real link by
-	 * view_album.php the same generic cross_ref_href way (see the 'liberty_xref_item' row Lester
+	 * view_album.php the same generic cross_ref_href way (see the 'liberty_xref_item' row
 	 * added for content_type_guid='fisheyealbum', matching fisheyefilm/fisheyeseason/fisheyeprogram's
 	 * own imdb/tmdb rows exactly: x_group='external', template='href').
 	 *
 	 * MusicBrainz doesn't hand out Discogs ids directly - a release only has one if someone has
 	 * already linked the two as a community edit, discoverable via the release's own url-rels
 	 * (see https://musicbrainz.org/ws/2/release/<mbid>?inc=url-rels&fmt=json). No such link existing
-	 * is a normal, common outcome, not an error - most of Lester's still-unmatched bootleg/demo
+	 * is a normal, common outcome, not an error - most still-unmatched bootleg/demo
 	 * material will never have one either way.
 	 *
 	 * @return array 'discogs_id'=>string plus 'url'=>string on a fresh find, 'already'=>true if a

@@ -8,8 +8,8 @@
  * gallery only (music_gallery_icons_inc.tpl's "Add Music Collection"), same gating as Film's own
  * "Load Collections" icon.
  *
- * No intermediate base-folder tier (there was one - a Classical/Modern-style split - until Lester
- * flattened the tidied portion of the library to sit directly under Music/; every real
+ * No intermediate base-folder tier (there used to be a Classical/Modern-style split, since flattened so the tidied
+ * part of the library sits directly under Music/); every real
  * artist/composer/collection folder now lives at exactly this one level, matching load_album.php's
  * own folder resolution).
  *
