@@ -48,7 +48,7 @@
 			{form legend="Covers" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_covers.php"}
 				<input type="hidden" name="site" value="{$site|escape}" />
 				<input type="hidden" name="gallery_id" value="{$galleryId|escape}" />
-				<p>{$rows|@count} {tr}images in the gallery;{/tr} {$matched} {tr}match a book in the Library;{/tr} {$waiting} {tr}still to bring in. Ticked covers replace the book's front cover and tile - its spine, back and other images stay. Each press does the first{/tr} {$batchSize} {tr}ticked.{/tr}</p>
+				<p>{$rows|@count} {tr}images in the gallery;{/tr} {$matched} {tr}match a book in the Library;{/tr} {$waiting} {tr}still to bring in. Ticked covers replace the book's front cover and tile, stored at no more than 400px - its spine, back and other images stay. Each press does the first{/tr} {$batchSize} {tr}ticked.{/tr}</p>
 				<table class="table table-condensed">
 					<thead><tr><th></th><th>{tr}ISBN{/tr}</th><th>{tr}Book{/tr}</th><th>{tr}Now{/tr}</th><th>{tr}New{/tr}</th></tr></thead>
 					<tbody>

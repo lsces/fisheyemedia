@@ -311,15 +311,16 @@ trait FisheyeMediaTrait {
 	 * @param string $pNameHint    basis for the stored file name (a relative path is flattened)
 	 * @param string $pSource      what data.source records ('Artwork/Book 01.jpg', 'caa:12345')
 	 * @param array  $pExtraData   anything else worth keeping in data (Cover Art Archive types)
+	 * @param int    $pMax         longest side kept, FISHEYEMEDIA_ARTWORK_MAX when 0 (a smaller picture is never enlarged)
 	 * @return string|null  the stored file name, or null if the image couldn't be read
 	 */
-	protected function storeArtworkXref( string $pSourceFile, string $pNameHint, string $pSource, array $pExtraData = [] ): ?string {
+	protected function storeArtworkXref( string $pSourceFile, string $pNameHint, string $pSource, array $pExtraData = [], int $pMax = 0 ): ?string {
 		$ext = strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) );
 		$base = trim( preg_replace( '/[^A-Za-z0-9._-]+/', '-', str_replace( '/', ' - ', pathinfo( $pNameHint, PATHINFO_DIRNAME ) !== '.' ? pathinfo( $pNameHint, PATHINFO_DIRNAME ).'/'.pathinfo( $pNameHint, PATHINFO_FILENAME ) : pathinfo( $pNameHint, PATHINFO_FILENAME ) ) ), '-' );
 		$fileName = $base.'.'.( in_array( $ext, [ 'png', 'gif' ], true ) ? $ext : 'jpg' );
 		$branch = $this->getExtraImagePath( '' );
 		\Bitweaver\KernelTools::mkdir_p( $branch );
-		if( !self::storeArtworkImage( $pSourceFile, $branch.$fileName, FISHEYEMEDIA_ARTWORK_MAX ) ) {
+		if( !self::storeArtworkImage( $pSourceFile, $branch.$fileName, $pMax > 0 ? $pMax : FISHEYEMEDIA_ARTWORK_MAX ) ) {
 			return null;
 		}
 		$nextOrder = (int)$this->mDb->getOne( "SELECT MAX(`xorder`) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) + 1;

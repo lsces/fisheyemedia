@@ -31,6 +31,9 @@ use Bitweaver\Fisheye\FisheyeGallery;
 define( 'FISHEYEBOOK_CONTENT_TYPE_GUID', 'fisheyebook' );
 
 // Single-valued plain-text items - the value lives in xkey_ext, as the album's label/barcode do.
+// Longest side kept for a cover brought in from elsewhere: the 400px 'medium' size the Library shows; a higher-resolution original is archived separately.
+const FISHEYEBOOK_COVER_MAX = 400;
+
 const FISHEYEBOOK_TEXT_ITEMS = [ 'format', 'edition', 'published', 'pages', 'language', 'copies', 'paid', 'imprint' ];
 // Repeatable plain-text items - one row per value.
 const FISHEYEBOOK_LIST_ITEMS = [ 'category', 'subject', 'note' ];
@@ -464,11 +467,12 @@ class FisheyeBook extends FisheyeMediaImage {
 	 *
 	 * @param string $pSourceFile local path of the new picture
 	 * @param string $pSource     where it came from - stored on the image row, so a later pass can tell it has been done
+	 * @param int    $pMax        longest side kept (FISHEYEBOOK_COVER_MAX); a smaller picture is stored as it is
 	 * @return string|null the stored file name, null when the picture could not be stored
 	 */
-	public function replaceCover( string $pSourceFile, string $pSource ): ?string {
+	public function replaceCover( string $pSourceFile, string $pSource, int $pMax = FISHEYEBOOK_COVER_MAX ): ?string {
 		$old = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
-		$fileName = $this->storeArtworkXref( $pSourceFile, 'front-cover', $pSource, [ 'types' => [ 'Front' ] ] );
+		$fileName = $this->storeArtworkXref( $pSourceFile, 'front-cover', $pSource, [ 'types' => [ 'Front' ] ], $pMax );
 		if( $fileName === null ) {
 			return null;
 		}
