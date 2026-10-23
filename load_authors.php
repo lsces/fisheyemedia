@@ -95,6 +95,9 @@ $withoutGallery = $fromSheet ? FisheyeBookCredits::authorsWithoutGallery( $catal
 
 $result = null;
 if( !empty( $_REQUEST['create_authors'] ) ) {
+	// One press at a time: a run that waited here finds the contacts the earlier one made (see lockPress()).
+	FisheyeBookLoader::lockPress();
+	FisheyeBookCredits::resetCache();
 	$result = [ 'done' => [], 'errors' => [], 'skipped' => 0 ];
 	$loadBooks = $fromSheet && !empty( $_REQUEST['load_books'] );
 	$bookBudget = LOAD_AUTHORS_BOOKS_PER_PRESS;
@@ -124,7 +127,14 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 				$made = [ 'error' => KernelTools::tra( 'No such contact' ) ];
 			}
 		} else {
-			$made = Wiki::createNameOnly( $person['name'], [ 'author' ] );
+			// Made a moment ago by an earlier run of this press (the page pressed again while it was working): use that one.
+			// Only a recent one - choosing "new" for a namesake of an older author contact is still a real choice.
+			$earlierId = FisheyeBookCredits::authorContactFor( $person['name'] );
+			if( $earlierId && (int)$gBitDb->getOne( "SELECT `created` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $earlierId ] ) < time() - 600 ) {
+				$earlierId = null;
+			}
+			$earlier = $earlierId ? FisheyeBookCredits::loadContact( (int)$earlierId ) : null;
+			$made = $earlier ? [ 'content' => $earlier ] : Wiki::createNameOnly( $person['name'], [ 'author' ] );
 		}
 		if( empty( $made['content'] ) ) {
 			$result['errors'][] = $person['name'].' - '.( $made['error'] ?? KernelTools::tra( 'could not be created' ) );

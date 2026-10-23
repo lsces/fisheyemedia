@@ -17,6 +17,25 @@ use Bitweaver\Fisheye\FisheyeImage;
 
 class FisheyeBookLoader {
 
+	/** @var resource|false|null the press lock, held to the end of the request once taken */
+	private static $pressLock = null;
+
+	/**
+	 * Take the press lock: one loading press at a time. A press that takes a few seconds gets pressed again, the browser
+	 * abandons the first and sends another - and PHP carries on with every one of them, so three or four runs of the same
+	 * press were each making the contact and the book. Held to the end of the request (taking it twice in one request is
+	 * harmless), so a later run starts only after the earlier one has finished and finds what it made.
+	 */
+	public static function lockPress(): void {
+		if( self::$pressLock === null ) {
+			ignore_user_abort( true );
+			self::$pressLock = @fopen( sys_get_temp_dir().'/fisheyemedia_press.lock', 'c' );
+			if( self::$pressLock ) {
+				flock( self::$pressLock, LOCK_EX );
+			}
+		}
+	}
+
 	/**
 	 * Load up to $pLimit books of a group.
 	 *
@@ -27,6 +46,7 @@ class FisheyeBookLoader {
 	 * @return array{created:int,already:int,errors:list<string>,group:string,details:list<array>,series?:array<string,int>}
 	 */
 	public static function loadGroup( array $pGroup, ?array $pPickedRows, bool $pUseSeries, ?array $pSplitChosen, int $pLimit ): array {
+		self::lockPress();
 		$result = [ 'created' => 0, 'already' => 0, 'errors' => [], 'group' => $pGroup['name'], 'details' => [] ];
 		$gallery = FisheyeBookCredits::findOrCreateLibraryGallery( $pGroup['name'] );
 		$galleryContentId = $gallery['content_id'];
