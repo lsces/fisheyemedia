@@ -457,6 +457,37 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $ok;
 	}
 
+	/**
+	 * Make a supplied picture the book's front cover and its tile, replacing the cover it had: the first image (the one that
+	 * became the tile) and any cover fetched from Open Library or Google Books. Spine, back and other images the book holds
+	 * are kept. The old image rows are expunged with their files, and the tile is rebuilt from the new file.
+	 *
+	 * @param string $pSourceFile local path of the new picture
+	 * @param string $pSource     where it came from - stored on the image row, so a later pass can tell it has been done
+	 * @return string|null the stored file name, null when the picture could not be stored
+	 */
+	public function replaceCover( string $pSourceFile, string $pSource ): ?string {
+		$old = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
+		$fileName = $this->storeArtworkXref( $pSourceFile, 'front-cover', $pSource, [ 'types' => [ 'Front' ] ] );
+		if( $fileName === null ) {
+			return null;
+		}
+		$newRowId = (int)$this->mDb->getOne( "SELECT MAX(`xref_id`) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `xkey_ext` = ? AND `end_date` IS NULL", [ $this->mContentId, $fileName ] );
+		foreach( $old as $index => $row ) {
+			$data = (string)$row['data'];
+			$isCover = $index === 0 || str_contains( $data, 'openlibrary:' ) || str_contains( $data, 'googlebooks:' ) || str_contains( $data, '"Front"' );
+			if( !$isCover || (int)$row['xref_id'] === $newRowId ) {
+				continue;
+			}
+			$stepHash = [ 'xref_id' => (int)$row['xref_id'], 'expunge' => 3 ];
+			if( $this->stepXref( $stepHash ) && $row['xkey_ext'] !== $fileName ) {
+				@unlink( $this->getExtraImagePath( '' ).$row['xkey_ext'] );
+			}
+		}
+		$this->attachThumbnail( $this->getExtraImagePath( '' ).$fileName );
+		return $fileName;
+	}
+
 	// ---- Open Library -------------------------------------------------------------------------
 
 	/**
