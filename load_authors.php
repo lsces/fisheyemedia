@@ -198,6 +198,11 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 				}
 			}
 		}
+		// Books this press has just loaded were linked as they loaded, so count the books now linked to the contact, not only the ones that were there.
+		class_exists( FisheyeBook::class );
+		$linked = (int)$gBitDb->getOne( "SELECT COUNT( DISTINCT x.`content_id` ) FROM `".BIT_DB_PREFIX."liberty_xref` x
+			JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			WHERE x.`xref` = ? AND x.`end_date` IS NULL AND lc.`content_type_guid` = 'fisheyebook' AND x.`item` IN ( '".implode( "', '", FISHEYEBOOK_CREDIT_ITEMS )."' )", [ (int)$contact->mContentId ] );
 		$result['done'][] = [ 'name' => $person['name'], 'booksLoaded' => $booksLoaded, 'contact' => FisheyeBookCredits::contactName( (int)$contact->mContentId ), 'url' => $contact->getDisplayUrl(), 'linked' => $linked, 'books' => count( $person['books'] ), 'gallery' => $galleryUrl ];
 	}
 	// Whoever is now linked drops out of the list; anyone left for now stays on it.

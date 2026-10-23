@@ -33,10 +33,12 @@ echo ( $apply ? 'APPLY' : 'DRY RUN' ).( $galleryContentId ? ", books in gallery 
 FisheyeBookCredits::resetCache();
 $byContact = [];
 $noContact = 0;
+$leftNames = [];
 foreach( FisheyeBookCredits::unlinkedPeople( $galleryContentId ) as $person ) {
 	$contactId = FisheyeBookCredits::authorContactFor( $person['name'] );
 	if( !$contactId ) {
 		$noContact += count( $person['xref_ids'] );
+		$leftNames[] = $person['name'].' ('.count( $person['xref_ids'] ).')';
 		continue;
 	}
 	$byContact[$contactId]['name'] = $person['name'];
@@ -55,6 +57,9 @@ foreach( $byContact as $contactId => $group ) {
 }
 echo "\n".$total." credits for ".count( $byContact )." contacts".( $apply ? ", linked $linked" : ' to link' ).";"
 	." $noContact left (no single author contact for the name)\n";
+if( $leftNames ) {
+	echo "Left: ".implode( '; ', $leftNames )."\n";
+}
 if( $apply && $total > $linked ) {
 	echo "More remain - run again.\n";
 }
