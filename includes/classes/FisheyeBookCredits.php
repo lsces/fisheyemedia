@@ -189,6 +189,18 @@ class FisheyeBookCredits {
 	}
 
 	/**
+	 * Link book credit rows (author, editor...) to a contact. FisheyeCredits::linkRows() with no item list means the film and TV
+	 * credits, so the book items are named here.
+	 *
+	 * @param list<int> $pXrefIds
+	 * @return int  credits linked
+	 */
+	public static function linkBookRows( array $pXrefIds, int $pContactId, string $pXkey ): int {
+		class_exists( FisheyeBook::class );
+		return FisheyeCredits::linkRows( $pXrefIds, $pContactId, $pXkey, FISHEYEBOOK_CREDIT_ITEMS, [ 'fisheyebook' ] );
+	}
+
+	/**
 	 * Link a loaded book's unlinked credits to the author contacts their names belong to (authorContactFor()).
 	 * Never touches a credit already linked, by hand or otherwise.
 	 *
@@ -209,7 +221,7 @@ class FisheyeBookCredits {
 		}
 		$linked = 0;
 		foreach( $byContact as $contactId => $xrefIds ) {
-			$linked += FisheyeCredits::linkRows( $xrefIds, $contactId, self::contactKey( $contactId ), null, [ 'fisheyebook' ] );
+			$linked += self::linkBookRows( $xrefIds, $contactId, self::contactKey( $contactId ) );
 		}
 		return $linked;
 	}

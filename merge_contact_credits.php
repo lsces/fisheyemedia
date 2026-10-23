@@ -107,7 +107,7 @@ foreach( $rows as $row ) {
 }
 echo count( $unlinked )." credits to link".( $leftAlone ? ", $leftAlone already linked to someone and left alone" : '' )."\n";
 if( $apply && $unlinked ) {
-	$linked = FisheyeCredits::linkRows( $unlinked, $toId, FisheyeBookCredits::contactKey( $toId ), null, [ 'fisheyebook' ] );
+	$linked = FisheyeBookCredits::linkBookRows( $unlinked, $toId, FisheyeBookCredits::contactKey( $toId ) );
 	echo "linked $linked\n";
 }
 

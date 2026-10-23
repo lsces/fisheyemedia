@@ -147,7 +147,7 @@ if( !empty( $_REQUEST['create_authors'] ) ) {
 		$xkey = $contact->getWikidataQid() ?: (string)( $olRow['xkey_ext'] ?? '' );
 		// Credits on books already loaded - from the sheet, a person's credit rows are looked up here.
 		$creditIds = $fromSheet ? ( FisheyeBookCredits::unlinkedPeople()[FisheyeBookCredits::nameKey( $person['name'] )]['xref_ids'] ?? [] ) : $person['xref_ids'];
-		$linked = FisheyeCredits::linkRows( $creditIds, (int)$contact->mContentId, $xkey, null, [ 'fisheyebook' ] );
+		$linked = FisheyeBookCredits::linkBookRows( $creditIds, (int)$contact->mContentId, $xkey );
 		// File the contact on the author's gallery: this one when asked from a gallery, else the Library gallery
 		// of that name (as the contact's name or as the credit was written).
 		if( $gallery && array_intersect( Wiki::nameForms( $person['name'] ), Wiki::nameForms( $gallery->getTitle() ) ) ) {
