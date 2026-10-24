@@ -29,8 +29,6 @@
 
 				{if $isbn}
 					<p><strong>{tr}ISBN{/tr}:</strong> {$isbn.isbn13|escape}{if $isbn.isbn10} ({$isbn.isbn10|escape}){/if}
-						{if $isbn.entered} &middot; {tr}entered as{/tr} {$isbn.entered|escape}{/if}
-						{if $isbn.note} &middot; {$isbn.note|escape}{/if}
 					</p>
 				{/if}
 

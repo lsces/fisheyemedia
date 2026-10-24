@@ -6,7 +6,7 @@
  * newest archived sheet is the catalogue a loader page works through a batch at a time.
  *
  * The sheet is flat, one book per row, with these header names (any order, extra columns ignored):
- *   Ref, Collection, Category, ISBN-13, ISBN-10, ISBN as entered, Authors (' | ' between people),
+ *   Ref, Collection, Category, ISBN-13, ISBN-10, Authors (' | ' between people),
  *   Author role, Title, Year, Published (an ISO date, blank when only a year is known), Date precision,
  *   Copies, Paid GBP, Source URL, Notes (';' between notes), Flags.
  * Only Title is required.
@@ -27,7 +27,7 @@ class FisheyeBookCatalogue {
 	// Header text => row key.
 	const COLUMNS = [
 		'Ref' => 'ref', 'Collection' => 'collection', 'Category' => 'category', 'ISBN-13' => 'isbn13',
-		'ISBN-10' => 'isbn10', 'ISBN as entered' => 'isbn_entered', 'Authors' => 'authors',
+		'ISBN-10' => 'isbn10', 'Authors' => 'authors',
 		'Author role' => 'author_role', 'Publisher' => 'publisher', 'Title' => 'title', 'Year' => 'year', 'Published' => 'published_iso',
 		'Date precision' => 'precision', 'Copies' => 'copies', 'Paid GBP' => 'paid',
 		'Source URL' => 'source_url', 'Notes' => 'notes', 'Flags' => 'flags',
@@ -236,8 +236,6 @@ class FisheyeBookCatalogue {
 			'publisher'    => trim( (string)( $pRaw['publisher'] ?? '' ) ),
 			'isbn13'       => trim( (string)( $pRaw['isbn13'] ?? '' ) ),
 			'isbn10'       => trim( (string)( $pRaw['isbn10'] ?? '' ) ),
-			'isbn_entered' => trim( (string)( $pRaw['isbn_entered'] ?? '' ) ),
-			'isbn_note'    => '',
 			'published'    => $published,
 			'category'     => trim( (string)( $pRaw['category'] ?? '' ) ) !== '' ? [ trim( $pRaw['category'] ) ] : [],
 			'copies'       => $copies > 1 ? (string)$copies : '',

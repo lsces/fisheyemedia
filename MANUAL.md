@@ -174,6 +174,16 @@ shows what is loaded, what is next and how many are done, and works in small bat
 - A site that holds book pictures elsewhere can bring them in with a **Local Imports** script
   (see the liberty manual), which files them into these folders.
 
+### Adding or correcting a book's details by hand
+
+On a book's edit page the **Book Details** tab lists the details held for the book; each row has its own edit icon and the tab has an add
+link for anything that is missing (pages, format, a publisher...).
+
+- **ISBN:** the ISBN row shows the ISBN-13 and the ISBN-10. Add or edit it by typing either number, with or without hyphens; the other form is
+  worked out and stored beside it, and a number whose check digit is wrong is refused. A book with no ISBN can be given one this way.
+- **Reload from Open Library** (on the same page) then looks the book up by its ISBN and fills in what is blank: the Open Library ids, pages,
+  format, language, publisher and a cover. It never replaces something that is already filled in.
+
 ### Credits and contacts
 
 Authors, editors, illustrators, translators and narrators are linked to Contact records. If a credit shows as

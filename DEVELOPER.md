@@ -651,7 +651,12 @@ refused).
 | `FISHEYEBOOK_CREDIT_ITEMS` | `author`, `editor`, `illustrator`, `translator`, `narrator` (name in `xkey_ext`, contact in `xref`) |
 | `FISHEYEBOOK_EXTERNAL_ITEMS` | `ol_edition`, `ol_work`, `wikidata_work`, `google_books`, `isfdb`, `gutenberg` |
 
-`isbn` is one row: `xkey` = ISBN-13, `xkey_ext` = ISBN-10, `data` {entered, note}. `event_time` carries the
+`isbn` is one row: `xkey` = ISBN-13, `xkey_ext` = ISBN-10, no data (an old `{entered, note}` value is gone).
+Its row templates are `templates/xref/fisheyebook/view_isbn_item.tpl` and `edit_isbn_item.tpl`, which show both numbers and take
+either; **every manual save goes through `FisheyeBook::storeXref()`**, which normalises an `isbn` row (the number typed in `isbn`,
+`xkey_ext` or `xkey` - ISBN-10 or -13, hyphens allowed - becomes the ISBN-13 in `xkey` and the ISBN-10 in `xkey_ext`), refuses a number
+that fails its check digit, and blanks the row's data. `reloadFromOpenLibrary()` reads `xkey` and `xkey_ext`, so a book given an ISBN
+by hand can be filled in from Open Library at once. `event_time` carries the
 published date for calendar sorting; the `published` item keeps its precision. Series are galleries
 (`FisheyeSeries`), not xrefs.
 

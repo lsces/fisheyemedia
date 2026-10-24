@@ -43,7 +43,7 @@ if( $gContent->mXrefInfo ) {
 		}
 
 		if( $item === 'isbn' ) {
-			$isbn = [ 'isbn13' => (string)$xref['xkey'], 'isbn10' => (string)$xref['xkey_ext'], 'entered' => $data['entered'] ?? '', 'note' => $data['note'] ?? '' ];
+			$isbn = [ 'isbn13' => (string)$xref['xkey'], 'isbn10' => (string)$xref['xkey_ext'] ];
 		} elseif( in_array( $item, [ ...FISHEYEBOOK_CREDIT_ITEMS, 'publisher' ], true ) ) {
 			// Linked to the person's contact once there is one - the root index.php?content_id=
 			// dispatcher routes to whatever the contact's own page is.

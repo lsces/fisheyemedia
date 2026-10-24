@@ -9,7 +9,7 @@
  *
  * Like an album, a book has no LibertyMime attachment of its own; everything about it is liberty_xref
  * rows, written through reconcileXrefItem() so a re-run never wipes hand edits or contact links:
- *   - isbn            one row: xkey = ISBN-13, xkey_ext = ISBN-10, data {entered, note}
+ *   - isbn            one row: xkey = ISBN-13, xkey_ext = ISBN-10
  *   - author/editor/illustrator/translator/narrator   credit rows (name in xkey_ext, contact in xref/xkey)
  *   - publisher       one credit row;   imprint = the line as printed
  *   - plain text      format, edition, published, pages, language, copies, paid
@@ -151,13 +151,12 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * 'isbn13'/'isbn10' are only ever set to values that pass their check digit. A 13-digit number
 	 * that fails is first tried as '978' glued onto an ISBN-10 with its old check digit left on (a
 	 * common slip) and, if the tail is a valid ISBN-10, repaired to the correct ISBN-13 and flagged;
-	 * otherwise it is left unusable. 'entered' keeps the original text whenever the stored ISBN is
-	 * not simply that text.
+	 * otherwise it is left unusable.
 	 *
-	 * @return array{isbn13:string,isbn10:string,entered:string,url:string,flags:list<string>}
+	 * @return array{isbn13:string,isbn10:string,url:string,flags:list<string>}
 	 */
 	public static function normaliseIsbn( string $pRaw ): array {
-		$ret = [ 'isbn13' => '', 'isbn10' => '', 'entered' => '', 'url' => '', 'flags' => [] ];
+		$ret = [ 'isbn13' => '', 'isbn10' => '', 'url' => '', 'flags' => [] ];
 		$raw = trim( $pRaw );
 		if( $raw === '' ) {
 			$ret['flags'][] = 'no-isbn';
@@ -179,10 +178,8 @@ class FisheyeBook extends FisheyeMediaImage {
 		} elseif( strlen( $digits ) === 13 && str_starts_with( $digits, '978' ) && self::isbn10IsValid( substr( $digits, 3 ) ) ) {
 			$ret['isbn10'] = strtoupper( substr( $digits, 3 ) );
 			$ret['isbn13'] = self::isbn10To13( $ret['isbn10'] );
-			$ret['entered'] = $raw;
 			$ret['flags'][] = 'isbn-repaired';
 		} else {
-			$ret['entered'] = $raw;
 			$ret['flags'][] = strlen( $digits ) === 13 ? 'isbn-checkdigit-fails' : 'isbn-unrecognised';
 		}
 		return $ret;
@@ -257,7 +254,7 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * gallery if given, and write its xrefs. Idempotent: a book already registered (see
 	 * findContentId()) is reported, not duplicated.
 	 *
-	 * Row keys, all optional but 'title': isbn13, isbn10, isbn_entered, isbn_note; title; description;
+	 * Row keys, all optional but 'title': isbn13, isbn10; title; description;
 	 * authors (list of names) with author_role (author, editor, ...); publisher; every name in
 	 * FISHEYEBOOK_TEXT_ITEMS; category/subject/note as strings or lists; published (as known) -
 	 * event_time is derived from it; external => [ ol_work => ..., wikidata_work => ... ].
@@ -329,8 +326,7 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 		};
 
-		// ISBN: one row, the ISBN-13 as the key (xkey), the ISBN-10 beside it (xkey_ext), what was
-		// originally entered and any remark in data.
+		// ISBN: one row, the ISBN-13 as the key (xkey), the ISBN-10 beside it (xkey_ext).
 		$isbn13 = (string)( $pRow['isbn13'] ?? '' );
 		$isbn10 = (string)( $pRow['isbn10'] ?? '' );
 		$wantedIsbn = [];
@@ -341,10 +337,6 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 			if( $isbn10 !== '' ) {
 				$wanted['xkey_ext'] = $isbn10;
-			}
-			$data = array_filter( [ 'entered' => (string)( $pRow['isbn_entered'] ?? '' ), 'note' => (string)( $pRow['isbn_note'] ?? '' ) ] );
-			if( $data ) {
-				$wanted['data'] = $data;
 			}
 			$wantedIsbn[] = $wanted;
 		}
@@ -492,6 +484,34 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $fileName;
 	}
 
+	/**
+	 * Every way an xref row is stored by hand (the Add form, the tab grid's edit) comes through here. An ISBN row is checked and
+	 * normalised first: whichever number was typed - ISBN-10 or ISBN-13, hyphens or not, in the `isbn`, `xkey_ext` or `xkey`
+	 * field - is stored as the ISBN-13 in xkey and the ISBN-10 beside it in xkey_ext, so the row always works for lookups, for
+	 * Reload from Open Library and for matching a catalogue row. A number that fails its check digit is refused with a message.
+	 */
+	public function storeXref( &$pParamHash ): bool {
+		if( ( $pParamHash['item'] ?? '' ) === 'isbn' ) {
+			$typed = '';
+			foreach( [ 'isbn', 'xkey_ext', 'xkey' ] as $field ) {
+				if( trim( (string)( $pParamHash[$field] ?? '' ) ) !== '' ) {
+					$typed = trim( (string)$pParamHash[$field] );
+					break;
+				}
+			}
+			$isbn = self::normaliseIsbn( $typed );
+			if( $isbn['isbn13'] === '' ) {
+				$this->mErrors['isbn'] = \Bitweaver\KernelTools::tra( 'That is not a valid ISBN: it should be an ISBN-10 or ISBN-13 with a correct check digit.' );
+				return false;
+			}
+			unset( $pParamHash['isbn'] );
+			$pParamHash['xkey'] = $isbn['isbn13'];
+			$pParamHash['xkey_ext'] = $isbn['isbn10'];
+			$pParamHash['edit'] = '';                           // the row carries no data; this also clears a leftover 'entered' value
+		}
+		return parent::storeXref( $pParamHash );
+	}
+
 	// ---- Open Library -------------------------------------------------------------------------
 
 	/**
@@ -624,6 +644,12 @@ class FisheyeBook extends FisheyeMediaImage {
 				$edition = $found;
 				break;
 			}
+		}
+		// No edition and the last request did not simply come back "not found" (HTTP 404): Open Library never answered, or refused,
+		// so this is not "no such edition" and nothing about the book is known.
+		if( !$edition && ( $fetchError = $wiki::getLastFetchError() ) && !str_contains( $fetchError, 'HTTP 404' ) ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'Open Library did not answer, so nothing was changed' ).': '.$fetchError;
+			return $summary;
 		}
 		if( $edition ) {
 			$summary['matched'] = true;
