@@ -217,6 +217,44 @@ class FisheyeSeason extends FisheyeMediaImage {
 		return @unlink( $path );
 	}
 
+	/** This season's featurettes (its bonus content), in order, as the featurette grid and detail panels want them. */
+	public function getFeaturettes(): array {
+		$rows = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'featurette' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
+		$featurettes = [];
+		foreach( $rows as $row ) {
+			$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : [];
+			$featurettes[] = [
+				'xref_id'    => $row['xref_id'],
+				'title'      => $data['title'] ?? pathinfo( $row['xkey_ext'], PATHINFO_FILENAME ),
+				'summary'    => $data['summary'] ?? '',
+				'thumb'      => $data['thumb'] ?? null,
+				'durationMs' => $data['duration'] ?? null,
+				'resolution' => $data['resolution'] ?? null,
+				'audio'      => $data['audio'] ?? null,
+			];
+		}
+		return $featurettes;
+	}
+
+	/** The Extras button counts the featurettes apart from the rest. */
+	public function getExtrasCounts(): array {
+		$counts = parent::getExtrasCounts();
+		$counts['featurettes'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'featurette' AND `end_date` IS NULL", [ $this->mContentId ] );
+		return $counts;
+	}
+
+	/** Featurettes lead the Extras list; editors get the Reload Featurettes icon on that tab. */
+	public function getExtrasGroups(): array {
+		$extras = parent::getExtrasGroups();
+		if( $featurettes = $this->getFeaturettes() ) {
+			$links = $this->hasUpdatePermission()
+				? [ [ 'title' => 'Reload Featurettes', 'url' => FISHEYEMEDIA_PKG_URL.'edit_season.php?content_id='.$this->mContentId.'&fReloadFeaturettes=1', 'icon' => 'view-refresh' ] ]
+				: [];
+			array_unshift( $extras['groups'], [ 'id' => 'featurettes', 'kind' => 'Featurettes', 'template' => 'featurettes', 'featurettes' => $featurettes, 'items' => $featurettes, 'links' => $links, 'playFn' => 'fisheyeToggleEpisodePlayback' ] );
+		}
+		return $extras;
+	}
+
 	/**
 	 * The images/episodes/featurettes arrays view_season.php and view_program.php's own
 	 * single-season dispatch both need from this season's own xrefs - previously two separate,

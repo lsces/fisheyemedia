@@ -15,7 +15,7 @@
 		{* Breadcrumb - same getBreadcrumbTrail() mechanism as view_film.tpl/fisheye_film_grid_inc.tpl/
 		   fisheye_program_grid_inc.tpl, previously just missing here entirely. Walks the real
 		   ancestor chain via fisheye_gallery_image_map - "TV Shows" leads for any registered show. *}
-		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}</h1>
+		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 	</header>
 
 	<section class="body">

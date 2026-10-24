@@ -122,6 +122,66 @@ to load.
 A concert or music video in the artist's `Videos/` folder is loaded with **Load Videos** and plays
 like a film. The videos appear as the last strip of the artist page.
 
+## Books
+
+Books are catalogued one **edition** at a time (the ISBN is the key), with their credits, publisher, series,
+cover and pictures. A book is a record of its own, filed in a gallery for its author (or in a category gallery
+when the author has only one or two books), under a top-level **Library** gallery. Authors and publishers are
+Contact records, so a contact's page lists the books that credit them.
+
+### Loading a library from a catalogue spreadsheet
+
+The loaders work from a spreadsheet with one row per book (title, author(s), ISBN, publisher, year, format,
+category and notes). They are the icons on the Library gallery's toolbar. Run them in this order; each page
+shows what is loaded, what is next and how many are done, and works in small batches:
+
+1. **Authors from Open Library** - reads the uploaded sheet, groups the books by author and creates the author contacts
+   (using Wikidata and Open Library where they know the person). Tick the authors to create. Authors with one
+   or two books can have those loaded in the same step.
+2. **Add Books** (or **Add this author's books** on an author's gallery) - a tick-list of that author's books still to load, ten at a
+   time. Each book is filled from the sheet and from Open Library.
+3. **Series from Wikidata and Open Library** and **Series from folders** - propose series, let you choose the
+   grouping, put a book into an existing series and rearrange the order. Books in a series are filed under
+   the series rather than in the author's own gallery.
+4. **Book details from Open Library** - fills blank fields from Open Library, finds covers, lists the books with no image at
+   all and has a box for replacing placeholder covers.
+
+### Covers and pictures
+
+- **Cover:** the book's front cover is its tile. It is found automatically (Open Library, then Google Books)
+  or added by hand; the first image added to a book with no tile becomes the tile. Covers are kept at no more
+  than 400 pixels on the longest side, the size the Library shows.
+- **Covers from a gallery:** **Covers from a gallery** reads a gallery of cover pictures on another
+  bitweaver site (images titled with the book's ISBN-13), matches them to books, shows the current cover
+  beside the new one and replaces the ones you tick.
+- **Extras:** a film, album, book, TV season or programme page has an **Extras** button beside its title. The button counts what is behind it by kind - for example **Featurettes (12) Extras (5)** - and shows only the kinds there are. It opens a
+  panel over the top of the page body. With more than one kind of material the panel has a tab for each, and each
+  tab has its own icons: a film's **Featurettes** tab (its bonus videos: pick a card for the details, **Play**
+  swaps the film's own player for it and closes the panel, press the button again to go back to the film) has
+  **Reload Featurettes**, and the **Extras** tab (the item's own images and those in its pictures folder - the same kind as the button's
+  **Extras (n)** count; with only that kind there are no tabs and no heading) has
+  **Add Pictures** and **Open pictures folder**. The edit icon at the top right of the page is the way to edit
+  the item itself. The button is hidden when there is nothing to show and nothing the visitor could add. The
+  list is also a page of its own (`extras.php?content_id=`), so it can be linked to.
+  On a TV season (and a single-season show) the episodes are the page, shown without tabs; the season's featurettes
+  and pictures are in the Extras panel.
+- **Pictures folder:** an item's extra pictures (front, spine, back, inside pages, posters, booklet scans) live
+  in an ordinary fisheye gallery, **Images / <Types> / <title>** (for example `Images / Books / <book title>`).
+  **Add Pictures** makes the folder if it is not there yet and opens the normal upload with it already chosen.
+  The folder behaves like any other gallery (layout, ordering, comments). On the item's edit page the **Images**
+  tab lists the item's own images and the folder's, **Set as Thumbnail** works on either kind, and **Move to
+  pictures** moves an image of the item's own into the folder; the tile is unaffected.
+- A site that holds book pictures elsewhere can bring them in with a **Local Imports** script
+  (see the liberty manual), which files them into these folders.
+
+### Credits and contacts
+
+Authors, editors, illustrators, translators and narrators are linked to Contact records. If a credit shows as
+plain text, **Link Book Credits** (dry run first, then `?apply=1`) links every credit whose name resolves to one
+contact. **Merge Contact Credits** moves one contact's book credits and other names to another when a person
+was entered twice. A book's credited people appear on its page; a contact's page lists the books that credit
+them.
+
 ## Playing
 
 Films, episodes and tracks play from links on their pages. Browsers play `.mp4` directly; for

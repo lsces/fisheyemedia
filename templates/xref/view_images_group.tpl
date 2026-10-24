@@ -7,7 +7,9 @@
 {assign var=xrefAllowEdit value=$allow_edit|default:true}
 {assign var=tabTitle value=$xrefGroup->mTitle}
 {assign var=isHistory value=($xrefGroup->mXGroup eq 'history')}
-{jstab title="`$tabTitle` ({$xrefGroup->mXrefs|@count})"}
+{* The item's pictures folder (Images / <Types> / <title>), listed with the item's own image rows - nothing is stored on the item for them. *}
+{if $isHistory}{assign var=folderImages value=[]}{else}{assign var=folderImages value=$gContent->getPicturesFolderImages()}{/if}
+{jstab title="`$tabTitle` ({$xrefGroup->mXrefs|@count + $folderImages|@count})"}
 {legend legend=$tabTitle}
 <div class="form-group table-responsive">
 	<table class="table table-condensed">
@@ -24,10 +26,28 @@
 			</tr>
 		</thead>
 		<tbody>
-			{if $xrefGroup->mXrefs}
+			{if $xrefGroup->mXrefs || $folderImages}
 				{foreach $xrefGroup->mXrefs as $xrefInfo}
 					<tr class="{cycle values="even,odd"}">
 						{include file=$gContent->getXrefRecordTemplate($xrefInfo.template)}
+					</tr>
+				{/foreach}
+				{foreach $folderImages as $folderImage}
+					<tr class="{cycle values="even,odd"}">
+						<td>{tr}Pictures folder{/tr}</td>
+						<td><a href="{$folderImage.url|escape}"><img src="{$folderImage.thumb|escape}" alt="{$folderImage.title|escape}" style="max-height:90px; max-width:140px;" /></a></td>
+						<td>{$folderImage.title|escape}</td>
+						{if $xrefAllowEdit}
+							<td></td>
+							<td></td>
+							<td>
+								<span class="actionicon">
+									{if $gContent->hasUpdatePermission()}
+										<a title="{tr}Set as Thumbnail{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}set_thumbnail.php?content_id={$gContent->mContentId}&amp;image_content_id={$folderImage.content_id}">{biticon ipackage="icons" iname="image-x-generic" iexplain="Set as Thumbnail"}</a>
+									{/if}
+								</span>
+							</td>
+						{/if}
 					</tr>
 				{/foreach}
 			{else}

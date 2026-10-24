@@ -615,7 +615,7 @@ the cast as well (Plex lists them there, and in fiction "Narrator" can be a char
 `narrator` row is additive. `narrator` is in `FisheyeCredits::ITEMS`: films reconcile it on Reload Metadata and the bulk film cast
 reload, episodes carry it in their data, a season's credit directory gets one narrator row per person with episode numbers (never
 filtered by the min-episodes rule, like directors/writers), and the show page rolls it up. It is not subject to the billing depth.
-The item definitions (film and season, group `metadata`, template `credit`) live in the rdmcloud scheme file `media.php` -
+The item definitions (film and season, group `metadata`, template `credit`) live in the site's media scheme file `media.php` -
 Apply it on each site before reloading.
 
 ## Character (role) text on cast rows
@@ -631,3 +631,119 @@ When a film's file is renamed or moved on disk, its stored path (`liberty_files.
 no longer matches. The edit page has a **File** field (shown with a warning when nothing is at the stored path); saving a changed value calls
 `FisheyeFilm::relocateFile()`, which refuses a path that is empty, contains `..`, is not a real file under the storage root, or already belongs to
 another film, and otherwise updates the stored path only (title, credits and the rest are untouched). `getStoredFilePath()` reads the stored path.
+
+
+## Books and the book pictures folder
+
+### The book record
+`FisheyeBook` (`content_type_guid = 'fisheyebook'`, extends `FisheyeMediaImage`) is one **edition**: the ISBN
+is the key, several editions of a work are separate records tied by work ids, and print, ebook and audiobook
+editions are each their own record. Like an album it has no attachment of its own; everything is `liberty_xref`
+rows written through `reconcileXrefItem()` so a re-run never wipes hand edits or contact links. The
+vocabulary is the `fisheyebook` group/items of the site's media xref scheme (apply it from the liberty
+**Local Scheme** page; a database restore removes it, and a store of an item the scheme does not define is
+refused).
+
+| Constant | Items |
+|---|---|
+| `FISHEYEBOOK_TEXT_ITEMS` | `format`, `edition`, `published`, `pages`, `language`, `copies`, `paid`, `imprint` |
+| `FISHEYEBOOK_LIST_ITEMS` | `category`, `subject`, `note` (repeatable) |
+| `FISHEYEBOOK_CREDIT_ITEMS` | `author`, `editor`, `illustrator`, `translator`, `narrator` (name in `xkey_ext`, contact in `xref`) |
+| `FISHEYEBOOK_EXTERNAL_ITEMS` | `ol_edition`, `ol_work`, `wikidata_work`, `google_books`, `isfdb`, `gutenberg` |
+
+`isbn` is one row: `xkey` = ISBN-13, `xkey_ext` = ISBN-10, `data` {entered, note}. `event_time` carries the
+published date for calendar sorting; the `published` item keeps its precision. Series are galleries
+(`FisheyeSeries`), not xrefs.
+
+### Loaders
+`FisheyeBookCatalogue` reads the sheet; `FisheyeBookLoader::loadGroup()` is the press logic shared by
+`load_authors.php` and `load_books.php`; `FisheyeBookCredits` resolves credit names to contacts
+(`authorContactFor()`) and links them. `lockPress()` serialises a press so a repeated POST cannot create
+duplicate contacts.
+
+**Credit linking must name the book items.** `FisheyeCredits::linkRows()` defaults to the film/TV items
+(director, writer, star, ...); book credits are linked with `FisheyeBookCredits::linkBookRows()`, which passes
+`FISHEYEBOOK_CREDIT_ITEMS` and the `fisheyebook` content type. `link_book_credits.php` repairs credits that
+were loaded before a contact existed.
+
+A contact id from a credit may belong to an individual or an organisation; load it with
+`FisheyeBookCredits::loadContact()`, not by constructing one class directly.
+
+### Covers
+`FisheyeBook::replaceCover()` stores a picture as the book's front cover and tile at no more than
+`FISHEYEBOOK_COVER_MAX` (400 px) and marks it with its source in the row data so a page can show it as done.
+`load_book_covers.php` reads a remote bitweaver gallery's HTML pages, matches image titles to ISBN-13 (a
+ten-digit ISBN with a `978` in front and a wrong check digit is repaired from its first nine digits) and
+fetches the remote site's `?size=medium` size from liberty's download route (a site without that route answers
+with the original, which the cap handles).
+
+### The pictures folder (any media item)
+Other pictures of an item are ordinary `FisheyeImage` records in a plain `FisheyeGallery` under the top-level
+**Images** gallery: `Images / <Types> / <title>` (`Books`, `Films`, `Albums`, ...). `FisheyeMediaTrait`, which
+every media class uses, provides it:
+
+- `picturesFolderPreference()` - the preference the folder carries to point back at the item: the content type
+  guid without `fisheye`, plus `_content_id` (`book_content_id`, `film_content_id`; an author's gallery carries
+  `author_contact_id` the same way).
+- `getPicturesFolder()` - `['content_id', 'gallery_id']` of the folder, or null. It is found by that
+  preference, so there is no row to keep in step on the item and no scheme item to apply.
+- `ensurePicturesFolder()` - the same, making `Images`, `Images / <Types>` and the folder when missing (the
+  folder takes the fisheye default layout).
+
+`pictures.php?content_id=N` is the "Add Pictures" target: it needs `p_fisheye_upload` and update permission on
+the item, calls `ensurePicturesFolder()` and redirects to `fisheye/upload.php?gallery_id=<folder>`.
+
+**Extras.** `templates/extras_inc.tpl`, included inside a page's `<h1>`, renders the **Extras** button and an
+overlay panel (a themed `panel` positioned over the page body; plain JS, closed by a second press, Esc or a press
+outside). The panel's list is fetched from `extras.php?content_id=N&fragment=1` the first time it is opened;
+without `fragment` the same list is a page of its own. `getExtrasCounts()` (SQL counts only, `['featurettes' => n, 'extras' => m]`; a type with another kind adds its
+own key and overrides it, calling `parent::`) gives the button's label and, summed by `getExtrasCount()`, whether it shows; `getExtrasGroups()` returns `groups`, each `{id, kind, items[{thumb, url, title}], links[{title, url, icon}]}`: one tab
+per group when there is more than one (the panel's script switches them), each tab carrying its own icons, and a plain
+heading when there is only one. Pictures are the base kind; a type adds its own by overriding the two
+methods and calling `parent::`. `FisheyeFilm` does, adding a `Featurettes` group (`'template' => 'featurettes'`,
+`getFeaturettes()`, with a Reload Featurettes icon for editors) that `extras_list_inc.tpl` renders with the existing `featurette_grid_inc.tpl` and
+`featurette_detail_panels_inc.tpl`; their Play button calls the page's own `fisheyeToggleFeaturette()` (view_film.tpl),
+and the panel closes itself when a `.episode-play-action .btn-primary` is pressed. A further kind (documents, audio)
+is one more group, with no page template changes. A
+type shows Extras by including the template in its title: book, film, album, season and programme (both the multi- and
+single-season pages) do. A group may name its own player swap in `'playFn'` (a film's featurettes use the page's
+`fisheyeToggleFeaturette`, a season's `fisheyeToggleEpisodePlayback`, which swaps the poster for the player). `FisheyeSeason`
+adds a Featurettes group like the film; `FisheyeProgram` for a single-season show (`getSingleSeason()`) adds that
+season's featurettes and merges its pictures into the show's own. Episodes stay the page: the Episodes grid sits on its
+own, with no tab bar, and `content_tabs_js_inc.tpl` still supplies `fisheyeShowGridItem()` for its cards.
+
+To file a
+picture from code, use the standard fisheye store path:
+
+```php
+require_once FISHEYE_PKG_INCLUDE_PATH.'upload_inc.php';
+$fileHash = [ 'name' => 'Front.jpg', 'tmp_name' => $tmpFile, 'size' => filesize( $tmpFile ), 'error' => 0 ];
+$errors = fisheye_store_upload( $fileHash, [ 'title' => 'Front', 'gallery_additions' => [ $folder['gallery_id'] ] ], false );
+```
+
+`getPicturesFolderImages()` lists the folder's images (content id, title, thumbnail, page URL) and
+`templates/xref/view_images_group.tpl`, the Images tab, shows them as extra rows beside the item's `image` rows;
+there are no xref rows for them, so nothing has to be kept in step. **Set as Thumbnail** on a folder image goes
+to `set_thumbnail.php?content_id=&image_content_id=`, which calls `promoteFolderImageToThumbnail()`: the image
+must be in the item's own folder, its file is copied into the item's image storage for the moment, passed to the
+type's existing `promoteImageToThumbnail()` and removed. The thumbnail is a rendered copy, so it does not point
+at the folder image afterwards.
+
+**Move to pictures** on an `image` row calls `move_to_pictures.php?content_id=&xref_id=`, which runs
+`moveImageToPictures()`: the row's file is filed in the folder (made if missing) through `fisheye_store_upload()`,
+titled from the row's `types` (Front, Back, ...) or its file name, and then the row is expunged and its file
+removed. A failure to file leaves the row and file where they were.
+
+The item's own `image` xref rows are separate: they are the pictures the item's own page and tile use, stored in
+the item's storage and size-capped (book covers at `FISHEYEBOOK_COVER_MAX`). The folder holds everything else.
+
+### Site-specific importers
+Importing book pictures from a particular source (a gallery on another site, a scanned collection, a folder of
+files) is a one-off that depends on that site's names and addresses, so it is not part of this package. It
+belongs in the site's `config/local/import/` folder as a **Local Imports** descriptor (see liberty's
+`DEVELOPER.md`): match each source picture to a book (by ISBN or by a squashed title), create the folder with
+`ensurePicturesFolder()`, file the pictures, and report a dry run first.
+
+### Not built
+magazines (the scheme carries
+`fisheyemagazine` / `fisheyeissue` items but nothing loads them); a library-wide Open Library series match.

@@ -7,7 +7,7 @@
 				<a title="{tr}Edit{/tr}" href="{$gContent->getEditUrl()|escape}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
 			{/if}
 		</div>
-		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}</h1>
+		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 	</header>
 
 	<div class="body">
@@ -39,10 +39,6 @@
 				{/foreach}
 
 				{if $gContent->mInfo.data}<p>{$gContent->mInfo.data|escape}</p>{/if}
-
-				{if $picturesUrl}
-					<p class="book-pictures"><a href="{$picturesUrl|escape}">{tr}Pictures of this book{/tr}</a></p>
-				{/if}
 
 				{if $externalLinks|@count}
 					<p class="book-external-links"><strong>{tr}Links{/tr}:</strong>

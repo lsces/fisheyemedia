@@ -514,6 +514,45 @@ class FisheyeFilm extends FisheyeMediaImage {
 		return $gallery->removeItem( (int)$this->mContentId ) ? [ 'ok' => true ] : [ 'ok' => false, 'error' => KernelTools::tra( 'The film could not be removed.' ) ];
 	}
 
+	/** One 'featurette' xref row as the featurette grid and detail panels want it. */
+	private static function featuretteFromXref( \ArrayAccess|array $pXref ): array {
+		$data = !empty( $pXref['data'] ) ? json_decode( $pXref['data'], true ) : [];
+		return [
+			'xref_id'    => $pXref['xref_id'],
+			'title'      => $data['title'] ?? $pXref['xkey_ext'],
+			'summary'    => $data['summary'] ?? '',
+			'thumb'      => $data['thumb'] ?? null,
+			'durationMs' => $data['duration'] ?? null,
+			'resolution' => $data['resolution'] ?? null,
+			'audio'      => $data['audio'] ?? null,
+		];
+	}
+
+	/** This film's featurettes (its bonus content), in order, read straight from the xref rows. */
+	public function getFeaturettes(): array {
+		$rows = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'featurette' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
+		return array_map( [ self::class, 'featuretteFromXref' ], $rows );
+	}
+
+	/** The Extras button counts the featurettes apart from the rest. */
+	public function getExtrasCounts(): array {
+		$counts = parent::getExtrasCounts();
+		$counts['featurettes'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'featurette' AND `end_date` IS NULL", [ $this->mContentId ] );
+		return $counts;
+	}
+
+	/** Featurettes lead the Extras list, played in the page's own player; editors get the Reload Featurettes icon on that tab. */
+	public function getExtrasGroups(): array {
+		$extras = parent::getExtrasGroups();
+		if( $featurettes = $this->getFeaturettes() ) {
+			$links = $this->hasUpdatePermission()
+				? [ [ 'title' => 'Reload Featurettes', 'url' => FISHEYEMEDIA_PKG_URL.'edit_film.php?content_id='.$this->mContentId.'&fReloadFeaturettes=1', 'icon' => 'view-refresh' ] ]
+				: [];
+			array_unshift( $extras['groups'], [ 'id' => 'featurettes', 'kind' => 'Featurettes', 'template' => 'featurettes', 'featurettes' => $featurettes, 'items' => $featurettes, 'links' => $links ] );
+		}
+		return $extras;
+	}
+
 	/**
 	 * This film's own facts, xref data and tab content, bucketed once for view_film.php/
 	 * view_film.tpl - same "one flat pass over liveXrefs(), keyed by item name only" shape as
@@ -571,16 +610,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 					case 'audio':          $audio         = $xref['xkey_ext']; break;
 					case 'image':          $filmImages[]  = [ 'xref_id' => $xref['xref_id'] ]; break;
 					case 'featurette':
-						$data = !empty( $xref['data'] ) ? json_decode( $xref['data'], true ) : [];
-						$featurettes[] = [
-							'xref_id'    => $xref['xref_id'],
-							'title'      => $data['title'] ?? $xref['xkey_ext'],
-							'summary'    => $data['summary'] ?? '',
-							'thumb'      => $data['thumb'] ?? null,
-							'durationMs' => $data['duration'] ?? null,
-							'resolution' => $data['resolution'] ?? null,
-							'audio'      => $data['audio'] ?? null,
-						];
+						$featurettes[] = self::featuretteFromXref( $xref );
 						break;
 				}
 				// external links (imdb/tvdb/tmdb/...) - identified by having a cross_ref_href

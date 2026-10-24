@@ -5,6 +5,8 @@
 
 namespace Bitweaver\Fisheyemedia;
 
+use Bitweaver\Fisheye\FisheyeGallery;
+
 /**
  * Shared engine used by both media inheritance branches - FisheyeMediaGallery (FisheyeProgram, a
  * show with no video file of its own) and FisheyeMediaImage (FisheyeFilm/FisheyeSeason/
@@ -209,6 +211,254 @@ trait FisheyeMediaTrait {
 	 */
 	public function getAddImageUrl(): ?string {
 		return $this->supportsAddImage() ? FISHEYEMEDIA_PKG_URL.'add_image_xref.php?content_id='.$this->mContentId : null;
+	}
+
+	/**
+	 * The preference a pictures folder carries to point back at this item - the type's guid without the 'fisheye'
+	 * prefix, so 'book_content_id' for a book, 'film_content_id' for a film (an author's gallery carries
+	 * 'author_contact_id' the same way).
+	 */
+	public function picturesFolderPreference(): string {
+		return preg_replace( '/^fisheye/', '', (string)$this->getContentType() ).'_content_id';
+	}
+
+	/**
+	 * This item's pictures folder - a plain fisheye gallery, Images / <Types> / <title>, holding every other picture
+	 * of it (the 'image' xref rows stay the small pictures the item's own page uses). Found by the preference the
+	 * folder carries, so there is nothing to keep in step on the item itself.
+	 *
+	 * @return array|null  'content_id' and 'gallery_id' of the folder, null when there is none yet
+	 */
+	public function getPicturesFolder(): ?array {
+		if( !$this->mContentId ) {
+			return null;
+		}
+		$row = $this->mDb->getRow(
+			"SELECT g.`content_id`, g.`gallery_id` FROM `".BIT_DB_PREFIX."liberty_content_prefs` p
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = p.`content_id` AND lc.`content_type_guid` = 'fisheyegallery'
+			 JOIN `".BIT_DB_PREFIX."fisheye_gallery` g ON g.`content_id` = p.`content_id`
+			 WHERE p.`pref_name` = ? AND p.`pref_value` = ?",
+			[ $this->picturesFolderPreference(), (string)$this->mContentId ]
+		);
+		return $row ? [ 'content_id' => (int)$row['content_id'], 'gallery_id' => (int)$row['gallery_id'] ] : null;
+	}
+
+	/**
+	 * This item's pictures folder, made (with the Images and Images / <Types> galleries above it) when it is not
+	 * there yet. The folder takes the fisheye default layout.
+	 *
+	 * @return array  'content_id' and 'gallery_id', plus 'created' => true when it was made now, or 'error'
+	 */
+	public function ensurePicturesFolder(): array {
+		if( $existing = $this->getPicturesFolder() ) {
+			return $existing;
+		}
+		$types = ucfirst( preg_replace( '/^fisheye/', '', (string)$this->getContentType() ) ).'s';
+		$parentContentId = null;
+		foreach( [ 'Images', $types ] as $title ) {
+			$found = $this->findOrMakePicturesGallery( $title, $parentContentId );
+			if( !$found ) {
+				return [ 'error' => 'The '.$title.' gallery could not be made.' ];
+			}
+			$parentContentId = $found;
+		}
+		$folder = $this->findOrMakePicturesGallery( $this->getTitle(), $parentContentId, true );
+		if( !$folder ) {
+			return [ 'error' => 'The pictures folder could not be made.' ];
+		}
+		$gallery = new FisheyeGallery( null, $folder );
+		$gallery->load();
+		$gallery->storePreference( $this->picturesFolderPreference(), (string)$this->mContentId );
+		return [ 'content_id' => $folder, 'gallery_id' => (int)$gallery->mGalleryId, 'created' => true ];
+	}
+
+	/**
+	 * The images in this item's pictures folder, for the Images tab to list beside the item's own 'image' rows.
+	 * Each: 'content_id', 'title', 'thumb' and 'url' (the image's own page). Nothing is stored on the item for them.
+	 *
+	 * @return array[]  at most $pLimit, in the folder's order
+	 */
+	public function getPicturesFolderImages( int $pLimit = 60 ): array {
+		$folder = $this->getPicturesFolder();
+		if( !$folder ) {
+			return [];
+		}
+		$rows = $this->mDb->getAll(
+			"SELECT lc.`content_id`, lc.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+			 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` <> 'fisheyegallery'
+			 ORDER BY m.`item_position`, lc.`content_id`",
+			[ $folder['content_id'] ]
+		) ?: [];
+		$images = [];
+		foreach( array_slice( $rows, 0, $pLimit ) as $row ) {
+			$image = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => (int)$row['content_id'] ] );
+			if( $image && $image->isValid() ) {
+				$images[] = [ 'content_id' => (int)$row['content_id'], 'title' => (string)$row['title'], 'thumb' => $image->getThumbnailUrl( 'small' ), 'url' => $image->getDisplayUrl() ];
+			}
+		}
+		return $images;
+	}
+
+	/**
+	 * Make one of the pictures folder's images this item's thumbnail: its file is copied into the item's own image
+	 * storage for the moment, handed to the type's promoteImageToThumbnail() (the call the Images tab's Set as
+	 * Thumbnail already makes for an 'image' row), and the copy removed - the thumbnail is a rendered copy, so
+	 * nothing keeps pointing at the folder image.
+	 *
+	 * @param int $pImageContentId  must be an image in this item's own folder
+	 */
+	public function promoteFolderImageToThumbnail( int $pImageContentId ): bool {
+		if( !method_exists( $this, 'promoteImageToThumbnail' ) || !method_exists( $this, 'getExtraImagePath' ) ) {
+			return false;
+		}
+		$inFolder = false;
+		foreach( $this->getPicturesFolderImages( 500 ) as $image ) {
+			$inFolder = $inFolder || $image['content_id'] === $pImageContentId;
+		}
+		$image = $inFolder ? \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => $pImageContentId ] ) : null;
+		$source = $image && $image->isValid() ? $image->getSourceFile() : '';
+		if( !$source || !is_file( $source ) ) {
+			return false;
+		}
+		$name = 'thumbsource-'.$pImageContentId.'.jpg';
+		$copy = $this->getExtraImagePath( $name );
+		if( !is_dir( dirname( $copy ) ) && !@mkdir( dirname( $copy ), 0775, true ) ) {
+			return false;
+		}
+		if( !@copy( $source, $copy ) ) {
+			return false;
+		}
+		$ok = $this->promoteImageToThumbnail( $name );
+		@unlink( $copy );
+		return $ok;
+	}
+
+	/**
+	 * Move one of the item's own 'image' rows into its pictures folder (made if it is not there): the file is filed in the
+	 * folder as an ordinary fisheye image, named for its part (Front, Back, ...) when the row says so, then the row and its
+	 * file are removed from the item. The item's thumbnail is a rendered copy and is not touched.
+	 *
+	 * @return array  'title' of the picture filed, or 'error'
+	 */
+	public function moveImageToPictures( int $pXrefId ): array {
+		$row = $this->mDb->getRow( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref`
+			WHERE `xref_id` = ? AND `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $pXrefId, $this->mContentId ] );
+		$file = $row ? $this->getExtraImagePath( '' ).$row['xkey_ext'] : '';
+		if( !$row || $row['xkey_ext'] === '' || basename( $row['xkey_ext'] ) !== $row['xkey_ext'] || !is_file( $file ) ) {
+			return [ 'error' => 'That image has no file to move.' ];
+		}
+		$folder = $this->ensurePicturesFolder();
+		if( !empty( $folder['error'] ) ) {
+			return $folder;
+		}
+		$data = json_decode( (string)$row['data'], true );
+		$title = is_array( $data ) && !empty( $data['types'][0] ) ? (string)$data['types'][0] : pathinfo( $row['xkey_ext'], PATHINFO_FILENAME );
+
+		require_once FISHEYE_PKG_INCLUDE_PATH.'upload_inc.php';
+		$tmp = tempnam( sys_get_temp_dir(), 'moveimg_' );
+		if( !@copy( $file, $tmp ) ) {
+			return [ 'error' => 'The image could not be read.' ];
+		}
+		$fileHash = [ 'name' => $row['xkey_ext'], 'tmp_name' => $tmp, 'size' => filesize( $tmp ), 'error' => 0 ];
+		$errors = fisheye_store_upload( $fileHash, [ 'title' => $title, 'gallery_additions' => [ $folder['gallery_id'] ] ], false );
+		@unlink( $tmp );
+		if( $errors ) {
+			return [ 'error' => implode( '; ', array_map( 'strval', (array)$errors ) ) ];
+		}
+		$stepHash = [ 'xref_id' => (int)$row['xref_id'], 'expunge' => 3 ];
+		if( $this->stepXref( $stepHash ) ) {
+			@unlink( $file );
+		}
+		return [ 'title' => $title ];
+	}
+
+	/**
+	 * How many things the Extras button has to offer, by kind: 'featurettes' (a type that has them adds its own) and 'extras',
+	 * the rest - here the item's own 'image' rows plus the pictures folder's images. Counted in SQL - nothing is loaded.
+	 *
+	 * @return array{featurettes:int,extras:int}
+	 */
+	public function getExtrasCounts(): array {
+		$counts = [ 'featurettes' => 0, 'extras' => 0 ];
+		if( !$this->mContentId ) {
+			return $counts;
+		}
+		$counts['extras'] = (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] );
+		if( $folder = $this->getPicturesFolder() ) {
+			$counts['extras'] += (int)$this->mDb->getOne(
+				"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` <> 'fisheyegallery'", [ $folder['content_id'] ] );
+		}
+		return $counts;
+	}
+
+	/** Everything the Extras button has to offer, all kinds together. */
+	public function getExtrasCount(): int {
+		return array_sum( $this->getExtrasCounts() );
+	}
+
+	/**
+	 * What the Extras popup lists, one group per kind of thing. Each group: 'id' (a tab name), 'kind' (its title), 'items'
+	 * (each with 'thumb', 'url' and 'title') and 'links' (the icons for that tab: 'title', 'url', 'icon', only the ones this user
+	 * may use). Pictures are the base group - the item's own 'image' rows and the pictures folder's images; a type adds its own
+	 * by overriding this and calling parent::, and a further kind (documents, audio) is one more group.
+	 *
+	 * @return array{groups:array[]}
+	 */
+	public function getExtrasGroups(): array {
+		global $gBitUser;
+		$pictures = [];
+		$rows = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
+		foreach( $rows as $row ) {
+			$data = json_decode( (string)$row['data'], true );
+			$view = FISHEYEMEDIA_PKG_URL.'view_extra_image.php?xref_id='.(int)$row['xref_id'];
+			$pictures[] = [
+				'thumb' => $view,
+				'url'   => $view.'&name=image.jpg',
+				'title' => is_array( $data ) && !empty( $data['types'][0] ) ? (string)$data['types'][0] : pathinfo( (string)$row['xkey_ext'], PATHINFO_FILENAME ),
+			];
+		}
+		foreach( $this->getPicturesFolderImages( 200 ) as $image ) {
+			$pictures[] = [ 'thumb' => $image['thumb'], 'url' => $image['url'], 'title' => $image['title'] ];
+		}
+		$links = [];
+		if( $this->hasUpdatePermission() && $gBitUser->hasPermission( 'p_fisheye_upload' ) ) {
+			$links[] = [ 'title' => 'Add Pictures', 'url' => FISHEYEMEDIA_PKG_URL.'pictures.php?content_id='.$this->mContentId, 'icon' => 'list-add' ];
+		}
+		if( $folder = $this->getPicturesFolder() ) {
+			$links[] = [ 'title' => 'Open pictures folder', 'url' => BIT_ROOT_URL.'index.php?content_id='.$folder['content_id'], 'icon' => 'folder-open' ];
+		}
+		return [ 'groups' => ( $pictures || $links ) ? [ [ 'id' => 'pictures', 'kind' => 'Extras', 'items' => $pictures, 'links' => $links ] ] : [] ];
+	}
+
+	/** content_id of the plain gallery with this title under a parent (null = top level), made when it is not there. */
+	private function findOrMakePicturesGallery( string $pTitle, ?int $pParentContentId, bool $pAlwaysNew = false ): ?int {
+		$contentId = null;
+		if( !$pAlwaysNew ) {
+			if( $pParentContentId ) {
+				$contentId = $this->mDb->getOne(
+					"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+					 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+					 WHERE m.`gallery_content_id` = ? AND lc.`title` = ? AND lc.`content_type_guid` = 'fisheyegallery'",
+					[ $pParentContentId, $pTitle ]
+				);
+			} elseif( $topId = FisheyeGallery::getTopGalleryId( $pTitle ) ) {
+				$contentId = $this->mDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topId ] );
+			}
+		}
+		if( $contentId ) {
+			return (int)$contentId;
+		}
+		$new = new FisheyeGallery();
+		$storeHash = [ 'title' => $pTitle ];
+		if( !$new->store( $storeHash ) ) {
+			return null;
+		}
+		if( $pParentContentId ) {
+			$new->addToGalleries( [ (int)$this->mDb->getOne( "SELECT `gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ $pParentContentId ] ) ] );
+		}
+		return (int)$new->mContentId;
 	}
 
 	/**

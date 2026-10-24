@@ -300,6 +300,47 @@ class FisheyeProgram extends FisheyeMediaGallery {
 		return $this->getImageStorageBranchPath().$pRelativePath;
 	}
 
+	/** A single-season show's page is the show and its one season together, so the season's extras count too. */
+	public function getExtrasCounts(): array {
+		$counts = parent::getExtrasCounts();
+		if( $season = $this->getSingleSeason() ) {
+			foreach( $season->getExtrasCounts() as $kind => $count ) {
+				$counts[$kind] += $count;
+			}
+		}
+		return $counts;
+	}
+
+	/**
+	 * For a single-season show the season's featurettes lead and its pictures join the show's own; the Reload Featurettes
+	 * icon is the season's, since that is what owns them.
+	 */
+	public function getExtrasGroups(): array {
+		$extras = parent::getExtrasGroups();
+		$season = $this->getSingleSeason();
+		if( !$season ) {
+			return $extras;
+		}
+		foreach( $season->getExtrasGroups()['groups'] as $group ) {
+			if( $group['id'] === 'pictures' ) {
+				$merged = false;
+				foreach( $extras['groups'] as &$mine ) {
+					if( $mine['id'] === 'pictures' ) {
+						$mine['items'] = array_merge( $mine['items'], $group['items'] );
+						$merged = true;
+					}
+				}
+				unset( $mine );
+				if( !$merged ) {
+					$extras['groups'][] = [ 'id' => 'pictures', 'kind' => 'Extras', 'items' => $group['items'], 'links' => [] ];
+				}
+			} else {
+				array_unshift( $extras['groups'], $group );
+			}
+		}
+		return $extras;
+	}
+
 	/**
 	 * This show's one-and-only season, for the single-season case (a flat/single-episode show,
 	 * see FisheyeSeason::registerFromDisk()'s own "isFlatSeason" handling) - null for a show with

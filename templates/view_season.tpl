@@ -15,11 +15,11 @@
 		   breadcrumb line, and rather than trying to make the shared, type-agnostic breadcrumb
 		   component type-aware. *}
 		{if $gGallery && $seasonTitleSuffix}
-			<h1><a href="{$gGallery->getDisplayUrl()|escape}">{$gGallery->getTitle()|escape}</a>{$seasonTitleSuffix|escape}</h1>
+			<h1><a href="{$gGallery->getDisplayUrl()|escape}">{$gGallery->getTitle()|escape}</a>{$seasonTitleSuffix|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 		{elseif $gGallery}
-			<h1><a href="{$gGallery->getDisplayUrl()|escape}">{$gContent->getTitle()|escape}</a></h1>
+			<h1><a href="{$gGallery->getDisplayUrl()|escape}">{$gContent->getTitle()|escape}</a>{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 		{else}
-			<h1>{$gContent->getTitle()|escape}</h1>
+			<h1>{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 		{/if}
 	</header>
 
@@ -45,11 +45,8 @@
 				   in their own group - fisheyeShowContentTab() (content_tabs_js_inc.tpl) toggles
 				   which group is visible to match the active tab, so this one area serves
 				   whichever of Episodes/Featurettes is currently selected. *}
-				<div id="episode-details-group"{if $firstContentTab != 'episodes'} style="display:none;"{/if}>
+				<div id="episode-details-group">
 					{include file="bitpackage:fisheyemedia/episode_detail_panels_inc.tpl"}
-				</div>
-				<div id="featurette-details-group"{if $firstContentTab != 'featurettes'} style="display:none;"{/if}>
-					{include file="bitpackage:fisheyemedia/featurette_detail_panels_inc.tpl" featurettes=$seasonFeaturettes}
 				</div>
 				{if !$episodes|@count}
 					{if $externalLinks|@count}
@@ -69,38 +66,16 @@
 
 	{* Episodes/Featurettes/Images tabs - each tab's own top-right edit action keeps
 	   section-specific admin actions out of the page's shared icon bar. *}
-	<div class="fisheye-content-tabs">
-		<ul class="nav nav-tabs">
-			{if $episodes|@count}<li class="fisheye-tab-item{if $firstContentTab == 'episodes'} active{/if}"><a class="fisheye-tab-link" href="#" onclick="return fisheyeShowContentTab('episodes', this);">{tr}Episodes{/tr}</a></li>{/if}
-			{if $seasonFeaturettes|@count}<li class="fisheye-tab-item{if $firstContentTab == 'featurettes'} active{/if}"><a class="fisheye-tab-link" href="#" onclick="return fisheyeShowContentTab('featurettes', this);">{tr}Featurettes{/tr}</a></li>{/if}
-			{if $seasonImages|@count}<li class="fisheye-tab-item{if $firstContentTab == 'images'} active{/if}"><a class="fisheye-tab-link" href="#" onclick="return fisheyeShowContentTab('images', this);">{tr}Images{/tr}</a></li>{/if}
-		</ul>
-
-		{if $episodes|@count}
-			<div class="fisheye-tab-panel" id="fisheye-tab-episodes"{if $firstContentTab != 'episodes'} style="display:none;"{/if}>
-				{if $gContent->hasUpdatePermission()}
-					<div class="fisheye-tab-header"><a title="{tr}Reload Episodes{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_season.php?content_id={$gContent->mContentId}&amp;fReloadEpisodes=1">{biticon ipackage="icons" iname="view-refresh" iexplain="Reload Episodes"}</a></div>
-				{/if}
-				{include file="bitpackage:fisheyemedia/episode_grid_inc.tpl"}
-			</div>
-		{/if}
-		{if $seasonFeaturettes|@count}
-			<div class="fisheye-tab-panel" id="fisheye-tab-featurettes"{if $firstContentTab != 'featurettes'} style="display:none;"{/if}>
-				{if $gContent->hasUpdatePermission()}
-					<div class="fisheye-tab-header"><a title="{tr}Reload Featurettes{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_season.php?content_id={$gContent->mContentId}&amp;fReloadFeaturettes=1">{biticon ipackage="icons" iname="view-refresh" iexplain="Reload Featurettes"}</a></div>
-				{/if}
-				{include file="bitpackage:fisheyemedia/featurette_grid_inc.tpl" featurettes=$seasonFeaturettes}
-			</div>
-		{/if}
-		{if $seasonImages|@count}
-			<div class="fisheye-tab-panel" id="fisheye-tab-images"{if $firstContentTab != 'images'} style="display:none;"{/if}>
-				{if $gContent->hasUpdatePermission()}
-					<div class="fisheye-tab-header"><a title="{tr}Add Image{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_image_xref.php?content_id={$gContent->mContentId}">{biticon ipackage="icons" iname="go-up" iexplain="Add Image"}</a></div>
-				{/if}
-				{include file="bitpackage:fisheyemedia/images_grid_inc.tpl" images=$seasonImages imagesAltText="Images"}
-			</div>
-		{/if}
-	</div>
+	{* Episodes are the page; featurettes and images are in the Extras panel (extras_inc.tpl, in the title). content_tabs_js_inc.tpl
+	   below still supplies fisheyeShowGridItem() for the episode cards and the panel's featurette cards. *}
+	{if $episodes|@count}
+		<div class="fisheye-tab-panel" id="fisheye-tab-episodes">
+			{if $gContent->hasUpdatePermission()}
+				<div class="fisheye-tab-header"><a title="{tr}Reload Episodes{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_season.php?content_id={$gContent->mContentId}&amp;fReloadEpisodes=1">{biticon ipackage="icons" iname="view-refresh" iexplain="Reload Episodes"}</a></div>
+			{/if}
+			{include file="bitpackage:fisheyemedia/episode_grid_inc.tpl"}
+		</div>
+	{/if}
 	{include file="bitpackage:fisheyemedia/content_tabs_js_inc.tpl"}
 </div>
 {/strip}

@@ -11,7 +11,7 @@
 		   around. getBreadcrumbTrail() (FisheyeBase) walks the real ancestor chain -
 		   "Films" always leads, then any Collection sub-gallery the film actually sits in, each
 		   segment's own URL type-correct (film_grid galleries route the same as any other). *}
-		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}</h1>
+		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 	</header>
 
 	<section class="body">
@@ -61,37 +61,8 @@
 		</div>
 	</section>
 
-	{* Featurettes/Images tabs - same fisheye-content-tabs/fisheye-tab-panel structure and
-	   fisheyeShowContentTab() (content_tabs_js_inc.tpl) as view_season.tpl/
-	   view_program_single_season.tpl, just without an Episodes tab. A film has no swappable
-	   top-right facts column the way a season does (this page's own col-md-4 film-facts column
-	   above is the FILM's own static info, not swappable) - so unlike Season, the featurette
-	   detail panel lives directly inside the Featurettes tab, under its thumbnail grid, rather
-	   than in a separate shared area. *}
-	<div class="fisheye-content-tabs">
-		<ul class="nav nav-tabs">
-			{if $featurettes|@count}<li class="fisheye-tab-item{if $firstFilmTab == 'featurettes'} active{/if}"><a class="fisheye-tab-link" href="#" onclick="return fisheyeShowContentTab('featurettes', this);">{tr}Featurettes{/tr}</a></li>{/if}
-			{if $filmImages|@count}<li class="fisheye-tab-item{if $firstFilmTab == 'images'} active{/if}"><a class="fisheye-tab-link" href="#" onclick="return fisheyeShowContentTab('images', this);">{tr}Images{/tr}</a></li>{/if}
-		</ul>
-
-		{if $featurettes|@count}
-			<div class="fisheye-tab-panel" id="fisheye-tab-featurettes"{if $firstFilmTab != 'featurettes'} style="display:none;"{/if}>
-				{if $gContent->hasUpdatePermission()}
-					<div class="fisheye-tab-header"><a title="{tr}Reload Featurettes{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_film.php?content_id={$gContent->mContentId}&amp;fReloadFeaturettes=1">{biticon ipackage="icons" iname="view-refresh" iexplain="Reload Featurettes"}</a></div>
-				{/if}
-				{include file="bitpackage:fisheyemedia/featurette_grid_inc.tpl" featurettes=$featurettes}
-				{include file="bitpackage:fisheyemedia/featurette_detail_panels_inc.tpl" featurettes=$featurettes playToggleFn="fisheyeToggleFeaturette"}
-			</div>
-		{/if}
-		{if $filmImages|@count}
-			<div class="fisheye-tab-panel" id="fisheye-tab-images"{if $firstFilmTab != 'images'} style="display:none;"{/if}>
-				{if $gContent->hasUpdatePermission()}
-					<div class="fisheye-tab-header"><a title="{tr}Add Image{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_image_xref.php?content_id={$gContent->mContentId}">{biticon ipackage="icons" iname="go-up" iexplain="Add Image"}</a></div>
-				{/if}
-				{include file="bitpackage:fisheyemedia/images_grid_inc.tpl" images=$filmImages imagesAltText="Images"}
-			</div>
-		{/if}
-	</div>
+	{* Featurettes and images are in the Extras panel (extras_inc.tpl, in the title); content_tabs_js_inc.tpl below still
+	   supplies fisheyeShowGridItem() for its featurette cards, and the script after it the page's own player swap. *}
 	{include file="bitpackage:fisheyemedia/content_tabs_js_inc.tpl"}
 
 	{if $featurettes|@count}

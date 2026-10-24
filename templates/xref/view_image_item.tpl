@@ -17,6 +17,9 @@
 		{if $gContent->hasUpdatePermission()}
 			{smartlink ititle="Set as Thumbnail" ipackage="liberty" ifile="edit_xref.php" biticon="image-x-generic" content_id=$gContent->mInfo.content_id xref_id=$xrefInfo.xref_id fSetAsThumbnail=1}
 		{/if}
+		{if $gContent->hasUpdatePermission() && !$isHistory && $gBitUser->hasPermission( 'p_fisheye_upload' ) && $gContent->supportsAddImage()}
+			<a title="{tr}Move to pictures{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}move_to_pictures.php?content_id={$gContent->mContentId}&amp;xref_id={$xrefInfo.xref_id}" onclick="return confirm('{tr}Move this image to the pictures folder?{/tr}');">{biticon ipackage="icons" iname="go-next" iexplain="Move to pictures"}</a>
+		{/if}
 		{if $gContent->hasUpdatePermission() && !$isHistory && $xrefInfo.multiple neq -1}
 			{smartlink ititle="Edit" ipackage="liberty" ifile="edit_xref.php" biticon="edit" content_id=$gContent->mInfo.content_id xref_id=$xrefInfo.xref_id}
 		{/if}
