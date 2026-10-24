@@ -61,6 +61,8 @@
 {if $allow_add && $gContent->isValid() && $gContent->hasUpdatePermission() && !$isHistory}
 	<div>
 		{smartlink ititle="Add Image" ipackage="liberty" ifile="add_xref.php" biticon="list-add" content_id=$gContent->mInfo.content_id group=$xrefGroup->mSortOrder}
+		&nbsp;
+		<a title="{tr}Load Images - straight into the pictures folder{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}pictures.php?content_id={$gContent->mContentId}">{biticon ipackage="icons" iname="folder-new" iexplain="Load Images - straight into the pictures folder"}</a>
 		{if $gContent->canGrabVideoFrame()}
 			&nbsp;
 			<a title="{tr}Grab Thumbnail from Video{/tr}" href="{$gContent->getEditUrl()|cat:'&fGrabFrame=1'|escape}">{biticon ipackage="icons" iname="package_multimedia" iexplain="Grab Thumbnail from Video"}</a>
