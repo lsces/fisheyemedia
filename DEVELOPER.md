@@ -674,6 +674,15 @@ were loaded before a contact existed.
 A contact id from a credit may belong to an individual or an organisation; load it with
 `FisheyeBookCredits::loadContact()`, not by constructing one class directly.
 
+### Wikidata series data on the book
+The series plan (`FisheyeSeries::planForRows()` / `proposeFromSources()`) carries, for each book it files, the Wikidata number in the series
+(`wd_ord`) and the work's Wikidata id (`work_q`; `wikidataWorks()` now selects `?work`, cache key `fm_wd_works_v2_`); `planForRows()` returns
+them as `meta[row] = [ordinal, work_q]`. `FisheyeBook::recordWikidataSeries( $seriesName, $ordinal, $workQ )` writes the `series` item as
+"<series>, #<n>" (`data.source = wikidata`) and the `wikidata_work` id, each only where the book has none - Open Library's text and hand edits
+are never replaced. It is called by `FisheyeBookLoader::loadGroup()` when a book is filed into a series, by `load_book_series.php` for the
+books it moves, and by `FisheyeBook::reloadFromWikidata()` (the **Reload from Wikidata** button on the edit page), which finds the book's
+author's Q-id with `FisheyeBookCredits::authorQid()`, asks `planForRows()` about this one book and records the result.
+
 ### Covers
 `FisheyeBook::replaceCover()` stores a picture as the book's front cover and tile at no more than
 `FISHEYEBOOK_COVER_MAX` (400 px) and marks it with its source in the row data so a page can show it as done.

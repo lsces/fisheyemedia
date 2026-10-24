@@ -90,6 +90,11 @@ class FisheyeBookLoader {
 							$authorOwn->load();
 							$authorOwn->removeItem( (int)$one['created'] );
 							$touchedSeries[$seriesName] = $into['series'];
+							// What Wikidata gave (the series, the book's number in it, the work's id) goes on the book itself.
+							$filed = FisheyeImage::lookup( [ 'content_id' => (int)$one['created'] ] );
+							if( $filed && $filed->isValid() && method_exists( $filed, 'recordWikidataSeries' ) ) {
+								$filed->recordWikidataSeries( $seriesName, $seriesPlan['meta'][$rowIndex]['ordinal'] ?? null, (string)( $seriesPlan['meta'][$rowIndex]['work_q'] ?? '' ) );
+							}
 							$result['series'][$seriesName] = ( $result['series'][$seriesName] ?? 0 ) + 1;
 						}
 					} else {

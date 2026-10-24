@@ -152,6 +152,10 @@ if( !empty( $_REQUEST['create_series'] ) && $works !== null ) {
 				$gContent->removeItem( $book['content_id'] );
 				$ordered[] = $book['content_id'];
 				$moved++;
+				$filed = FisheyeImage::lookup( [ 'content_id' => (int)$book['content_id'] ] );
+				if( $filed && $filed->isValid() && method_exists( $filed, 'recordWikidataSeries' ) && in_array( 'Wikidata', (array)( $book['sources'] ?? [] ), true ) ) {
+					$filed->recordWikidataSeries( $name, $book['wd_ord'] ?? null, (string)( $book['work_q'] ?? '' ) );
+				}
 			}
 		}
 		$series->setOrder( $ordered );

@@ -41,6 +41,15 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	} else {
 		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Open Library has this edition, but nothing it holds is missing here.' ) : KernelTools::tra( 'Open Library has no edition with this ISBN.' );
 	}
+} elseif( !empty( $_REQUEST['fReloadWikidata'] ) ) {
+	$olResult = $gContent->reloadFromWikidata();
+	if( !empty( $olResult['error'] ) ) {
+		$gContent->mErrors['wikidata'] = $olResult['error'];
+	} elseif( $olResult['items'] ) {
+		$olMessage = KernelTools::tra( 'Added from Wikidata' );
+	} else {
+		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Wikidata has this book in its series, but nothing it holds is missing here.' ) : KernelTools::tra( 'Wikidata does not list this book in a series.' );
+	}
 } elseif( !empty( $_REQUEST['delete'] ) ) {
 	$gContent->hasUserPermission( 'p_fisheye_admin', true );
 

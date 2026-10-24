@@ -184,6 +184,12 @@ link for anything that is missing (pages, format, a publisher...).
 - **Reload from Open Library** (on the same page) then looks the book up by its ISBN and fills in what is blank: the Open Library ids, pages,
   format, language, publisher and a cover. It never replaces something that is already filled in.
 
+- **Reload from Wikidata** (beside Reload from Open Library) asks Wikidata about the book through its author and adds, where the book has
+  nothing yet, the series it belongs to with its number ("The Lord of the Rings, #1") and the work's Wikidata id. The same two details are
+  written automatically when a book is filed into a series as it is loaded, so the book carries them even where Open Library has no series
+  text. Like the Open Library reload it only fills blanks. It does not move the book between galleries; the series page does that. It needs
+  the author to be a contact with a Wikidata item.
+
 ### Credits and contacts
 
 Authors, editors, illustrators, translators and narrators are linked to Contact records. If a credit shows as

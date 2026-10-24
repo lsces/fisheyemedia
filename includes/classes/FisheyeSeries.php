@@ -289,19 +289,19 @@ class FisheyeSeries extends FisheyeMediaGallery {
 	 * part of), the number it carries there and its first publication date. Cached for an hour, as the
 	 * proposal and the create step both ask. Null if Wikidata cannot be asked.
 	 *
-	 * @return list<array{title:string,series_q:string,series:string,ord:?int,date:string,parent:string}>|null
+	 * @return list<array{title:string,work_q:string,series_q:string,series:string,ord:?int,date:string,parent:string}>|null
 	 */
 	public static function wikidataWorks( string $pQid ): ?array {
 		$class = '\Bitweaver\Contactwiki\ContactWikiIndividual';
 		if( !preg_match( '/^Q\d+$/', $pQid ) || !class_exists( $class ) ) {
 			return null;
 		}
-		$cacheKey = 'fm_wd_works_'.$pQid;
+		$cacheKey = 'fm_wd_works_v2_'.$pQid;
 		if( function_exists( 'apcu_fetch' ) && ( $cached = apcu_fetch( $cacheKey ) ) !== false ) {
 			return $cached;
 		}
 		$bindings = $class::wikidataSparql(
-			'SELECT ?workLabel ?series ?seriesLabel ?ord ?pub ?parentLabel WHERE { ?work wdt:P50 wd:'.$pQid.' . ?work p:P179 ?s . ?s ps:P179 ?series . '
+			'SELECT ?work ?workLabel ?series ?seriesLabel ?ord ?pub ?parentLabel WHERE { ?work wdt:P50 wd:'.$pQid.' . ?work p:P179 ?s . ?s ps:P179 ?series . '
 			.'OPTIONAL { ?s pq:P1545 ?ord } OPTIONAL { ?work wdt:P577 ?pub } OPTIONAL { ?series wdt:P179 ?parent } '
 			.'SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }' );
 		if( $bindings === null ) {
@@ -316,7 +316,7 @@ class FisheyeSeries extends FisheyeMediaGallery {
 			}
 			$parent = (string)( $row['parentLabel']['value'] ?? '' );
 			$key = self::titleKey( $title ).'|'.self::seriesKey( $series );
-			$entry = [ 'title' => $title, 'series_q' => basename( (string)( $row['series']['value'] ?? '' ) ), 'series' => $series,
+			$entry = [ 'title' => $title, 'work_q' => basename( (string)( $row['work']['value'] ?? '' ) ), 'series_q' => basename( (string)( $row['series']['value'] ?? '' ) ), 'series' => $series,
 				'ord' => isset( $row['ord']['value'] ) && ctype_digit( (string)$row['ord']['value'] ) ? (int)$row['ord']['value'] : null,
 				'date' => substr( (string)( $row['pub']['value'] ?? '' ), 0, 10 ), 'parent' => preg_match( '/^Q\d+$/', $parent ) ? '' : $parent ];
 			// Several dates or parents for one work and series: the earliest date is the first publication.
@@ -376,6 +376,7 @@ class FisheyeSeries extends FisheyeMediaGallery {
 						$key = self::seriesKey( $work['series'] );
 						$cands[$key]['wd_ord'] = $work['ord'];
 						$cands[$key]['date'] = $work['date'];
+						$cands[$key]['work_q'] = $work['work_q'] ?? '';
 						$cands[$key]['sources']['Wikidata'] = true;
 					}
 				}
@@ -405,7 +406,7 @@ class FisheyeSeries extends FisheyeMediaGallery {
 				if( $top !== $key ) {
 					$c['wd_ord'] = null;
 				}
-				foreach( [ 'wd_ord', 'ol_num', 'date' ] as $field ) {
+				foreach( [ 'wd_ord', 'ol_num', 'date', 'work_q' ] as $field ) {
 					$folded[$top][$field] = $folded[$top][$field] ?? ( $c[$field] ?? null );
 				}
 				$folded[$top]['sources'] = ( $folded[$top]['sources'] ?? [] ) + $c['sources'];
@@ -428,7 +429,7 @@ class FisheyeSeries extends FisheyeMediaGallery {
 			$c = $cands[$key];
 			$series[$key]['name'] = $names[$key];
 			$series[$key]['books'][] = [
-				'content_id' => $book['content_id'], 'title' => $book['title'], 'wd_ord' => $c['wd_ord'] ?? null, 'ol_num' => $c['ol_num'] ?? null,
+				'content_id' => $book['content_id'], 'title' => $book['title'], 'wd_ord' => $c['wd_ord'] ?? null, 'ol_num' => $c['ol_num'] ?? null, 'work_q' => $c['work_q'] ?? '',
 				'date' => ( $c['date'] ?? '' ) ?: ( $book['event_time'] ? gmdate( 'Y-m-d', (int)$book['event_time'] ) : '' ),
 				'sources' => array_keys( $c['sources'] ), 'also' => array_map( fn( $k ) => $names[$k], array_slice( array_keys( $cands ), 1 ) ),
 			];
@@ -523,15 +524,19 @@ class FisheyeSeries extends FisheyeMediaGallery {
 		}
 		$proposal = self::proposeFromSources( $books, $works, $split );
 		$assign = [];
+		$meta = [];
 		$series = [];
 		foreach( $proposal['series'] as $entry ) {
 			$rows = array_column( $entry['books'], 'content_id' );
 			foreach( $rows as $i ) {
 				$assign[$i] = $entry['name'];
 			}
+			foreach( $entry['books'] as $one ) {
+				$meta[$one['content_id']] = [ 'ordinal' => $one['wd_ord'] ?? null, 'work_q' => (string)( $one['work_q'] ?? '' ) ];
+			}
 			$series[] = [ 'key' => $entry['key'], 'name' => $entry['name'], 'order' => $entry['order'], 'rows' => $rows ];
 		}
-		return [ 'assign' => $assign, 'series' => $series, 'umbrellas' => $umbrellas, 'split' => $split, 'works' => count( $works ) ];
+		return [ 'assign' => $assign, 'meta' => $meta, 'series' => $series, 'umbrellas' => $umbrellas, 'split' => $split, 'works' => count( $works ) ];
 	}
 
 	/**

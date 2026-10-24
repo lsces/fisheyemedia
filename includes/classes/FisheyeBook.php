@@ -512,6 +512,35 @@ class FisheyeBook extends FisheyeMediaImage {
 		return parent::storeXref( $pParamHash );
 	}
 
+	/**
+	 * What Wikidata says about this book once it is filed in a series, written to the book itself so the metadata does not depend
+	 * on Open Library having it: the `series` item as "<series>, #<number>" (just the name when Wikidata gives no number) and the
+	 * `wikidata_work` id. Each only where the book has nothing yet - Open Library's own text and anything entered by hand are
+	 * never replaced.
+	 *
+	 * @param int|string|null $pOrdinal  the number Wikidata gives the book in the series
+	 * @return list<string>  the items written
+	 */
+	public function recordWikidataSeries( string $pSeriesName, $pOrdinal = null, string $pWorkQ = '' ): array {
+		$has = fn( string $pItem ): bool => (bool)(int)$this->mDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] );
+		$written = [];
+		if( trim( $pSeriesName ) !== '' && !$has( 'series' ) ) {
+			$text = trim( $pSeriesName ).( $pOrdinal !== null && $pOrdinal !== '' ? ', #'.$pOrdinal : '' );
+			$hash = [ 'content_id' => $this->mContentId, 'item' => 'series', 'xkey_ext' => $text, 'edit' => json_encode( [ 'source' => 'wikidata' ] ) ];
+			if( $this->storeXref( $hash ) ) {
+				$written[] = 'series';
+			}
+		}
+		if( preg_match( '/^Q\d+$/', $pWorkQ ) && !$has( 'wikidata_work' ) ) {
+			$hash = [ 'content_id' => $this->mContentId, 'item' => 'wikidata_work', 'xkey' => $pWorkQ, 'edit' => json_encode( [ 'source' => 'wikidata' ] ) ];
+			if( $this->storeXref( $hash ) ) {
+				$written[] = 'wikidata_work';
+			}
+		}
+		return $written;
+	}
+
 	// ---- Open Library -------------------------------------------------------------------------
 
 	/**
@@ -621,6 +650,46 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 		}
 		return $white / 576 > 0.78 || $colourful === 0;
+	}
+
+	/**
+	 * Ask Wikidata about this book through its author: the series it belongs to, its number in it and the work's own id, written
+	 * to the book where it has none (see recordWikidataSeries() - nothing already there is replaced). The book's series gallery
+	 * is not touched; that is the series page's job.
+	 *
+	 * @return array{matched:bool,items:list<string>,error?:string}
+	 */
+	public function reloadFromWikidata(): array {
+		$summary = [ 'matched' => false, 'items' => [] ];
+		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
+		if( !class_exists( $wiki ) ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'The contactwiki package is needed to ask Wikidata.' );
+			return $summary;
+		}
+		$author = (string)$this->mDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'author' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] );
+		if( trim( $author ) === '' ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'This book has no author to look up.' );
+			return $summary;
+		}
+		$qid = FisheyeBookCredits::authorQid( $author );
+		if( $qid === '' ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'The author is not linked to a contact that has a Wikidata item, so Wikidata cannot be asked.' );
+			return $summary;
+		}
+		$published = (string)$this->mDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'published' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$plan = FisheyeSeries::planForRows( [ [ 'title' => $this->getTitle(), 'published' => $published ] ], $qid );
+		if( $plan === null ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'Wikidata did not answer, so nothing was changed' ).( ( $e = $wiki::getLastFetchError() ) ? ': '.$e : '' );
+			return $summary;
+		}
+		if( !isset( $plan['assign'][0] ) ) {
+			return $summary;                              // Wikidata knows the author's works but not this one in a series
+		}
+		$summary['matched'] = true;
+		foreach( $this->recordWikidataSeries( $plan['assign'][0], $plan['meta'][0]['ordinal'] ?? null, (string)( $plan['meta'][0]['work_q'] ?? '' ) ) as $item ) {
+			$summary['items'][] = $item.': '.( $item === 'series' ? $plan['assign'][0].( ( $plan['meta'][0]['ordinal'] ?? null ) !== null ? ', #'.$plan['meta'][0]['ordinal'] : '' ) : $plan['meta'][0]['work_q'] );
+		}
+		return $summary;
 	}
 
 	public function reloadFromOpenLibrary(): array {
