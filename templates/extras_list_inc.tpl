@@ -14,7 +14,7 @@
 {foreach from=$extrasGroups item=group name=extrasPanels}
 	<div class="extras-tab-panel" id="extras-tab-{$group.id}"{if $extrasTabbed && !$smarty.foreach.extrasPanels.first} hidden{/if}>
 		{if $group.links}
-			<div class="floaticon extras-links">
+			<div class="extras-bar">
 				{foreach from=$group.links item=link}<a title="{tr}{$link.title}{/tr}" href="{$link.url|escape}">{biticon ipackage="icons" iname=$link.icon iexplain=$link.title}</a>{/foreach}
 			</div>
 		{/if}
