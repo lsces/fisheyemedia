@@ -129,6 +129,9 @@ cover and pictures. A book is a record of its own, filed in a gallery for its au
 when the author has only one or two books), under a top-level **Library** gallery. Authors and publishers are
 Contact records, so a contact's page lists the books that credit them.
 
+Books come in two ways: from a catalogue spreadsheet, a library at a time (next section), or by typing in a list of
+ISBNs, a few books at a time (**Adding books from a list of ISBNs**, below).
+
 ### Loading a library from a catalogue spreadsheet
 
 The loaders work from a spreadsheet with one row per book (title, author(s), ISBN, publisher, year, format,
