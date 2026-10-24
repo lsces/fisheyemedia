@@ -50,6 +50,11 @@ class FisheyeBookLoader {
 		$result = [ 'created' => 0, 'already' => 0, 'errors' => [], 'group' => $pGroup['name'], 'details' => [] ];
 		$gallery = FisheyeBookCredits::findOrCreateLibraryGallery( $pGroup['name'] );
 		$galleryContentId = $gallery['content_id'];
+		if( $galleryContentId ) {
+			$shown = new FisheyeGallery( null, $galleryContentId );
+			$shown->load();
+			$result['group_url'] = $shown->getDisplayUrl();
+		}
 		if( $gallery['error'] ) {
 			$result['errors'][] = $gallery['error'];
 		}
@@ -129,9 +134,78 @@ class FisheyeBookLoader {
 			$book = FisheyeImage::lookup( [ 'content_id' => $bookContentId ] );
 			if( $book && $book->isValid() && method_exists( $book, 'reloadFromOpenLibrary' ) ) {
 				$found = $book->reloadFromOpenLibrary();
-				$result['details'][] = [ 'title' => $book->getTitle(), 'matched' => !empty( $found['matched'] ), 'items' => $found['items'] ?? [], 'error' => $found['error'] ?? '' ];
+				$result['details'][] = [ 'content_id' => $bookContentId, 'url' => $book->getDisplayUrl(), 'title' => $book->getTitle(), 'matched' => !empty( $found['matched'] ), 'items' => $found['items'] ?? [], 'error' => $found['error'] ?? '' ];
 			}
 		}
 		return $result;
+	}
+
+	/**
+	 * Where each of these book rows (FisheyeBookCatalogue::rowFromIsbn()) would be filed, read-only: the row's primary author as
+	 * the Library gallery is titled, whether that gallery exists, and whether the author earns one (it exists already, or with
+	 * this batch they have MIN_AUTHOR_BOOKS) - otherwise the book goes in the gallery for its Category.
+	 *
+	 * @param list<array> $pRows
+	 * @return list<array{author:string,kind:string,name:string,gallery:bool,loaded:?int,leaves:list<string>}>  one per row, same order
+	 */
+	public static function filingFor( array $pRows ): array {
+		$batch = [];
+		foreach( $pRows as $row ) {
+			$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
+			if( !FisheyeBook::findContentId( $row ) ) {
+				$batch[mb_strtolower( $author )] = ( $batch[mb_strtolower( $author )] ?? 0 ) + 1;
+			}
+		}
+		$out = [];
+		$known = [];
+		foreach( $pRows as $row ) {
+			$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
+			$key = mb_strtolower( $author );
+			$hasGallery = FisheyeBookCredits::libraryGalleryFor( $author ) !== null;
+			$known[$key] ??= $hasGallery ? 0 : count( FisheyeBookCredits::booksOfAuthor( $author ) );
+			$kind = $hasGallery || $known[$key] + ( $batch[$key] ?? 0 ) >= FisheyeBookCatalogue::MIN_AUTHOR_BOOKS ? 'author' : 'category';
+			$category = (string)( $row['category'][0] ?? '' );
+			$out[] = [ 'author' => $author, 'kind' => $kind, 'name' => $kind === 'author' ? $author : ( $category !== '' ? $category : \Bitweaver\KernelTools::tra( 'Uncategorised' ) ),
+				'gallery' => $hasGallery, 'loaded' => FisheyeBook::findContentId( $row ),
+				'joins' => $kind === 'author' && !$hasGallery ? $known[$key] : 0 ];
+		}
+		return $out;
+	}
+
+	/**
+	 * Load book rows (rowFromIsbn()) one author's batch at a time: a Library gallery for an author who has or earns one, the
+	 * Category gallery otherwise; books already loaded under that author are filed in a new gallery and taken out of their
+	 * Category galleries; a series Wikidata names is made and put in order.
+	 *
+	 * @param list<array> $pRows
+	 * @return list<array>  loadGroup()'s result per author batch, each with 'filed' (books added to a new author gallery) and 'moved'
+	 */
+	public static function addRows( array $pRows ): array {
+		self::lockPress();
+		$filing = self::filingFor( $pRows );
+		$groups = [];
+		foreach( $pRows as $i => $row ) {
+			$groups[$filing[$i]['kind'].'|'.mb_strtolower( $filing[$i]['name'] )] ??= [ 'kind' => $filing[$i]['kind'], 'name' => $filing[$i]['name'], 'rows' => [] ];
+			$groups[$filing[$i]['kind'].'|'.mb_strtolower( $filing[$i]['name'] )]['rows'][] = $row;
+		}
+		$results = [];
+		foreach( $groups as $group ) {
+			$result = self::loadGroup( $group, null, $group['kind'] === 'author', null, 20 );
+			$result['filed'] = 0;
+			$result['moved'] = 0;
+			if( $group['kind'] === 'author' && ( $galleryContentId = FisheyeBookCredits::libraryGalleryFor( $group['name'] ) ) ) {
+				$done = FisheyeBookCredits::fileBooksOfAuthor( $galleryContentId, $group['name'] );
+				$result['filed'] = $done['added'];
+				$result['moved'] = $done['moved'];
+				foreach( array_keys( $result['series'] ?? [] ) as $seriesName ) {
+					$into = FisheyeSeries::findOrCreateUnder( $seriesName, $galleryContentId );
+					if( $into['series'] ) {
+						$into['series']->orderByOrdinal();
+					}
+				}
+			}
+			$results[] = $result;
+		}
+		return $results;
 	}
 }

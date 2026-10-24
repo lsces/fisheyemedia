@@ -571,4 +571,22 @@ class FisheyeSeries extends FisheyeMediaGallery {
 			);
 		}
 	}
+
+	/**
+	 * Put this series' books in the order of the number each carries in its own series line ("The Lord of the Rings, #2"),
+	 * books with no number after them. For books added a few at a time, when the sheet's order of the whole series is not to hand.
+	 */
+	public function orderByOrdinal(): void {
+		$byBook = [];
+		foreach( $this->mDb->getAll(
+			"SELECT fgim.`item_content_id` AS `cid`, lx.`xkey_ext` AS `line` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` fgim
+			 LEFT JOIN `".BIT_DB_PREFIX."liberty_xref` lx ON lx.`content_id` = fgim.`item_content_id` AND lx.`item` = 'series' AND lx.`end_date` IS NULL
+			 WHERE fgim.`gallery_content_id` = ?", [ $this->mContentId ] ) ?: [] as $row ) {
+			$cid = (int)$row['cid'];
+			$ordinal = preg_match( '/#\s*(\d+(?:\.\d+)?)\s*$/', (string)$row['line'], $m ) ? (float)$m[1] : INF;
+			$byBook[$cid] = min( $byBook[$cid] ?? INF, $ordinal );
+		}
+		uksort( $byBook, fn( $a, $b ) => [ $byBook[$a], $a ] <=> [ $byBook[$b], $b ] );
+		$this->setOrder( array_keys( $byBook ) );
+	}
 }

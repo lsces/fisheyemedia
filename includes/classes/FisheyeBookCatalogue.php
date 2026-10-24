@@ -293,4 +293,65 @@ class FisheyeBookCatalogue {
 		return $ret;
 	}
 
+	/**
+	 * A book row (the shape FisheyeBook::registerFromRow() takes) from an ISBN alone, out of Open Library - nothing is
+	 * written. The authors come from the edition, else from its work.
+	 *
+	 * @return array{isbn:string,row?:array,error?:string}  'isbn' is the ISBN-13 (or the text as typed when it is not one)
+	 */
+	public static function rowFromIsbn( string $pRaw, string $pCategory = '' ): array {
+		$isbn = FisheyeBook::normaliseIsbn( $pRaw );
+		if( $isbn['isbn13'] === '' ) {
+			return [ 'isbn' => trim( $pRaw ), 'error' => \Bitweaver\KernelTools::tra( 'Not a valid ISBN' ) ];
+		}
+		$ret = [ 'isbn' => $isbn['isbn13'] ];
+		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
+		if( !class_exists( $wiki ) ) {
+			return $ret + [ 'error' => \Bitweaver\KernelTools::tra( 'The contactwiki package is needed to ask Open Library.' ) ];
+		}
+		$edition = null;
+		foreach( array_filter( [ $isbn['isbn13'], $isbn['isbn10'] ] ) as $try ) {
+			usleep( 300000 );
+			$found = $wiki::fetchOpenLibraryJson( '/isbn/'.rawurlencode( $try ).'.json' );
+			if( str_starts_with( (string)( $found['key'] ?? '' ), '/books/' ) ) {
+				$edition = $found;
+				break;
+			}
+		}
+		if( !$edition ) {
+			$why = (string)$wiki::getLastFetchError();
+			return $ret + [ 'error' => $why !== '' && !str_contains( $why, 'HTTP 404' ) ? \Bitweaver\KernelTools::tra( 'Open Library did not answer' ).': '.$why : \Bitweaver\KernelTools::tra( 'Open Library has no edition with this ISBN' ) ];
+		}
+		$authorKeys = array_column( (array)( $edition['authors'] ?? [] ), 'key' );
+		if( !$authorKeys && !empty( $edition['works'][0]['key'] ) ) {
+			usleep( 300000 );
+			$work = $wiki::fetchOpenLibraryJson( $edition['works'][0]['key'].'.json' );
+			foreach( (array)( $work['authors'] ?? [] ) as $one ) {
+				if( !empty( $one['author']['key'] ) ) {
+					$authorKeys[] = $one['author']['key'];
+				}
+			}
+		}
+		$authors = [];
+		foreach( $authorKeys as $key ) {
+			usleep( 300000 );
+			$author = $wiki::fetchOpenLibraryAuthor( basename( (string)$key ) );
+			if( !empty( $author['name'] ) ) {
+				$authors[] = trim( (string)$author['name'] );
+			}
+		}
+		$title = trim( (string)( $edition['title'] ?? '' ) );
+		if( $title === '' || !$authors ) {
+			return $ret + [ 'error' => $title === '' ? \Bitweaver\KernelTools::tra( 'Open Library gives no title' ) : \Bitweaver\KernelTools::tra( 'Open Library names no author' ), 'row' => [ 'title' => $title, 'authors' => $authors ] ];
+		}
+		preg_match( '/\b(\d{4})\b/', (string)( $edition['publish_date'] ?? '' ), $year );
+		$ret['row'] = [
+			'ref' => '', 'title' => $title, 'authors' => $authors, 'author_role' => 'author',
+			'publisher' => trim( (string)( $edition['publishers'][0] ?? '' ) ),
+			'isbn13' => $isbn['isbn13'], 'isbn10' => $isbn['isbn10'], 'published' => $year[1] ?? '',
+			'category' => $pCategory !== '' ? [ $pCategory ] : [], 'copies' => '', 'paid' => '', 'note' => [], 'external' => [],
+		];
+		return $ret;
+	}
+
 }

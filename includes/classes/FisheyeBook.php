@@ -179,6 +179,11 @@ class FisheyeBook extends FisheyeMediaImage {
 			$ret['isbn10'] = strtoupper( substr( $digits, 3 ) );
 			$ret['isbn13'] = self::isbn10To13( $ret['isbn10'] );
 			$ret['flags'][] = 'isbn-repaired';
+		} elseif( strlen( $digits ) === 13 && str_starts_with( $digits, '987' ) && self::isbn13IsValid( '978'.substr( $digits, 3 ) ) ) {
+			// The 978 prefix typed the wrong way round.
+			$ret['isbn13'] = '978'.substr( $digits, 3 );
+			$ret['isbn10'] = self::isbn13To10( $ret['isbn13'] );
+			$ret['flags'][] = 'isbn-prefix-swapped';
 		} else {
 			$ret['flags'][] = strlen( $digits ) === 13 ? 'isbn-checkdigit-fails' : 'isbn-unrecognised';
 		}

@@ -613,4 +613,105 @@ class FisheyeBookCredits {
 			'olhint' => count( $isbnHits ) === 1 ? (string)array_key_first( $isbnHits ) : '',
 			'bookTitles' => array_slice( array_values( $pPerson['books'] ), 0, 6 ), 'bookCount' => count( $pPerson['books'] ) ];
 	}
+
+	/**
+	 * Every book that credits this author (as primary author or co-author) - from the books themselves, not a catalogue
+	 * sheet, so it holds for books added one at a time.
+	 *
+	 * @return list<int>  content_ids
+	 */
+	public static function booksOfAuthor( string $pName ): array {
+		global $gBitDb;
+		$key = mb_strtolower( self::canonicalName( $pName ) );
+		$canon = [];
+		$ids = [];
+		foreach( $gBitDb->getAll(
+			"SELECT lx.`content_id`, lx.`xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` lx
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = lx.`content_id`
+			 WHERE lc.`content_type_guid` = ? AND lx.`item` = 'author' AND lx.`end_date` IS NULL", [ FISHEYEBOOK_CONTENT_TYPE_GUID ] ) ?: [] as $row ) {
+			$name = (string)$row['xkey_ext'];
+			$canon[$name] ??= mb_strtolower( self::canonicalName( $name ) );
+			if( $canon[$name] === $key ) {
+				$ids[(int)$row['content_id']] = true;
+			}
+		}
+		return array_keys( $ids );
+	}
+
+	/**
+	 * File every book crediting this author in the author's gallery (booksOfAuthor(), the sheet-free fileCreditedBooks()),
+	 * and take each out of the generic category galleries it was filed in while the author had no gallery.
+	 *
+	 * @return array{added:int,moved:int}
+	 */
+	public static function fileBooksOfAuthor( int $pGalleryContentId, string $pAuthorName ): array {
+		$gallery = new FisheyeGallery( null, $pGalleryContentId );
+		$gallery->load();
+		$ret = [ 'added' => 0, 'moved' => 0 ];
+		foreach( self::booksOfAuthor( $pAuthorName ) as $bookId ) {
+			if( !self::isInSeriesOf( $bookId, $pGalleryContentId ) && $gallery->addItem( $bookId ) ) {
+				$ret['added']++;
+			}
+			$ret['moved'] += self::leaveCategoryGalleries( $bookId );
+		}
+		return $ret;
+	}
+
+	/**
+	 * Take a book out of the generic category galleries (Fiction ...) directly under the top-level Library gallery - those
+	 * named for one of the book's own Categories - once it is filed under an author's gallery or one of its series.
+	 * Where it is in no author gallery it is left alone.
+	 *
+	 * @return int  galleries it was removed from
+	 */
+	public static function leaveCategoryGalleries( int $pBookContentId ): int {
+		global $gBitDb;
+		$topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
+		$topContentId = $topGalleryId ? (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topGalleryId ] ) : 0;
+		if( !$topContentId ) {
+			return 0;
+		}
+		$categories = array_map( fn( $r ) => mb_strtolower( trim( (string)$r['xkey_ext'] ) ), $gBitDb->getAll(
+			"SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'category' AND `end_date` IS NULL", [ $pBookContentId ] ) ?: [] );
+		if( !$categories ) {
+			return 0;
+		}
+		$filed = [];
+		$inAuthorGallery = false;
+		foreach( $gBitDb->getAll(
+			"SELECT fgim.`gallery_content_id`, lc.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` fgim
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = fgim.`gallery_content_id`
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` up ON up.`item_content_id` = fgim.`gallery_content_id`
+			 WHERE fgim.`item_content_id` = ? AND up.`gallery_content_id` = ?", [ $pBookContentId, $topContentId ] ) ?: [] as $row ) {
+			if( in_array( mb_strtolower( (string)$row['title'] ), $categories, true ) ) {
+				$filed[] = (int)$row['gallery_content_id'];
+			} else {
+				$inAuthorGallery = true;
+			}
+		}
+		if( !$inAuthorGallery && !self::inSeriesUnderLibrary( $pBookContentId, $topContentId ) ) {
+			return 0;
+		}
+		$removed = 0;
+		foreach( $filed as $galleryContentId ) {
+			$gallery = new FisheyeGallery( null, $galleryContentId );
+			$gallery->load();
+			$removed += $gallery->removeItem( $pBookContentId ) ? 1 : 0;
+		}
+		return $removed;
+	}
+
+	/**
+	 * Whether the book sits in a series gallery under any gallery directly under the top-level Library gallery.
+	 */
+	private static function inSeriesUnderLibrary( int $pBookContentId, int $pTopContentId ): bool {
+		global $gBitDb;
+		return (bool)(int)$gBitDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` inSeries
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` series ON series.`content_id` = inSeries.`gallery_content_id`
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` author ON author.`item_content_id` = inSeries.`gallery_content_id`
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` up ON up.`item_content_id` = author.`gallery_content_id`
+			 WHERE inSeries.`item_content_id` = ? AND series.`content_type_guid` = 'fisheyeseries' AND up.`gallery_content_id` = ?",
+			[ $pBookContentId, $pTopContentId ] );
+	}
 }

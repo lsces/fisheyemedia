@@ -174,6 +174,24 @@ shows what is loaded, what is next and how many are done, and works in small bat
 - A site that holds book pictures elsewhere can bring them in with a **Local Imports** script
   (see the liberty manual), which files them into these folders.
 
+### Adding books from a list of ISBNs
+
+**Add Books from ISBNs** (the plus icon on the Library gallery) is the quick way to add books that are not on
+a spreadsheet - best done one author at a time.
+
+1. Type or paste the ISBNs (one per line, or separated by commas or spaces; up to 20 at a time) and press
+   **Look up**. Nothing is saved yet. Each ISBN is read from Open Library and listed with its title, authors
+   and where it would be filed.
+2. The list says whether the author has a gallery, will get one with this batch, or the book will be filed
+   under the **Category** you gave (Fiction by default). An ISBN already in the Library cannot be ticked.
+3. An ISBN Open Library cannot place gets a title and author box. Fill both in and press **Look up again**
+   to load it from what you typed (its cover and details are still fetched where Open Library has any).
+4. **Load the ticked books** adds them, with credits, cover, and the series Wikidata gives.
+
+An author with two or more books gets a gallery of their own. When it is made, books of theirs already in the
+Library are brought into it and taken out of the Category gallery they were sitting in, so the next Clarke
+or Feist book moves the earlier one out of Fiction by itself. A book's own Category is not changed.
+
 ### Adding or correcting a book's details by hand
 
 On a book's edit page the **Book Details** tab lists the details held for the book; each row has its own edit icon and the tab has an add

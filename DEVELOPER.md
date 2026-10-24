@@ -674,6 +674,16 @@ were loaded before a contact existed.
 A contact id from a credit may belong to an individual or an organisation; load it with
 `FisheyeBookCredits::loadContact()`, not by constructing one class directly.
 
+### Adding by ISBN
+`add_books.php` is two steps over the loader, with no catalogue sheet. `FisheyeBookCatalogue::rowFromIsbn()` reads an
+Open Library edition (authors from the edition, else its work) into a `registerFromRow()` row; nothing is written.
+`FisheyeBookLoader::filingFor()` reports, per row, the filing it would get (author gallery exists / earned by this
+batch plus `FisheyeBookCredits::booksOfAuthor()` / Category gallery); `addRows()` groups rows by that, runs
+`loadGroup()` for each, then `FisheyeBookCredits::fileBooksOfAuthor()` brings the author's loaded books into a new
+gallery and `leaveCategoryGalleries()` removes a book from the galleries under the top-level Library gallery named for
+one of its own Category values, but only once it is in an author gallery or one of its series. Series affected are put
+in order by the number in each book's series line (`FisheyeSeries::orderByOrdinal()`), as the sheet's order is not to hand.
+
 ### Wikidata series data on the book
 The series plan (`FisheyeSeries::planForRows()` / `proposeFromSources()`) carries, for each book it files, the Wikidata number in the series
 (`wd_ord`) and the work's Wikidata id (`work_q`; `wikidataWorks()` now selects `?work`, cache key `fm_wd_works_v2_`); `planForRows()` returns

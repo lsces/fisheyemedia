@@ -9,6 +9,7 @@
 		{if $gContent->getTitle() eq 'Library'}
 			<a title="{tr}Authors from Open Library{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_authors.php">{biticon ipackage="icons" iname="system-users" iexplain="Authors from Open Library"}</a>
 			<a title="{tr}Add Books{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php">{biticon ipackage="icons" iname="folder-new" iexplain="Add Books"}</a>
+			<a title="{tr}Add Books from ISBNs{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{biticon ipackage="icons" iname="list-add" iexplain="Add Books from ISBNs"}</a>
 			<a title="{tr}Book details from Open Library{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php">{biticon ipackage="icons" iname="view-refresh" iexplain="Book details from Open Library"}</a>
 			<a title="{tr}Covers from a gallery{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_covers.php">{biticon ipackage="icons" iname="image-x-generic" iexplain="Covers from a gallery"}</a>
 		{else}
