@@ -281,22 +281,26 @@ class FisheyeBookCredits {
 		global $gBitDb;
 		// FISHEYEBOOK_CREDIT_ITEMS is defined with FisheyeBook - make sure that file has been loaded.
 		class_exists( FisheyeBook::class );
-		$bind = [];
-		$inGallery = '';
-		if( $pGalleryContentId ) {
-			$inGallery = " AND x.`content_id` IN ( SELECT m.`item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
-				WHERE m.`gallery_content_id` = ? OR m.`gallery_content_id` IN ( SELECT s.`item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` s WHERE s.`gallery_content_id` = ? ) )";
-			$bind = [ $pGalleryContentId, $pGalleryContentId ];
-		}
-		$rows = $gBitDb->getAll(
-			"SELECT x.`xref_id`, x.`content_id`, x.`item`, x.`xkey`, x.`xkey_ext`, x.`data`, lc.`title`
-			 FROM `".BIT_DB_PREFIX."liberty_xref` x
-			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
-			 WHERE lc.`content_type_guid` = 'fisheyebook' AND x.`end_date` IS NULL
+		$select = "SELECT x.`xref_id`, x.`content_id`, x.`item`, x.`xkey`, x.`xkey_ext`, x.`data`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`";
+		$where = " lc.`content_type_guid` = 'fisheyebook' AND x.`end_date` IS NULL
 			 AND x.`item` IN ( '".implode( "', '", FISHEYEBOOK_CREDIT_ITEMS )."' )
-			 AND x.`xkey_ext` IS NOT NULL AND ( x.`xref` IS NULL OR x.`xref` = 0 )".$inGallery,
-			$bind
-		) ?: [];
+			 AND x.`xkey_ext` IS NOT NULL AND ( x.`xref` IS NULL OR x.`xref` = 0 )";
+		if( $pGalleryContentId ) {
+			// The gallery's own books, and those of its series, as joins: a "content_id IN ( SELECT ... OR ... IN ( SELECT ... ) )" is
+			// worked out again for every one of the table's rows, and took a minute and a half on a table of this size.
+			$byXref = [];
+			foreach( [ [ " JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id` WHERE m.`gallery_content_id` = ? AND", [ $pGalleryContentId ] ],
+				[ " JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
+				   JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` s ON s.`item_content_id` = m.`gallery_content_id` WHERE s.`gallery_content_id` = ? AND", [ $pGalleryContentId ] ] ] as [ $joins, $bind ] ) {
+				foreach( $gBitDb->getAll( $select.$joins.$where, $bind ) ?: [] as $row ) {
+					$byXref[(int)$row['xref_id']] = $row;
+				}
+			}
+			$rows = array_values( $byXref );
+		} else {
+			$rows = $gBitDb->getAll( $select." WHERE".$where ) ?: [];
+		}
 		$people = [];
 		foreach( $rows as $row ) {
 			$name = trim( preg_replace( '/\s+/u', ' ', (string)$row['xkey_ext'] ) );
