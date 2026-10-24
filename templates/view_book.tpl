@@ -40,6 +40,10 @@
 
 				{if $gContent->mInfo.data}<p>{$gContent->mInfo.data|escape}</p>{/if}
 
+				{if $picturesUrl}
+					<p class="book-pictures"><a href="{$picturesUrl|escape}">{tr}Pictures of this book{/tr}</a></p>
+				{/if}
+
 				{if $externalLinks|@count}
 					<p class="book-external-links"><strong>{tr}Links{/tr}:</strong>
 						{foreach from=$externalLinks item=link name=externalLinks}

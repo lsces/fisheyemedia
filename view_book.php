@@ -97,6 +97,13 @@ $gBitSmarty->assign( 'isbn', $isbn );
 $gBitSmarty->assign( 'creditGroups', $creditGroups );
 $gBitSmarty->assign( 'details', $details );
 $gBitSmarty->assign( 'externalLinks', $externalLinks );
+
+// The book's own picture folder (Images / Books / <title>) carries the book's content_id as a 'book_content_id' preference.
+global $gBitDb;
+$picturesContentId = $gBitDb->getOne( "SELECT p.`content_id` FROM `".BIT_DB_PREFIX."liberty_content_prefs` p
+	JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = p.`content_id` AND lc.`content_type_guid` = 'fisheyegallery'
+	WHERE p.`pref_name` = 'book_content_id' AND p.`pref_value` = ?", [ (string)$gContent->mContentId ] );
+$gBitSmarty->assign( 'picturesUrl', $picturesContentId ? BIT_ROOT_URL.'index.php?content_id='.(int)$picturesContentId : null );
 $gBitSmarty->assign( 'gContent', $gContent );
 
 $gBitSystem->setCanonicalLink( $gContent->getDisplayUrl() );
