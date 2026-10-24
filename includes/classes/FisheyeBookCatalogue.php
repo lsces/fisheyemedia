@@ -333,11 +333,15 @@ class FisheyeBookCatalogue {
 			}
 		}
 		$authors = [];
+		$authorIds = [];
 		foreach( $authorKeys as $key ) {
 			usleep( 300000 );
 			$author = $wiki::fetchOpenLibraryAuthor( basename( (string)$key ) );
 			if( !empty( $author['name'] ) ) {
-				$authors[] = trim( (string)$author['name'] );
+				$name = trim( (string)$author['name'] );
+				$authors[] = $name;
+				// Who the author is, as Open Library knows them - kept on the credit so the authors pass need not find them again.
+				$authorIds[$name] = [ 'olid' => basename( (string)$author['key'] ), 'qid' => strtoupper( trim( (string)( $author['remote_ids']['wikidata'] ?? '' ) ) ) ];
 			}
 		}
 		$title = trim( (string)( $edition['title'] ?? '' ) );
@@ -350,6 +354,7 @@ class FisheyeBookCatalogue {
 			'publisher' => trim( (string)( $edition['publishers'][0] ?? '' ) ),
 			'isbn13' => $isbn['isbn13'], 'isbn10' => $isbn['isbn10'], 'published' => $year[1] ?? '',
 			'category' => $pCategory !== '' ? [ $pCategory ] : [], 'copies' => '', 'paid' => '', 'note' => [], 'external' => [],
+			'author_ids' => $authorIds,
 		];
 		return $ret;
 	}

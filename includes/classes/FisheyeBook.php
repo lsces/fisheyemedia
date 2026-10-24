@@ -375,7 +375,14 @@ class FisheyeBook extends FisheyeMediaImage {
 			$wanted = [];
 			if( $item === $role ) {
 				foreach( array_values( array_filter( array_map( 'trim', (array)( $pRow['authors'] ?? [] ) ) ) ) as $name ) {
-					$wanted[] = [ 'key' => 'name:'.mb_strtolower( $name ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $name, 'data' => [ 'source' => 'import' ] ];
+					$ids = (array)( $pRow['author_ids'][$name] ?? [] );
+					$one = [ 'key' => 'name:'.mb_strtolower( $name ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $name, 'data' => [ 'source' => 'import' ] ];
+					if( $ids ) {
+						// The Wikidata id when Open Library has it, else its own: the key a credit linked to a contact carries (contactKey()).
+						$one['xkey'] = $ids['qid'] ?: $ids['olid'];
+						$one['data'] += array_filter( [ 'olid' => $ids['olid'] ?? '', 'qid' => $ids['qid'] ?? '' ] );
+					}
+					$wanted[] = $one;
 				}
 			}
 			$tally( $this->reconcileXrefItem( $item, $wanted, $creditKey, true, true ) );

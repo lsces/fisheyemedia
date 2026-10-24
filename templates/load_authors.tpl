@@ -85,7 +85,7 @@
 								<input type="radio" name="choice[{$i}]" value="ol:{$candidate.olid|escape}"{if $person.default eq "ol:`$candidate.olid`"} checked="checked"{/if} />
 								<strong>{$candidate.name|escape}</strong>{if $candidate.born} ({$candidate.born|escape}{if $candidate.died} - {$candidate.died|escape}{/if}){/if}
 								- <a href="https://openlibrary.org/authors/{$candidate.olid|escape}" target="_blank" rel="noopener">{$candidate.olid|escape}</a>{if $candidate.qid}, <a href="https://www.wikidata.org/wiki/{$candidate.qid|escape}" target="_blank" rel="noopener">{$candidate.qid|escape}</a>{/if}
-								- {if $candidate.via eq 'isbn'}{tr}found from the ISBN of{/tr}{else}{tr}found by name, known for{/tr}{/if} {$candidate.book|escape}{if $candidate.held} - {tr}already a contact:{/tr} {$candidate.held|escape}{/if}
+								- {if $candidate.via eq 'credit'}{tr}identified when the book was added:{/tr}{elseif $candidate.via eq 'isbn'}{tr}found from the ISBN of{/tr}{else}{tr}found by name, known for{/tr}{/if} {$candidate.book|escape}{if $candidate.held} - {tr}already a contact:{/tr} {$candidate.held|escape}{/if}
 								{if $candidate.copies}<br /><small>{tr}Open Library also has these under the same name, taken as copies of this author:{/tr} {foreach from=$candidate.copies item=copy name=copies}<a href="https://openlibrary.org/authors/{$copy.olid|escape}" target="_blank" rel="noopener">{$copy.olid|escape}</a> ({$copy.works} {tr}works{/tr}){if !$smarty.foreach.copies.last}, {/if}{/foreach}</small>{/if}
 							</label></div>
 						{/foreach}

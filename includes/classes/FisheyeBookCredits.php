@@ -289,7 +289,7 @@ class FisheyeBookCredits {
 			$bind = [ $pGalleryContentId, $pGalleryContentId ];
 		}
 		$rows = $gBitDb->getAll(
-			"SELECT x.`xref_id`, x.`content_id`, x.`item`, x.`xkey_ext`, lc.`title`
+			"SELECT x.`xref_id`, x.`content_id`, x.`item`, x.`xkey`, x.`xkey_ext`, x.`data`, lc.`title`
 			 FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE lc.`content_type_guid` = 'fisheyebook' AND x.`end_date` IS NULL
@@ -312,6 +312,16 @@ class FisheyeBookCredits {
 			$p['roles'][$row['item']] = ( $p['roles'][$row['item']] ?? 0 ) + 1;
 			$p['books'][(int)$row['content_id']] = (string)$row['title'];
 			$p['xref_ids'][] = (int)$row['xref_id'];
+			// The Open Library / Wikidata ids Add Books kept on the credit (data), or an id left as the credit's key.
+			$kept = !empty( $row['data'] ) ? (array)json_decode( (string)$row['data'], true ) : [];
+			$olid = (string)( $kept['olid'] ?? ( preg_match( '/^OL\d+A$/', (string)$row['xkey'] ) ? $row['xkey'] : '' ) );
+			$qid = (string)( $kept['qid'] ?? ( preg_match( '/^Q\d+$/', (string)$row['xkey'] ) ? $row['xkey'] : '' ) );
+			if( $olid !== '' ) {
+				$p['olids'][$olid] = ( $p['olids'][$olid] ?? 0 ) + 1;
+			}
+			if( $qid !== '' ) {
+				$p['qids'][$qid] = ( $p['qids'][$qid] ?? 0 ) + 1;
+			}
 			unset( $p );
 		}
 		// The ISBN of each book, so a person can be found from the book rather than from the name alone.
@@ -542,9 +552,14 @@ class FisheyeBookCredits {
 			}
 		}
 
-		// Open Library, from the person's own books first.
+		// Open Library: the author Add Books already identified on the credit (one id, no namesake to choose between) - else from
+		// the person's own books, else by name.
 		$candidates = [];
-		foreach( array_slice( $pPerson['isbns'], 0, 3, true ) as $isbn => $title ) {
+		if( count( $pPerson['olids'] ?? [] ) === 1 ) {
+			$olid = (string)array_key_first( $pPerson['olids'] );
+			$candidates[$olid] = [ 'olid' => $olid, 'via' => 'credit', 'book' => (string)reset( $pPerson['books'] ) ];
+		}
+		foreach( $candidates ? [] : array_slice( $pPerson['isbns'], 0, 3, true ) as $isbn => $title ) {
 			usleep( 300000 );
 			$data = Wiki::fetchOpenLibraryJson( '/search.json?'.http_build_query( [ 'q' => 'isbn:'.$isbn, 'fields' => 'key,title,author_key,author_name', 'limit' => 1 ], '', '&' ) );
 			$doc = $data['docs'][0] ?? [];
@@ -597,7 +612,7 @@ class FisheyeBookCredits {
 				'qid' => $qid, 'held' => $held['title'] ?? null ];
 		}
 
-		$isbnHits = array_filter( $candidates, fn( $c ) => $c['via'] === 'isbn' );
+		$isbnHits = array_filter( $candidates, fn( $c ) => in_array( $c['via'], [ 'isbn', 'credit' ], true ) );
 		if( count( $isbnHits ) === 1 ) {
 			$default = 'ol:'.array_key_first( $isbnHits );
 		} elseif( $clustered ) {
