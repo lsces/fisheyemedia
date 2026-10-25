@@ -45,6 +45,10 @@ $formFisheyeMediaGeneral = [
 		'label' => 'TheTVDB API Key',
 		'note' => 'A TheTVDB v4 API key (thetvdb.com/dashboard/account/apikey). Used only to fill the gaps Plex and TMDb leave in a show\'s credits - above all a documentary\'s presenters, and some series\' episode writers, directors and guests - by the "Fill gaps from TheTVDB" button on a show\'s people page. Leave blank to switch it off.',
 	],
+	"fisheyemedia_google_books_api_key" => [
+		'label' => 'Google Books API Key',
+		'note' => 'A Google Cloud API key with the Books API enabled (console.cloud.google.com, APIs & Services, Credentials) - restrict it to the Books API. Without a key Google answers anonymous requests with "quota exceeded", so this is what lets book details (description, genre, page count, language) be fetched from Google Books for what Open Library leaves blank. Free for about 1,000 lookups a day. Leave blank to switch Google Books lookups off.',
+	],
 	"fisheyemedia_credit_min_episodes" => [
 		'label' => 'Season cast: minimum episodes',
 		'note' => 'A season\'s cast list keeps a person who appears in at least this many of the season\'s episodes (or who is billed high enough, below). A one-episode guest stays in that episode\'s own cast list only. Directors and writers are always kept. Default 2.',
