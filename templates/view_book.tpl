@@ -36,7 +36,7 @@
 					<p><strong>{$line.label|escape}:</strong> {$line.value|escape}</p>
 				{/foreach}
 
-				{if $gContent->mInfo.data}<p>{$gContent->mInfo.data|escape}</p>{/if}
+				{if $gContent->mInfo.data}<p>{$gContent->mInfo.data|escape|nl2br}</p>{/if}
 
 				{if $externalLinks|@count}
 					<p class="book-external-links"><strong>{tr}Links{/tr}:</strong>

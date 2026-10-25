@@ -815,7 +815,55 @@ class FisheyeBook extends FisheyeMediaImage {
 				$summary['items'][] = 'image: thumbnail not attached: the stored cover file is missing';
 			}
 		}
+		// A description, for a book with none - from the work, which is where Open Library keeps it.
+		$described = $this->fillDescriptionFromOpenLibrary( $edition );
+		if( $described !== null ) {
+			$summary['items'][] = 'description: '.mb_substr( $described, 0, 60 ).( mb_strlen( $described ) > 60 ? '...' : '' );
+		}
 		return $summary;
+	}
+
+	/**
+	 * Open Library's text as plain paragraphs: line endings normalised, the "----------" footer it appends to a description
+	 * (and its "([source][1])" references) dropped.
+	 */
+	public static function cleanOpenLibraryText( string $pText ): string {
+		$text = str_replace( [ "\r\n", "\r" ], "\n", $pText );
+		$text = preg_split( '/\n\s*-{5,}\s*\n/', $text )[0];
+		$text = preg_replace( [ '/\(\[source\]\[\d+\]\)/', '/^\s*\[\d+\]:\s*\S+.*$/m', '/\n{3,}/' ], [ '', '', "\n\n" ], $text );
+		return trim( $text );
+	}
+
+	/**
+	 * Give the book Open Library's description when it has none of its own: the edition's if it has one, else the work's (one
+	 * request, from the edition just read or the book's stored work id). Never replaces text already there.
+	 *
+	 * @param ?array $pEdition  the edition record when the caller has just read it
+	 * @return ?string  the text stored, null when there was nothing to store (the book has a description, or Open Library none)
+	 */
+	public function fillDescriptionFromOpenLibrary( ?array $pEdition = null ): ?string {
+		$wiki = '\Bitweaver\Contactwiki\ContactWikiIndividual';
+		if( !class_exists( $wiki ) || trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) !== '' ) {
+			return null;
+		}
+		$pick = fn( $pRecord ) => is_array( $pRecord ) ? ( is_array( $pRecord['description'] ?? null ) ? (string)( $pRecord['description']['value'] ?? '' ) : (string)( $pRecord['description'] ?? '' ) ) : '';
+		$text = self::cleanOpenLibraryText( $pick( $pEdition ) );
+		if( $text === '' ) {
+			$workKey = (string)( $pEdition['works'][0]['key'] ?? '' );
+			if( $workKey === '' && ( $stored = (string)$this->mDb->getOne( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ol_work' AND `end_date` IS NULL", [ $this->mContentId ] ) ) !== '' ) {
+				$workKey = '/works/'.$stored;
+			}
+			if( $workKey === '' ) {
+				return null;
+			}
+			usleep( 300000 );
+			$text = self::cleanOpenLibraryText( $pick( $wiki::fetchOpenLibraryJson( $workKey.'.json' ) ) );
+		}
+		if( $text === '' ) {
+			return null;
+		}
+		$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $text ];
+		return $this->store( $storeHash ) ? $text : null;
 	}
 
 }
