@@ -704,7 +704,10 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $summary;
 	}
 
-	public function reloadFromOpenLibrary(): array {
+	/**
+	 * @param bool $pCover  false to leave covers alone - the bulk Local Imports fill asks for the text and ids only
+	 */
+	public function reloadFromOpenLibrary( bool $pCover = true ): array {
 		$summary = [ 'matched' => false, 'items' => [] ];
 		$wiki = '\Bitweaver\Contactwiki\ContactWikiIndividual';
 		if( !class_exists( $wiki ) ) {
@@ -750,6 +753,14 @@ class FisheyeBook extends FisheyeMediaImage {
 					$summary['items'][] = $item.': '.( $value['xkey'] ?? $value['xkey_ext'] );
 				}
 			}
+		}
+
+		// What the work record holds: the description, genres, and the work-level ids and links.
+		foreach( $this->fillFromOpenLibraryWork( $edition ) as $line ) {
+			$summary['items'][] = $line;
+		}
+		if( !$pCover ) {
+			return $summary;
 		}
 
 		// A cover, for a book with no image yet. Open Library by the edition's own cover id first (not rate limited, unlike
@@ -815,11 +826,6 @@ class FisheyeBook extends FisheyeMediaImage {
 				$summary['items'][] = 'image: thumbnail not attached: the stored cover file is missing';
 			}
 		}
-		// A description, for a book with none - from the work, which is where Open Library keeps it.
-		$described = $this->fillDescriptionFromOpenLibrary( $edition );
-		if( $described !== null ) {
-			$summary['items'][] = 'description: '.mb_substr( $described, 0, 60 ).( mb_strlen( $described ) > 60 ? '...' : '' );
-		}
 		return $summary;
 	}
 
@@ -834,36 +840,129 @@ class FisheyeBook extends FisheyeMediaImage {
 		return trim( $text );
 	}
 
+	/** Words in an Open Library subject that name a genre (lower case) => the genre it is filed as. Used when the work has no genre tags. */
+	const SUBJECT_GENRES = [
+		'science fiction' => 'Science Fiction', 'fantasy' => 'Fantasy', 'horror' => 'Horror', 'ghost' => 'Horror', 'detective' => 'Mystery', 'mystery' => 'Mystery',
+		'thriller' => 'Thriller', 'suspense' => 'Thriller', 'historical fiction' => 'Historical Fiction', 'humor' => 'Humour', 'humour' => 'Humour',
+		'satire' => 'Humour', 'romance' => 'Romance', 'western' => 'Western', 'dystopia' => 'Dystopian', 'adventure' => 'Adventure', 'war stories' => 'War',
+		'short stories' => 'Short Stories', 'biograph' => 'Biography', 'autobiograph' => 'Biography', 'travel' => 'Travel',
+	];
+
 	/**
-	 * Give the book Open Library's description when it has none of its own: the edition's if it has one, else the work's (one
-	 * request, from the edition just read or the book's stored work id). Never replaces text already there.
+	 * What the book's Open Library work record adds to the edition's, each only where the book has nothing yet (nothing entered by hand or
+	 * from the catalogue is replaced): the description (the edition seldom has one), genres (Open Library's own genre tags, else genre words
+	 * in its subjects), the Wikidata work id, a Wikipedia link, and any service id the edition did not carry. One request for the work -
+	 * from the edition just read, or the book's stored work id.
 	 *
 	 * @param ?array $pEdition  the edition record when the caller has just read it
-	 * @return ?string  the text stored, null when there was nothing to store (the book has a description, or Open Library none)
+	 * @return list<string>  a line for each thing stored
 	 */
-	public function fillDescriptionFromOpenLibrary( ?array $pEdition = null ): ?string {
+	public function fillFromOpenLibraryWork( ?array $pEdition = null ): array {
+		$done = [];
 		$wiki = '\Bitweaver\Contactwiki\ContactWikiIndividual';
-		if( !class_exists( $wiki ) || trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) !== '' ) {
-			return null;
+		if( !class_exists( $wiki ) ) {
+			return $done;
 		}
-		$pick = fn( $pRecord ) => is_array( $pRecord ) ? ( is_array( $pRecord['description'] ?? null ) ? (string)( $pRecord['description']['value'] ?? '' ) : (string)( $pRecord['description'] ?? '' ) ) : '';
-		$text = self::cleanOpenLibraryText( $pick( $pEdition ) );
-		if( $text === '' ) {
-			$workKey = (string)( $pEdition['works'][0]['key'] ?? '' );
-			if( $workKey === '' && ( $stored = (string)$this->mDb->getOne( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ol_work' AND `end_date` IS NULL", [ $this->mContentId ] ) ) !== '' ) {
-				$workKey = '/works/'.$stored;
+		$workKey = (string)( $pEdition['works'][0]['key'] ?? '' );
+		if( $workKey === '' && ( $stored = (string)$this->mDb->getOne( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ol_work' AND `end_date` IS NULL", [ $this->mContentId ] ) ) !== '' ) {
+			$workKey = '/works/'.$stored;
+		}
+		if( $workKey === '' ) {
+			return $done;
+		}
+		usleep( 300000 );
+		$work = $wiki::fetchOpenLibraryJson( $workKey.'.json' );
+		if( !is_array( $work ) ) {
+			return $done;
+		}
+		$has = fn( string $pItem ): bool => (bool)(int)$this->mDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] );
+		$text = fn( $pValue ): string => is_array( $pValue ) ? (string)( $pValue['value'] ?? '' ) : (string)$pValue;
+
+		// The description: the edition's if it has one, else the work's.
+		if( trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) === '' ) {
+			$description = self::cleanOpenLibraryText( $text( $pEdition['description'] ?? '' ) ) ?: self::cleanOpenLibraryText( $text( $work['description'] ?? '' ) );
+			$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $description ];
+			if( $description !== '' && $this->store( $storeHash ) ) {
+				$done[] = 'description: '.mb_substr( $description, 0, 60 ).( mb_strlen( $description ) > 60 ? '...' : '' );
 			}
-			if( $workKey === '' ) {
-				return null;
+		}
+
+		// Genres.
+		if( !$has( 'genre' ) ) {
+			$genres = [];
+			foreach( (array)( $work['genres'] ?? [] ) as $tag ) {
+				if( preg_match( '#^/tags/(OL\d+T)$#', (string)$tag ) ) {
+					$name = self::openLibraryTagName( (string)$tag );
+					if( $name !== '' ) {
+						$genres[mb_strtolower( $name )] = $name;
+					}
+				}
 			}
-			usleep( 300000 );
-			$text = self::cleanOpenLibraryText( $pick( $wiki::fetchOpenLibraryJson( $workKey.'.json' ) ) );
+			if( !$genres ) {
+				foreach( (array)( $work['subjects'] ?? [] ) as $subject ) {
+					foreach( self::SUBJECT_GENRES as $word => $genre ) {
+						if( str_contains( mb_strtolower( (string)$subject ), $word ) ) {
+							$genres[mb_strtolower( $genre )] = $genre;
+						}
+					}
+				}
+			}
+			$wanted = [];
+			foreach( array_slice( array_values( $genres ), 0, 6 ) as $genre ) {
+				$wanted[] = [ 'key' => mb_strtolower( $genre ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $genre ];
+			}
+			if( $wanted ) {
+				$this->reconcileXrefItem( 'genre', $wanted, fn( array $pXrefRow ) => mb_strtolower( (string)$pXrefRow['xkey_ext'] ) );
+				$done[] = 'genre: '.implode( ', ', array_column( $wanted, 'xkey_ext' ) );
+			}
 		}
-		if( $text === '' ) {
-			return null;
+
+		// Ids and links that belong to the work.
+		$ids = (array)( $work['identifiers'] ?? [] );
+		$found = [];
+		if( preg_match( '/^Q\d+$/', strtoupper( (string)( $ids['wikidata'][0] ?? '' ) ) ) ) {
+			$found['wikidata_work'] = strtoupper( (string)$ids['wikidata'][0] );
 		}
-		$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $text ];
-		return $this->store( $storeHash ) ? $text : null;
+		foreach( [ 'goodreads', 'librarything' ] as $service ) {
+			if( preg_match( '/^\d{1,12}$/', (string)( $ids[$service][0] ?? '' ) ) ) {
+				$found[$service] = (string)$ids[$service][0];
+			}
+		}
+		foreach( (array)( $work['links'] ?? [] ) as $link ) {
+			if( preg_match( '#^https?://en\.wikipedia\.org/wiki/([^\s?\#]{1,200})$#', (string)( $link['url'] ?? '' ), $m ) ) {
+				$found['wikipedia'] = $m[1];
+				break;
+			}
+		}
+		foreach( $found as $item => $id ) {
+			if( !$has( $item ) ) {
+				$this->reconcileXrefItem( $item, [ [ 'key' => '', 'xorder' => 0, 'xkey' => $id, 'data' => [ 'source' => 'openlibrary' ] ] ], null );
+				$done[] = $item.': '.$id;
+			}
+		}
+		return $done;
+	}
+
+	/**
+	 * The name of an Open Library tag (/tags/OL169T -> "Fantasy"), remembered for a day - a handful of tags cover every book.
+	 */
+	private static function openLibraryTagName( string $pTagKey ): string {
+		static $names = [];
+		if( isset( $names[$pTagKey] ) ) {
+			return $names[$pTagKey];
+		}
+		$cacheKey = 'fm_ol_tag_'.basename( $pTagKey );
+		if( function_exists( 'apcu_fetch' ) && ( $cached = apcu_fetch( $cacheKey ) ) !== false ) {
+			return $names[$pTagKey] = (string)$cached;
+		}
+		usleep( 300000 );
+		$tag = '\Bitweaver\Contactwiki\ContactWikiIndividual'::fetchOpenLibraryJson( $pTagKey.'.json' );
+		$name = ( ( $tag['tag_type'] ?? '' ) === 'genres' ) ? trim( (string)( $tag['name'] ?? '' ) ) : '';
+		if( function_exists( 'apcu_store' ) && is_array( $tag ) ) {
+			apcu_store( $cacheKey, $name, 86400 );
+		}
+		return $names[$pTagKey] = $name;
 	}
 
 }

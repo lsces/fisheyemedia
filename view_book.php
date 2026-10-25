@@ -54,7 +54,7 @@ if( $gContent->mXrefInfo ) {
 			];
 		} elseif( in_array( $item, FISHEYEBOOK_TEXT_ITEMS, true ) ) {
 			$values[$item] = (string)$xref['xkey_ext'];
-		} elseif( in_array( $item, FISHEYEBOOK_LIST_ITEMS, true ) ) {
+		} elseif( $item === 'genre' || in_array( $item, FISHEYEBOOK_LIST_ITEMS, true ) ) {
 			$lists[$item][] = [ 'text' => (string)$xref['xkey_ext'], 'xorder' => (int)$xref['xorder'] ];
 		}
 	}
@@ -87,7 +87,7 @@ foreach( $detailLabels as $item => $label ) {
 		$details[] = [ 'label' => KernelTools::tra( $label ), 'value' => $values[$item] ];
 	}
 }
-foreach( [ 'category' => 'Category', 'subject' => 'Subject', 'note' => 'Note' ] as $item => $label ) {
+foreach( [ 'category' => 'Category', 'genre' => 'Genre', 'subject' => 'Subject', 'note' => 'Note' ] as $item => $label ) {
 	if( !empty( $lists[$item] ) ) {
 		$details[] = [ 'label' => KernelTools::tra( $label ), 'value' => implode( '; ', array_column( $lists[$item], 'text' ) ) ];
 	}

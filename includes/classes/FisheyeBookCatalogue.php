@@ -290,6 +290,21 @@ class FisheyeBookCatalogue {
 		if( trim( (string)( $pEdition['publishers'][0] ?? '' ) ) !== '' ) {
 			$ret['publisher'] = [ 'name' => trim( (string)$pEdition['publishers'][0] ) ];
 		}
+		// "New Ed edition", "Second printing" ...
+		if( trim( (string)( $pEdition['edition_name'] ?? '' ) ) !== '' ) {
+			$ret['edition'] = [ 'xkey_ext' => trim( (string)$pEdition['edition_name'] ) ];
+		}
+		// Ids on other services, each shown as a link by its scheme item (cross_ref_href): Google Books, Goodreads, LibraryThing,
+		// WorldCat (OCLC number) and the Internet Archive's scan of the book.
+		$ids = (array)( $pEdition['identifiers'] ?? [] );
+		foreach( [ 'google_books' => $ids['google'][0] ?? '', 'goodreads' => $ids['goodreads'][0] ?? '', 'librarything' => $ids['librarything'][0] ?? '',
+			'oclc' => $pEdition['oclc_numbers'][0] ?? '', 'internet_archive' => $pEdition['ocaid'] ?? '' ] as $item => $id ) {
+			// Goodreads, LibraryThing and WorldCat ids are numbers - Open Library holds the odd one that is not (an edition id typed into the wrong box).
+			$pattern = in_array( $item, [ 'goodreads', 'librarything', 'oclc' ], true ) ? '/^\d{1,12}$/' : '/^[A-Za-z0-9_.-]{1,32}$/';
+			if( preg_match( $pattern, trim( (string)$id ) ) ) {
+				$ret[$item] = [ 'xkey' => trim( (string)$id ) ];
+			}
+		}
 		return $ret;
 	}
 
