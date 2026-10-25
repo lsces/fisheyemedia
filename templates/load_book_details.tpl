@@ -48,6 +48,9 @@
 			{/form}
 		{/if}
 
+		{if $quota}
+			<div class="alert alert-danger"><p>{$quota|escape}. {tr}The run has stopped; the books not reached are not marked and will be asked about next time.{/tr}</p></div>
+		{/if}
 		{if $busy}
 			<div class="alert alert-warning"><p>{tr}A run is already going - started by an earlier press. It carries on by itself and this page asks again in a few seconds; there is no need to press the button again.{/tr}</p></div>
 		{/if}
@@ -69,10 +72,14 @@
 				<input type="hidden" name="job" value="{$job|escape}" />
 			{else}
 				<div class="form-group">
-					<label><input type="radio" name="job" value="details"{if $job ne 'covers'} checked="checked"{/if} /> {tr}Load Missing Details{/tr}{if $job eq 'details'} - {$pendingCount} {tr}to do{/tr}{else} - {$otherPending} {tr}to do{/tr}{/if}</label>
-					<span class="help-block">{tr}Books with a cover first: whatever Open Library holds that is still blank - its edition id, a description, genres, links to Wikipedia, Goodreads and the like. Only the blanks are filled in; nothing entered is replaced.{/tr}</span>
-					<label><input type="radio" name="job" value="covers"{if $job eq 'covers'} checked="checked"{/if} /> {tr}Find Missing Covers{/tr}{if $job eq 'covers'} - {$pendingCount} {tr}to do{/tr}{else} - {$otherPending} {tr}to do{/tr}{/if}</label>
+					<label><input type="radio" name="job" value="details"{if $job eq 'details'} checked="checked"{/if} /> {tr}Load Missing Details{/tr} - {$counts.details} {tr}to do{/tr}</label>
+					<span class="help-block">{tr}Every book with an ISBN, with a cover or without: whatever Open Library holds that is still blank - its edition id, a description, genres, links to Wikipedia, Goodreads and the like. Only the blanks are filled in; nothing entered is replaced. Covers are not looked for here - that is the next job.{/tr}</span>
+					<label><input type="radio" name="job" value="covers"{if $job eq 'covers'} checked="checked"{/if} /> {tr}Find Missing Covers{/tr} - {$counts.covers} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}The books with no image: Open Library is asked for a cover (then Google Books), and the rest of what it holds is filled in too. A book no source has a cover for is passed over, ready for your own scan.{/tr}</span>
+					{if $googleKey}
+						<label><input type="radio" name="job" value="google"{if $job eq 'google'} checked="checked"{/if} /> {tr}Fill Gaps from Google Books{/tr} - {$counts.google} {tr}to do{/tr}</label>
+						<span class="help-block">{tr}For what Open Library left blank - the description, genres, pages, language and publisher. Best run after Load Missing Details. Uses the Google Books key (Media Library Settings), about 1,000 lookups a day; it stops by itself when Google says the day's quota is used.{/tr}</span>
+					{/if}
 				</div>
 			{/if}
 			{if !$more}
@@ -88,7 +95,7 @@
 					{if $more}<a class="btn btn-default" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php">{tr}Stop{/tr}</a>{/if}
 				</div>
 			{else}
-				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{else}{tr}Finished - every book with a cover has been looked at.{/tr}{/if}</p></div>
+				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{elseif $job eq 'google'}{tr}Finished - every book with a gap has been looked up on Google Books.{/tr}{else}{tr}Finished - every book with an ISBN has been looked at.{/tr}{/if}</p></div>
 			{/if}
 		{/form}
 		<script>/* <![CDATA[ */
@@ -109,6 +116,10 @@
 				{/if}
 			} )();
 		/* ]]> */</script>
+
+		{if $noIsbn}
+			<p class="help-block">{$noIsbn} {tr}books have no ISBN, so Open Library cannot be asked about them by ISBN - they need their details entered by hand, or an ISBN added first.{/tr}</p>
+		{/if}
 
 		{if $noCoverCount}
 			{if $showNoCover}

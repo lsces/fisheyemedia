@@ -1,17 +1,20 @@
 <?php
 /**
- * Tidies the Library's books that have a cover, from Open Library: each is looked up (FisheyeBook::reloadFromOpenLibrary()) and gets
+ * Tidies the Library's books, from Open Library: each is looked up (FisheyeBook::reloadFromOpenLibrary()) and gets
  * what it is missing - edition and work ids, pages, format, date, language, publisher, edition name, its description, genres and the
  * links to Wikipedia, Goodreads, LibraryThing, WorldCat, Google Books and the Internet Archive. Blanks only: nothing the catalogue
  * or an editor entered is replaced, so a book can be run again without harm. The same action as 'Reload from Open Library' on a
  * book's own edit page.
  *
- * One press runs as many books as fit in LOAD_BOOK_DETAILS_BUDGET seconds, then the page sends itself again until the list is
- * done (a Stop link ends it); the run walks the books in content id order, so a book Open Library cannot add to is passed over
- * rather than asked again and again - and once asked, a book is marked (the 'ol_details_checked' / 'ol_covers_checked' content preference), so a book
- * Open Library has no description, genre or cover for does not stay on the list for ever; 'ask again' lifts the mark. Two jobs, chosen on the page: 'details' - the books whose cover is in place get their blanks
- * filled in; 'covers' - the books with no image yet are looked up for a cover as well (Open Library, then Google Books). A book no source has a
- * cover for waits for a photograph or scan (their list is a link at the foot of the page).
+ * One press runs as many books as fit in LOAD_BOOK_DETAILS_BUDGET seconds, then the page sends itself again until the list is done (a
+ * Stop link ends it). The run walks the books in content id order, so a book Open Library cannot add to is passed over rather than asked
+ * again and again: once asked, a book is marked (the 'ol_details_checked' / 'ol_covers_checked' / 'google_books_checked' content
+ * preferences), so a book Open Library has no description, genre or cover for does not stay on the list for ever; 'ask again' lifts the mark.
+ *
+ * Three jobs, chosen on the page: 'details' - every book with an ISBN, with a cover or without, gets its blanks filled in (covers are
+ * left alone); 'covers' - the books with no image yet are looked up for a cover as well (Open Library, then Google Books), a book no
+ * source has a cover for waiting for a photograph or scan; 'google' - what Open Library left blank is asked of Google Books (needs its
+ * API key). Books with no ISBN cannot be looked up by ISBN at all - the page says how many.
  *
  * @package fisheyemedia
  */
@@ -42,13 +45,14 @@ const LOAD_BOOK_DETAILS_NOCOVER_SHOWN = 100;
 const LOAD_BOOK_DETAILS_BATCH = 10;
 
 /** Content preference that marks a book already asked about, per job. */
-const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked' ];
+const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked' ];
 
 /**
  * The books worth asking Open Library about, in content id order after $pAfter, leaving out those already asked about for this job
  * (unless $pAgain).
- *  'details': an ISBN and a cover in place, and something Open Library might hold still missing - its edition id, a description, a genre,
- *             or the thumbnail attachment that shows the cover.
+ *  'details': an ISBN, with or without a cover, and something Open Library might hold still missing - its edition id, a description, a
+ *             genre, or (for a book with a cover) the thumbnail attachment that shows it. Covers are not looked for here: that is the
+ *             'covers' job.
  *  'covers':  an ISBN and no image yet (the book's tile is blank), whatever else it has.
  *
  * @return list<int>
@@ -57,11 +61,13 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 	global $gBitDb;
 	$live = "x.`end_date` IS NULL";
 	$has = fn( string $pItem ) => "EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = '$pItem' AND $live )";
-	$job = $pJob === 'covers'
+	$job = $pJob === 'google'
+		? "( NOT ".$has( 'genre' )." OR NOT ".$has( 'pages' )." OR NOT ".$has( 'language' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
+		: ( $pJob === 'covers'
 		? "NOT ".$has( 'image' )
-		: $has( 'image' )." AND ( NOT ".$has( 'ol_edition' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0
-		    OR NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) )";
-	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[$pJob === 'covers' ? 'covers' : 'details']."' )";
+		: "( NOT ".$has( 'ol_edition' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0
+		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" );
+	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google' ], true ) ? $pJob : 'details']."' )";
 	$rows = $gBitDb->getCol(
 		"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."liberty_content` lc
 		 WHERE lc.`content_type_guid` = 'fisheyebook' AND lc.`content_id` > ? AND ".$has( 'isbn' )." AND $job$mark
@@ -71,17 +77,21 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 }
 
 $after = max( 0, (int)( $_REQUEST['after'] ?? 0 ) );
-$job = ( $_REQUEST['job'] ?? '' ) === 'covers' ? 'covers' : 'details';
+$googleKey = trim( (string)$gBitSystem->getConfig( 'fisheyemedia_google_books_api_key' ) ) !== '';
+$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
 $again = !empty( $_REQUEST['again'] );
 $pending = load_book_details_pending( $after, $job, $again );
-$allPending = $after ? count( load_book_details_pending( 0, $job, $again ) ) : count( $pending );
-$otherPending = count( load_book_details_pending( 0, $job === 'covers' ? 'details' : 'covers', $again ) );
+$counts = [];
+foreach( array_filter( [ 'details', 'covers', $googleKey ? 'google' : '' ] ) as $name ) {
+	$counts[$name] = $name === $job ? count( $pending ) : count( load_book_details_pending( 0, $name, $again ) );
+}
 $doneBefore = (int)( $_REQUEST['done'] ?? 0 );
 $changedBefore = (int)( $_REQUEST['changed'] ?? 0 );
 
 $results = null;
 $more = false;
 $busy = false;
+$quota = '';
 $pressSeconds = 0.0;
 $secondsBefore = (float)( $_REQUEST['secs'] ?? 0 );
 if( !empty( $_REQUEST['fetch'] ) ) {
@@ -105,21 +115,33 @@ if( !empty( $_REQUEST['fetch'] ) ) {
 			if( !$book || !$book->isValid() || !method_exists( $book, 'reloadFromOpenLibrary' ) ) {
 				continue;
 			}
-			$found = $book->reloadFromOpenLibrary();
-			// Asked and answered (even "nothing more here"): marked, so it is not asked again - unless Open Library did not answer.
+			if( $job === 'google' ) {
+				$found = $book->fillFromGoogleBooks();
+				if( !empty( $found['quota'] ) ) {
+					$quota = $found['error'];
+					break;
+				}
+			} else {
+				// The details job leaves covers alone (a book with a cover repairs its thumbnail, with no request); the covers job looks for them.
+				$found = $book->reloadFromOpenLibrary( $job === 'covers' || (bool)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $contentId ] ) );
+			}
+			// Asked and answered (even "nothing more here"): marked, so it is not asked again - unless the service did not answer.
 			if( empty( $found['error'] ) ) {
 				$book->storePreference( LOAD_BOOK_DETAILS_MARK[$job], (string)time() );
 			}
 			$results[] = [ 'title' => $book->getTitle(), 'url' => $book->getDisplayUrl(), 'matched' => $found['matched'], 'items' => $found['items'], 'error' => $found['error'] ?? '' ];
 		}
 		$pressSeconds = microtime( true ) - $started;
+		if( $quota !== '' ) {
+			$more = false;
+		}
 		$after = $last;
 		$doneBefore += count( $results );
 		$changedBefore += count( array_filter( $results, fn( $r ) => $r['items'] ) );
 		$pending = load_book_details_pending( $after, $job, $again );
 		// Stop when Open Library stops answering rather than asking the rest: a run of errors is the service, not the books.
 		$errors = count( array_filter( $results, fn( $r ) => $r['error'] ) );
-		$more = $pending && $errors < max( 3, count( $results ) / 2 ) && ( $more || $results );
+		$more = $pending && $quota === '' && $errors < max( 3, count( $results ) / 2 ) && ( $more || $results );
 		if( $lock ) {
 			flock( $lock, LOCK_UN );
 		}
@@ -172,15 +194,18 @@ $gBitSmarty->assign( 'noCoverShown', min( count( $noCover ), LOAD_BOOK_DETAILS_N
 $gBitSmarty->assign( 'blankCount', count( $blankBooks ) );
 $gBitSmarty->assign( 'replaced', $replaced );
 $gBitSmarty->assign( 'pendingCount', count( $pending ) );
-$gBitSmarty->assign( 'allPending', $allPending );
 $gBitSmarty->assign( 'after', $after );
 $gBitSmarty->assign( 'job', $job );
 $gBitSmarty->assign( 'again', $again );
-$gBitSmarty->assign( 'otherPending', $otherPending );
 $gBitSmarty->assign( 'doneCount', $doneBefore );
 $gBitSmarty->assign( 'changedCount', $changedBefore );
 $gBitSmarty->assign( 'more', $more );
 $gBitSmarty->assign( 'busy', $busy );
+$gBitSmarty->assign( 'noIsbn', (int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_content` lc WHERE lc.`content_type_guid` = 'fisheyebook' AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'isbn' AND x.`end_date` IS NULL )" ) );
+$gBitSmarty->assign( 'quota', $quota );
+$gBitSmarty->assign( 'googleKey', $googleKey );
+$counts[$job] = count( $pending );
+$gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'pressSeconds', round( $pressSeconds, 1 ) );
 $gBitSmarty->assign( 'totalSeconds', round( $secondsBefore + $pressSeconds, 1 ) );
 $gBitSmarty->assign( 'pressBooks', is_array( $results ) ? count( $results ) : 0 );

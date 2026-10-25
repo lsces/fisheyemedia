@@ -840,6 +840,160 @@ class FisheyeBook extends FisheyeMediaImage {
 		return trim( $text );
 	}
 
+	/** Genre spellings that mean the same thing => the one name used, so a listing by genre does not split one genre in two. Lower case keys. */
+	const GENRE_ALIASES = [
+		'sci-fi' => 'Science Fiction', 'scifi' => 'Science Fiction', 'sf' => 'Science Fiction', 'science-fiction' => 'Science Fiction', 'science fiction' => 'Science Fiction',
+		'fantasy fiction' => 'Fantasy', 'epic' => 'Epic Fantasy', 'high fantasy' => 'Epic Fantasy', 'humor' => 'Humour', 'humorous' => 'Humour',
+		'mysteries' => 'Mystery', 'detective and mystery' => 'Mystery', 'thrillers' => 'Thriller', 'suspense' => 'Thriller', 'historical' => 'Historical Fiction',
+		'horror tales' => 'Horror', 'ghost' => 'Horror', 'biography & autobiography' => 'Biography', 'biographies' => 'Biography',
+	];
+
+	/** The name a genre is stored under: spelling variants folded together, otherwise as written (an all-lower-case name gets capitals). */
+	public static function canonicalGenre( string $pName ): string {
+		$name = trim( html_entity_decode( $pName, ENT_QUOTES | ENT_HTML5 ) );
+		// A name already written with capitals ("Coming of Age") is left as it is; an all-lower-case one is capitalised.
+		return self::GENRE_ALIASES[mb_strtolower( $name )] ?? ( $name === mb_strtolower( $name ) ? mb_convert_case( $name, MB_CASE_TITLE ) : $name );
+	}
+
+	/** Google's two-letter language codes for the languages the library holds => the name used (as Open Library's three-letter ones are). */
+	const GOOGLE_LANGUAGES = [ 'en' => 'English', 'fr' => 'French', 'de' => 'German', 'es' => 'Spanish', 'it' => 'Italian', 'cy' => 'Welsh', 'la' => 'Latin', 'ga' => 'Irish' ];
+
+	/**
+	 * A Google Books volume record as the values a book takes - nothing is read from or written to the database. Description: Google's
+	 * carries HTML (<p>, <br>, <b>), turned to plain paragraphs. Genres: its categories ("Fiction / Fantasy / Epic") split into parts, less
+	 * the generic ones, folded through canonicalGenre().
+	 *
+	 * @return array{description:string,genres:list<string>,items:array<string,array{xkey?:string,xkey_ext?:string}>,publisher:string}
+	 */
+	public static function parseGoogleVolume( array $pVolume ): array {
+		$info = (array)( $pVolume['volumeInfo'] ?? [] );
+		$ret = [ 'description' => '', 'genres' => [], 'items' => [], 'publisher' => trim( (string)( $info['publisher'] ?? '' ) ) ];
+		if( !empty( $info['description'] ) ) {
+			$text = preg_replace( [ '#<\s*br\s*/?>#i', '#</\s*p\s*>#i' ], "\n\n", (string)$info['description'] );
+			$text = self::cleanOpenLibraryText( html_entity_decode( strip_tags( $text ), ENT_QUOTES | ENT_HTML5 ) );
+			if( mb_strlen( $text ) >= 30 && !preg_match( '/^\W*(duplicate|dupe|see )/i', $text ) ) {
+				$ret['description'] = $text;
+			}
+		}
+		$genres = [];
+		foreach( (array)( $info['categories'] ?? [] ) as $category ) {
+			foreach( preg_split( '#\s*/\s*#', (string)$category ) as $part ) {
+				if( !in_array( mb_strtolower( trim( $part ) ), [ '', 'fiction', 'general', 'juvenile fiction', 'young adult fiction', 'literary collections' ], true ) ) {
+					$genres[mb_strtolower( self::canonicalGenre( $part ) )] = self::canonicalGenre( $part );
+				}
+			}
+		}
+		$ret['genres'] = array_slice( array_values( $genres ), 0, 6 );
+		if( (int)( $info['pageCount'] ?? 0 ) > 0 ) {
+			$ret['items']['pages'] = [ 'xkey_ext' => (string)(int)$info['pageCount'] ];
+		}
+		if( isset( self::GOOGLE_LANGUAGES[strtolower( (string)( $info['language'] ?? '' ) )] ) ) {
+			$ret['items']['language'] = [ 'xkey_ext' => self::GOOGLE_LANGUAGES[strtolower( (string)$info['language'] )] ];
+		}
+		if( preg_match( '/^\d{4}(-\d{2}(-\d{2})?)?$/', (string)( $info['publishedDate'] ?? '' ) ) ) {
+			$ret['items']['published'] = [ 'xkey_ext' => (string)$info['publishedDate'] ];
+		}
+		if( preg_match( '/^[A-Za-z0-9_-]{4,20}$/', (string)( $pVolume['id'] ?? '' ) ) ) {
+			$ret['items']['google_books'] = [ 'xkey' => (string)$pVolume['id'] ];
+		}
+		return $ret;
+	}
+
+	/**
+	 * What Google Books holds about this book, by ISBN, for what is still blank - after Open Library has had its turn: the description,
+	 * genres (from Google's categories, "Fiction / Fantasy / Epic" - every part but "Fiction" and "General"), pages, language, publication
+	 * date, publisher and Google's own id. Needs the Google Books API key (Media Library Settings): without one Google answers every
+	 * request with "quota exceeded". Nothing already there is replaced.
+	 *
+	 * @return array{matched:bool,items:list<string>,error:string,quota:bool}  quota: Google refused for the day, or is failing - stop asking
+	 */
+	public function fillFromGoogleBooks(): array {
+		global $gBitSystem;
+		$ret = [ 'matched' => false, 'items' => [], 'error' => '', 'quota' => false ];
+		$key = trim( (string)$gBitSystem->getConfig( 'fisheyemedia_google_books_api_key' ) );
+		if( $key === '' ) {
+			$ret['error'] = \Bitweaver\KernelTools::tra( 'No Google Books API key is set (Media Library Settings).' );
+			return $ret;
+		}
+		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$isbns = array_values( array_filter( [ trim( (string)( $isbnRow['xkey'] ?? '' ) ), trim( (string)( $isbnRow['xkey_ext'] ?? '' ) ) ] ) );
+		if( !$isbns ) {
+			$ret['error'] = \Bitweaver\KernelTools::tra( 'This book has no ISBN to look up.' );
+			return $ret;
+		}
+		$context = stream_context_create( [ 'http' => [ 'timeout' => 15, 'ignore_errors' => true, 'header' => "Accept: application/json\r\nUser-Agent: bitweaver-fisheyemedia\r\n" ] ] );
+		$volume = null;
+		foreach( $isbns as $isbn ) {
+			usleep( 200000 );
+			$body = @file_get_contents( 'https://www.googleapis.com/books/v1/volumes?'.http_build_query( [ 'q' => 'isbn:'.$isbn, 'maxResults' => 1, 'key' => $key ] ), false, $context );
+			$status = 0;
+			foreach( (array)( function_exists( 'http_get_last_response_headers' ) ? http_get_last_response_headers() : ( $http_response_header ?? [] ) ) as $header ) {
+				if( preg_match( '#^HTTP/\S+\s+(\d{3})#', (string)$header, $m ) ) {
+					$status = (int)$m[1];
+				}
+			}
+			if( $status === 429 || $status === 403 ) {
+				$ret['quota'] = true;
+				$ret['error'] = 'Google Books refused the request (HTTP '.$status.') - the key is out of quota for today, or not allowed for the Books API';
+				return $ret;
+			}
+			if( $status >= 500 ) {
+				// Google's own side is failing (its book search has spells of 503 "backendFailed"): every further request would fail the same way.
+				$ret['quota'] = true;
+				$ret['error'] = 'Google Books is not answering (HTTP '.$status.') - try again later';
+				return $ret;
+			}
+			if( $body === false || $status < 200 || $status >= 300 ) {
+				$ret['error'] = 'Google Books did not answer'.( $status ? ' (HTTP '.$status.')' : '' );
+				return $ret;
+			}
+			$data = json_decode( $body, true );
+			$candidate = $data['items'][0] ?? null;
+			if( $candidate ) {
+				// Only the book itself: its own ISBN among the identifiers Google lists.
+				$listed = array_column( (array)( $candidate['volumeInfo']['industryIdentifiers'] ?? [] ), 'identifier' );
+				if( array_intersect( $isbns, $listed ) ) {
+					$volume = $candidate;
+					break;
+				}
+			}
+		}
+		if( !$volume ) {
+			return $ret;
+		}
+		$ret['matched'] = true;
+		$parsed = self::parseGoogleVolume( $volume );
+		$has = fn( string $pItem ): bool => (bool)(int)$this->mDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] );
+
+		if( $parsed['description'] !== '' && trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) === '' ) {
+			$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $parsed['description'] ];
+			if( $this->store( $storeHash ) ) {
+				$ret['items'][] = 'description: '.mb_substr( $parsed['description'], 0, 60 ).( mb_strlen( $parsed['description'] ) > 60 ? '...' : '' );
+			}
+		}
+		if( $parsed['genres'] && !$has( 'genre' ) ) {
+			$wanted = [];
+			foreach( $parsed['genres'] as $genre ) {
+				$wanted[] = [ 'key' => mb_strtolower( $genre ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $genre ];
+			}
+			$this->reconcileXrefItem( 'genre', $wanted, fn( array $pXrefRow ) => mb_strtolower( (string)$pXrefRow['xkey_ext'] ) );
+			$ret['items'][] = 'genre: '.implode( ', ', $parsed['genres'] );
+		}
+		foreach( $parsed['items'] as $item => $value ) {
+			if( !$has( $item ) ) {
+				$this->reconcileXrefItem( $item, [ $value + [ 'key' => '', 'xorder' => 0, 'data' => [ 'source' => 'googlebooks' ] ] ], null );
+				$ret['items'][] = $item.': '.( $value['xkey'] ?? $value['xkey_ext'] );
+			}
+		}
+		if( $parsed['publisher'] !== '' && !$has( 'publisher' ) ) {
+			$this->reconcileXrefItem( 'publisher', [ [ 'key' => 'name:'.mb_strtolower( $parsed['publisher'] ), 'xorder' => 1, 'xkey_ext' => $parsed['publisher'], 'data' => [ 'source' => 'googlebooks' ] ] ],
+				fn( array $pXrefRow ) => 'name:'.mb_strtolower( (string)$pXrefRow['xkey_ext'] ), true, true );
+			$ret['items'][] = 'publisher: '.$parsed['publisher'];
+		}
+		return $ret;
+	}
+
 	/** Words in an Open Library subject that name a genre (lower case) => the genre it is filed as. Used when the work has no genre tags. */
 	const SUBJECT_GENRES = [
 		'science fiction' => 'Science Fiction', 'fantasy' => 'Fantasy', 'horror' => 'Horror', 'ghost' => 'Horror', 'detective' => 'Mystery', 'mystery' => 'Mystery',
@@ -900,7 +1054,7 @@ class FisheyeBook extends FisheyeMediaImage {
 				if( preg_match( '#^/tags/(OL\d+T)$#', (string)$tag ) ) {
 					$name = self::openLibraryTagName( (string)$tag );
 					if( $name !== '' ) {
-						$genres[mb_strtolower( $name )] = $name;
+						$genres[mb_strtolower( self::canonicalGenre( $name ) )] = self::canonicalGenre( $name );
 					}
 				}
 			}
