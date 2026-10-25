@@ -923,41 +923,59 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		$context = stream_context_create( [ 'http' => [ 'timeout' => 15, 'ignore_errors' => true, 'header' => "Accept: application/json\r\nUser-Agent: bitweaver-fisheyemedia\r\n" ] ] );
 		$volume = null;
-		foreach( $isbns as $isbn ) {
+		// One request: [ status, body ]. Google's refusals (quota, a key restricted to other addresses or APIs, a key not valid) stop the run with
+		// Google's own wording; its own failures (5xx) stop it too - the next request would fail the same way.
+		$get = function( string $pUrl ) use ( $context ): array {
 			usleep( 200000 );
-			$body = @file_get_contents( 'https://www.googleapis.com/books/v1/volumes?'.http_build_query( [ 'q' => 'isbn:'.$isbn, 'maxResults' => 1, 'key' => $key ] ), false, $context );
+			$body = @file_get_contents( $pUrl, false, $context );
 			$status = 0;
 			foreach( (array)( function_exists( 'http_get_last_response_headers' ) ? http_get_last_response_headers() : ( $http_response_header ?? [] ) ) as $header ) {
 				if( preg_match( '#^HTTP/\S+\s+(\d{3})#', (string)$header, $m ) ) {
 					$status = (int)$m[1];
 				}
 			}
-			if( $status === 429 || $status === 403 || $status === 400 ) {
-				// Google says why in its own words (quota used up, key restricted to other addresses or APIs, key not valid) - shown as it is.
-				$why = (string)( json_decode( (string)$body, true )['error']['message'] ?? '' );
+			return [ $status, $body === false ? '' : $body ];
+		};
+		$refusal = function( int $pStatus, string $pBody ) use ( &$ret ): bool {
+			if( $pStatus === 429 || $pStatus === 403 || $pStatus === 400 ) {
+				$why = (string)( json_decode( $pBody, true )['error']['message'] ?? '' );
 				$ret['quota'] = true;
-				$ret['error'] = 'Google Books refused the request (HTTP '.$status.')'.( $why !== '' ? ': '.preg_replace( '/\s+/', ' ', mb_substr( $why, 0, 300 ) ) : ' - the key is out of quota for today, or not allowed for the Books API' );
-				return $ret;
+				$ret['error'] = 'Google Books refused the request (HTTP '.$pStatus.')'.( $why !== '' ? ': '.preg_replace( '/\s+/', ' ', mb_substr( $why, 0, 300 ) ) : ' - the key is out of quota for today, or not allowed for the Books API' );
+				return true;
 			}
-			if( $status >= 500 ) {
-				// Google's own side is failing (its book search has spells of 503 "backendFailed"): every further request would fail the same way.
+			if( $pStatus >= 500 ) {
 				$ret['quota'] = true;
-				$ret['error'] = 'Google Books is not answering (HTTP '.$status.') - try again later';
-				return $ret;
+				$ret['error'] = 'Google Books is not answering (HTTP '.$pStatus.') - try again later';
+				return true;
 			}
-			if( $body === false || $status < 200 || $status >= 300 ) {
-				$ret['error'] = 'Google Books did not answer'.( $status ? ' (HTTP '.$status.')' : '' );
-				return $ret;
-			}
-			$data = json_decode( $body, true );
-			$candidate = $data['items'][0] ?? null;
-			if( $candidate ) {
-				// Only the book itself: its own ISBN among the identifiers Google lists.
-				$listed = array_column( (array)( $candidate['volumeInfo']['industryIdentifiers'] ?? [] ), 'identifier' );
-				if( array_intersect( $isbns, $listed ) ) {
+			return false;
+		};
+		$ownIsbn = fn( array $pVolume ): bool => (bool)array_intersect( $isbns, array_column( (array)( $pVolume['volumeInfo']['industryIdentifiers'] ?? [] ), 'identifier' ) );
+		foreach( $isbns as $isbn ) {
+			// The ISBN's volume id from Google's older view-API lookup (it has no quota, and its search sibling has had long spells of 503),
+			// then the one volume by id with the key. Only the book itself is taken: its own ISBN among the identifiers Google lists.
+			[ $status, $body ] = $get( 'https://books.google.com/books?bibkeys=ISBN:'.rawurlencode( $isbn ).'&jscmd=viewapi&callback=f' );
+			if( $status === 200 && preg_match( '#books\.google\.com/books\?id=([A-Za-z0-9_-]{4,20})#', $body, $m ) ) {
+				[ $status, $body ] = $get( 'https://www.googleapis.com/books/v1/volumes/'.$m[1].'?'.http_build_query( [ 'key' => $key ] ) );
+				if( $refusal( $status, $body ) ) {
+					return $ret;
+				}
+				$candidate = $status === 200 ? json_decode( $body, true ) : null;
+				if( is_array( $candidate ) && $ownIsbn( $candidate ) ) {
 					$volume = $candidate;
 					break;
 				}
+			}
+			// Not found that way: the search, as before. It is the part of Google's API that has had spells of 503 and answers 429 from the
+			// shared anonymous quota, so any failure of it only means "not found here" - it never stops the run (the keyed volume fetch above does).
+			[ $status, $body ] = $get( 'https://www.googleapis.com/books/v1/volumes?'.http_build_query( [ 'q' => 'isbn:'.$isbn, 'maxResults' => 1, 'key' => $key ] ) );
+			if( $status !== 200 ) {
+				continue;
+			}
+			$candidate = $status === 200 ? ( json_decode( $body, true )['items'][0] ?? null ) : null;
+			if( is_array( $candidate ) && $ownIsbn( $candidate ) ) {
+				$volume = $candidate;
+				break;
 			}
 		}
 		if( !$volume ) {
