@@ -882,6 +882,11 @@ class FisheyeBook extends FisheyeMediaImage {
 		// The description: the edition's if it has one, else the work's.
 		if( trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) === '' ) {
 			$description = self::cleanOpenLibraryText( $text( $pEdition['description'] ?? '' ) ) ?: self::cleanOpenLibraryText( $text( $work['description'] ?? '' ) );
+			// Open Library marks a work it holds twice with a description of just "(Duplicate)" - and some are a bare "See ..." or a few
+			// words: not a description of the book, so nothing is stored.
+			if( mb_strlen( $description ) < 30 || preg_match( '/^\W*(duplicate|dupe|see )/i', $description ) ) {
+				$description = '';
+			}
 			$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $description ];
 			if( $description !== '' && $this->store( $storeHash ) ) {
 				$done[] = 'description: '.mb_substr( $description, 0, 60 ).( mb_strlen( $description ) > 60 ? '...' : '' );

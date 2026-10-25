@@ -1,17 +1,14 @@
 {* Floaticon set for the library_grid layout - Edit/Image Order/Public/Delete as the music and
-   program galleries have, plus Authors, Add Books and Book details on the top-level Library pool only (in the order they are used: authors before their books) (same title gating as
-   music_gallery_icons_inc.tpl's own 'Music'); an author's gallery gets Add Books for that author alone, preceded by the author's contact icon (the contact page once linked, the creating page before). Edit is safe here:
+   program galleries have, plus Add Books from ISBNs on the top-level Library pool only (same title gating as
+   music_gallery_icons_inc.tpl's own 'Music') - the bulk loaders (authors, the catalogue, book details, covers) are links in the Fisheyemedia
+   admin menu, not page icons; an author's gallery gets Add Books for that author alone, preceded by the author's contact icon (the contact page once linked, the creating page before). Edit is safe here:
    FisheyeMediaGallery::addToGalleries() keeps a library gallery's parents, which edit.php would otherwise drop
    (it detached series from their author) - Edit is for renaming and the description, the load pages do the filing. *}
 <div class="floaticon">
 	{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
 	{if $gContent->hasUpdatePermission()}
 		{if $gContent->getTitle() eq 'Library'}
-			<a title="{tr}Authors from Open Library{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_authors.php">{biticon ipackage="icons" iname="system-users" iexplain="Authors from Open Library"}</a>
-			<a title="{tr}Add Books{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php">{biticon ipackage="icons" iname="folder-new" iexplain="Add Books"}</a>
 			<a title="{tr}Add Books from ISBNs{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{biticon ipackage="icons" iname="list-add" iexplain="Add Books from ISBNs"}</a>
-			<a title="{tr}Book details from Open Library{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php">{biticon ipackage="icons" iname="view-refresh" iexplain="Book details from Open Library"}</a>
-			<a title="{tr}Covers from a gallery{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_covers.php">{biticon ipackage="icons" iname="image-x-generic" iexplain="Covers from a gallery"}</a>
 		{else}
 			{* The author's contact: the contact page itself once one is linked, else the page that creates it. *}
 			{assign var=authorContactUrl value=$gContent->getAuthorContactUrl()}
