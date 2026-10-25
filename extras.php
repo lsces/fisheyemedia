@@ -11,14 +11,14 @@
 namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\KernelTools;
-use Bitweaver\Fisheye\FisheyeImage;
 
 require_once '../kernel/includes/setup_inc.php';
 global $gBitSystem, $gBitSmarty;
 
 $gBitSystem->verifyPackage( 'fisheye' );
 
-$gContent = FisheyeImage::lookup( $_REQUEST );
+// Any content that can say what its Extras are - a media item, or a contact.
+$gContent = !empty( $_REQUEST['content_id'] ) ? \Bitweaver\Liberty\LibertyBase::getLibertyObject( (int)$_REQUEST['content_id'] ) : null;
 if( !$gContent || !$gContent->isValid() || !method_exists( $gContent, 'getExtrasGroups' ) ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No item exists with the given ID' ), 'error.tpl' );
 }

@@ -5,7 +5,7 @@
 {assign var=extrasCount value=$extrasCounts.featurettes+$extrasCounts.extras}
 {if $extrasCount || $gContent->hasUpdatePermission()}
 	<style>
-		.display > header { position: relative; }
+		.display > header, .display > .header { position: relative; }
 		.extras-toggle { margin-left: 14px; vertical-align: middle; padding: 4px 16px; font-size: 18px; line-height: 1.3; color: #fff; background-color: #4a4a4a; border: 1px solid #333; border-radius: 4px; }
 		.extras-toggle:hover, .extras-toggle:focus { color: #fff; background-color: #666; border-color: #444; }
 		.extras-panel .extras-bar { text-align: right; padding: 2px 0 8px; margin-bottom: 8px; border-bottom: 1px solid rgba(128,128,128,.3); }

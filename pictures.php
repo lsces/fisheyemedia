@@ -11,7 +11,6 @@
 namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\KernelTools;
-use Bitweaver\Fisheye\FisheyeImage;
 
 require_once '../kernel/includes/setup_inc.php';
 global $gBitSystem;
@@ -19,7 +18,8 @@ global $gBitSystem;
 $gBitSystem->verifyPackage( 'fisheye' );
 $gBitSystem->verifyPermission( 'p_fisheye_upload' );
 
-$gContent = FisheyeImage::lookup( $_REQUEST );
+// Any content that has a pictures folder - a media item, or a contact.
+$gContent = !empty( $_REQUEST['content_id'] ) ? \Bitweaver\Liberty\LibertyBase::getLibertyObject( (int)$_REQUEST['content_id'] ) : null;
 if( !$gContent || !$gContent->isValid() || !method_exists( $gContent, 'ensurePicturesFolder' ) ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No item exists with the given ID' ), 'error.tpl' );
 }
