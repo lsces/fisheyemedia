@@ -288,7 +288,7 @@ class FisheyeBook extends FisheyeMediaImage {
 		$book = new FisheyeBook();
 		$storeHash = [ 'title' => $title ];
 		if( !empty( $pRow['description'] ) ) {
-			$storeHash['edit'] = $pRow['description'];
+			$storeHash['edit'] = self::textToHtml( (string)$pRow['description'] );
 		}
 		$timestamp = self::publishedToTimestamp( (string)( $pRow['published'] ?? '' ) );
 		if( $timestamp !== null ) {
@@ -830,6 +830,25 @@ class FisheyeBook extends FisheyeMediaImage {
 	}
 
 	/**
+	 * A description as the HTML a contact's is: paragraphs in <p>...</p> (a blank line starts one, a single line break inside one is <br />),
+	 * the text escaped. Text that already carries HTML tags is returned as it is, so it is safe to apply twice.
+	 */
+	public static function textToHtml( string $pText ): string {
+		$text = trim( str_replace( [ "\r\n", "\r" ], "\n", $pText ) );
+		if( $text === '' || preg_match( '#</?(p|br|div|ul|ol|li|h[1-6]|strong|em|b|i|a|span|table)\b#i', $text ) ) {
+			return $text;
+		}
+		$out = [];
+		foreach( preg_split( '/\n\s*\n/', $text ) as $paragraph ) {
+			$paragraph = trim( $paragraph );
+			if( $paragraph !== '' ) {
+				$out[] = '<p>'.nl2br( htmlspecialchars( $paragraph, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8' ), true ).'</p>';
+			}
+		}
+		return implode( "\n", $out );
+	}
+
+	/**
 	 * Open Library's text as plain paragraphs: line endings normalised, the "----------" footer it appends to a description
 	 * (and its "([source][1])" references) dropped.
 	 */
@@ -987,7 +1006,7 @@ class FisheyeBook extends FisheyeMediaImage {
 			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] );
 
 		if( $parsed['description'] !== '' && trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) === '' ) {
-			$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $parsed['description'] ];
+			$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::textToHtml( $parsed['description'] ) ];
 			if( $this->store( $storeHash ) ) {
 				$ret['items'][] = 'description: '.mb_substr( $parsed['description'], 0, 60 ).( mb_strlen( $parsed['description'] ) > 60 ? '...' : '' );
 			}
@@ -1061,7 +1080,7 @@ class FisheyeBook extends FisheyeMediaImage {
 			if( mb_strlen( $description ) < 30 || preg_match( '/^\W*(duplicate|dupe|see )/i', $description ) ) {
 				$description = '';
 			}
-			$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $description ];
+			$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::textToHtml( $description ) ];
 			if( $description !== '' && $this->store( $storeHash ) ) {
 				$done[] = 'description: '.mb_substr( $description, 0, 60 ).( mb_strlen( $description ) > 60 ? '...' : '' );
 			}

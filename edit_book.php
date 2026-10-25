@@ -79,4 +79,5 @@ $gBitSmarty->assign( 'olMessage', $olMessage ?? '' );
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gBitSmarty->assign( 'gContent', $gContent );
 
+$gBitSmarty->assign( 'descriptionHtml', FisheyeBook::textToHtml( (string)( $gContent->mInfo['data'] ?? '' ) ) );
 $gBitSystem->display( 'bitpackage:fisheyemedia/edit_book.tpl', KernelTools::tra( 'Edit Book: ' ).$gContent->getTitle(), [ 'display_mode' => 'edit' ] );

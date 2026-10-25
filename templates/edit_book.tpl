@@ -34,12 +34,8 @@
 								<input type="text" class="form-control" name="title" id="title" value="{$gContent->getTitle()|escape}" />
 							{/forminput}
 						</div>
-						<div class="form-group">
-							{formlabel label="Description" for="edit"}
-							{forminput}
-								<textarea class="form-control" name="edit" id="edit" rows="4">{$gContent->mInfo.data|default:''|escape}</textarea>
-							{/forminput}
-						</div>
+						{* The same editor a contact's description uses; the text is HTML (paragraphs), a description still plain is shown converted. *}
+						{textarea rows=12 noformat=1 edit=$descriptionHtml}
 					{/legend}
 
 					{if $gXrefInfo->mGroups}
