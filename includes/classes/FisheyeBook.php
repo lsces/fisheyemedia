@@ -932,9 +932,11 @@ class FisheyeBook extends FisheyeMediaImage {
 					$status = (int)$m[1];
 				}
 			}
-			if( $status === 429 || $status === 403 ) {
+			if( $status === 429 || $status === 403 || $status === 400 ) {
+				// Google says why in its own words (quota used up, key restricted to other addresses or APIs, key not valid) - shown as it is.
+				$why = (string)( json_decode( (string)$body, true )['error']['message'] ?? '' );
 				$ret['quota'] = true;
-				$ret['error'] = 'Google Books refused the request (HTTP '.$status.') - the key is out of quota for today, or not allowed for the Books API';
+				$ret['error'] = 'Google Books refused the request (HTTP '.$status.')'.( $why !== '' ? ': '.preg_replace( '/\s+/', ' ', mb_substr( $why, 0, 300 ) ) : ' - the key is out of quota for today, or not allowed for the Books API' );
 				return $ret;
 			}
 			if( $status >= 500 ) {
