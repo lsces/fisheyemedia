@@ -705,6 +705,13 @@ bytes. It needs GD with FreeType and uses `util/fonts/liberation-serif/Liberatio
 the servers carry no serif face. Preview shows it; **Use as cover** stores it through `replaceCover()` with the source `generated:<cloth>`, so
 a made cover can be told from a found one later.
 
+### Books with no ISBN
+`list_no_isbn.php` lists the books with no live `isbn` xref (title order, authors from the `author` rows) with search links and a per-row
+Add ISBN (`storeXref()`, as the cover picker's). `add_books.php` has a second form for typed books: `ADD_BOOKS_NOISBN_ROWS` rows of
+title / author (`;` separates several) / year / publisher become loader rows with empty `isbn13`/`isbn10`, `FisheyeBookLoader::filingFor()` says
+where each would be filed (`FisheyeBook::findContentId()` matches a book with no ISBN on title plus first author, so a repeat is reported
+as already there), and `addRows()` loads the ticked ones; loaded rows are cleared from the form.
+
 ### Book covers from the shops (Book Details job)
 `load_book_details.php`'s fourth job, 'shops': the books with an ISBN and no image are asked of Amazon and AbeBooks
 (`FisheyeBookCovers::candidates()`), the larger real picture is stored with `replaceCover()` as `shop:<name>`, and the book is marked

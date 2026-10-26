@@ -12,6 +12,9 @@
  *
  * A list is best kept to one author at a time. At most ADD_BOOKS_MAX ISBNs are taken per press.
  *
+ * A second form takes books that have no ISBN, typed in (title, author, year, publisher): the same look-then-load steps through
+ * FisheyeBookLoader, ADD_BOOKS_NOISBN_ROWS rows per press.
+ *
  * @package fisheyemedia
  */
 
@@ -27,6 +30,8 @@ global $gBitSystem, $gBitSmarty, $gBitDb;
 $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 
 const ADD_BOOKS_MAX = 20;
+// Rows of the form for books with no ISBN.
+const ADD_BOOKS_NOISBN_ROWS = 6;
 
 $topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
 
@@ -95,6 +100,54 @@ if( $wanted && ( $loading || !empty( $_REQUEST['look_up'] ) ) ) {
 	}
 }
 
+// Books with no ISBN, typed in (a pre-ISBN book, or one on the desk): the same two steps. FisheyeBook::findContentId() knows a book with no
+// ISBN by its title and first author, so one already loaded is reported, not duplicated.
+$nbIn = [];
+for( $i = 0; $i < ADD_BOOKS_NOISBN_ROWS; $i++ ) {
+	foreach( [ 'title', 'author', 'year', 'publisher' ] as $field ) {
+		$nbIn[$i][$field] = $decode( ( (array)( $_REQUEST['nb_'.$field] ?? [] ) )[$i] ?? '' );
+	}
+}
+$nbCategory = $decode( $_REQUEST['nb_category'] ?? 'Fiction' );
+$nbFiling = [];
+if( !empty( $_REQUEST['nb_look'] ) || !empty( $_REQUEST['nb_add'] ) ) {
+	$nbRows = [];
+	foreach( $nbIn as $i => $one ) {
+		if( implode( '', $one ) === '' ) {
+			continue;
+		}
+		if( $one['title'] === '' || $one['author'] === '' ) {
+			$errors[] = KernelTools::tra( 'Row' ).' '.( $i + 1 ).': '.KernelTools::tra( 'a title and an author are both needed.' );
+			continue;
+		}
+		$nbRows[$i] = [ 'ref' => '', 'title' => $one['title'], 'authors' => array_values( array_filter( array_map( 'trim', explode( ';', $one['author'] ) ) ) ), 'author_role' => 'author',
+			'publisher' => $one['publisher'], 'isbn13' => '', 'isbn10' => '', 'published' => $one['year'], 'category' => $nbCategory !== '' ? [ $nbCategory ] : [], 'copies' => '', 'paid' => '', 'note' => [], 'external' => [] ];
+	}
+	$nbFiling = $nbRows ? array_combine( array_keys( $nbRows ), FisheyeBookLoader::filingFor( array_values( $nbRows ) ) ) : [];
+	if( !empty( $_REQUEST['nb_add'] ) ) {
+		$picked = array_map( 'intval', (array)( $_REQUEST['nb_pick'] ?? [] ) );
+		$toLoad = [];
+		foreach( $nbRows as $i => $row ) {
+			if( in_array( $i, $picked, true ) && empty( $nbFiling[$i]['loaded'] ) ) {
+				$toLoad[$i] = $row;
+			}
+		}
+		if( !$topGalleryId ) {
+			$errors[] = KernelTools::tra( 'There is no top-level Library gallery to file books under.' );
+		} elseif( $toLoad ) {
+			$results = FisheyeBookLoader::addRows( array_values( $toLoad ) );
+			// The rows that were loaded are cleared from the form, the rest stay for another press.
+			foreach( array_keys( $toLoad ) as $i ) {
+				$nbIn[$i] = [ 'title' => '', 'author' => '', 'year' => '', 'publisher' => '' ];
+				unset( $nbFiling[$i] );
+			}
+		}
+	}
+}
+
+$gBitSmarty->assign( 'nbRows', $nbIn );
+$gBitSmarty->assign( 'nbFiling', $nbFiling );
+$gBitSmarty->assign( 'nbCategory', $nbCategory );
 $gBitSmarty->assign( 'hasTopGallery', (bool)$topGalleryId );
 $topGalleryUrlHash = [ 'gallery_id' => $topGalleryId ];
 $gBitSmarty->assign( 'topGalleryUrl', $topGalleryId ? FisheyeGallery::getDisplayUrlFromHash( $topGalleryUrlHash ) : null );

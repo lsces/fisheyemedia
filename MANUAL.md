@@ -163,6 +163,10 @@ shows what is loaded, what is next and how many are done, and works in small bat
   and kept as ISBN-13 and ISBN-10), and **Reload from Open Library** fills the format, genre, pages and description
   where they are blank. Only an editor of the book can use the page, and a web address must be a public site.
   The book page's **Links** line also carries Amazon and AbeBooks links made from the ISBN.
+- **Books with no ISBN:** the admin menu's **Books with no ISBN** lists every book without one, with its author and year, search links
+  (AbeBooks, Open Library, Google Books) made from its title and author, and a box to paste the ISBN into - it is checked, kept as ISBN-13
+  and ISBN-10, and the book leaves the list. A book too old to have an ISBN can be added on the **Add Books** page, whose second form takes
+  title, author, year and publisher by hand (six at a time, checked before anything is saved).
 - **Make a cover:** for a plain cloth-bound book with only a title on the spine, the same page can make a front board. Scan a patch
   of the plain cloth and upload it as a picture into a gallery titled **Cover Backgrounds** (one picture per cloth - red, blue,
   green ...); the picker then offers each cloth, with the book's title and author filled in to edit, a lettering colour and an optional

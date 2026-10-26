@@ -86,6 +86,39 @@
 			</div>
 		{/form}
 
+		{form legend="Books with no ISBN" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php"}
+			<p>{tr}For a book that has no ISBN - older, or one on the desk. Title and author are needed; the year and publisher are optional. Check shows where each would be filed and whether it is already in the Library; nothing is saved until Load. An author given as "A; B" has both credited.{/tr}</p>
+			<div class="form-group">
+				<label for="nb_category">{tr}Category{/tr}</label>
+				<input type="text" class="form-control" id="nb_category" name="nb_category" value="{$nbCategory|escape}" />
+			</div>
+			<table class="table table-condensed">
+				<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}Publisher{/tr}</th><th>{tr}Filed in{/tr}</th></tr></thead>
+				<tbody>
+					{foreach from=$nbRows key=n item=row}
+						<tr>
+							<td>{if isset($nbFiling.$n)}<input type="checkbox" name="nb_pick[]" value="{$n}"{if !$nbFiling.$n.loaded} checked="checked"{else} disabled="disabled"{/if} />{/if}</td>
+							<td><input type="text" class="form-control" name="nb_title[]" value="{$row.title|escape}" /></td>
+							<td><input type="text" class="form-control" name="nb_author[]" value="{$row.author|escape}" /></td>
+							<td><input type="text" class="form-control" name="nb_year[]" value="{$row.year|escape}" size="6" /></td>
+							<td><input type="text" class="form-control" name="nb_publisher[]" value="{$row.publisher|escape}" /></td>
+							<td>
+								{if isset($nbFiling.$n)}
+									{if $nbFiling.$n.loaded}{tr}already in the Library{/tr}
+									{elseif $nbFiling.$n.kind eq 'author'}{$nbFiling.$n.author|escape}{if !$nbFiling.$n.gallery} <small>({tr}new gallery{/tr}{if $nbFiling.$n.joins}, {tr}brings in{/tr} {$nbFiling.$n.joins} {tr}loaded{/tr}{/if})</small>{/if}
+									{else}{$nbFiling.$n.name|escape} <small>({tr}category{/tr})</small>{/if}
+								{/if}
+							</td>
+						</tr>
+					{/foreach}
+				</tbody>
+			</table>
+			<div class="form-group submit">
+				<button type="submit" class="btn btn-default" name="nb_look" value="1">{tr}Check{/tr}</button>&nbsp;
+				<button type="submit" class="btn btn-primary" name="nb_add" value="1"{if !$hasTopGallery || !$nbFiling} disabled="disabled"{/if}>{tr}Load the ticked books{/tr}</button>
+			</div>
+		{/form}
+
 	</div>
 </div>
 {/strip}

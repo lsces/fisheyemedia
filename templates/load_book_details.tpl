@@ -125,7 +125,7 @@
 		/* ]]> */</script>
 
 		{if $noIsbn}
-			<p class="help-block">{$noIsbn} {tr}books have no ISBN, so Open Library cannot be asked about them by ISBN - they need their details entered by hand, or an ISBN added first.{/tr}</p>
+			<p class="help-block">{$noIsbn} {tr}books have no ISBN, so Open Library cannot be asked about them by ISBN - they need their details entered by hand, or an ISBN added first.{/tr} <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}list_no_isbn.php">{tr}List them{/tr}</a></p>
 		{/if}
 
 		{if $noCoverCount}
