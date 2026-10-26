@@ -163,6 +163,13 @@ shows what is loaded, what is next and how many are done, and works in small bat
   and kept as ISBN-13 and ISBN-10), and **Reload from Open Library** fills the format, genre, pages and description
   where they are blank. Only an editor of the book can use the page, and a web address must be a public site.
   The book page's **Links** line also carries Amazon and AbeBooks links made from the ISBN.
+- **Make a cover:** for a plain cloth-bound book with only a title on the spine, the same page can make a front board. Scan a patch
+  of the plain cloth and upload it as a picture into a gallery titled **Cover Backgrounds** (one picture per cloth - red, blue,
+  green ...); the picker then offers each cloth, with the book's title and author filled in to edit, a lettering colour and an optional
+  ruled border. **Preview** shows it, **Use as cover** makes it the book's cover. A cover made this way can be replaced by a real
+  photograph or scan at any time from the same page.
+- **Find Covers at Amazon and AbeBooks:** a job on the Book Details page for the books that still have no image: each is asked of
+  Amazon and AbeBooks by its ISBN and the larger real picture becomes the cover. Tick **Only look** first to see what it would take.
 - **Covers from a gallery:** **Covers from a gallery** reads a gallery of cover pictures on another
   bitweaver site (images titled with the book's ISBN-13), matches them to books, shows the current cover
   beside the new one and replaces the ones you tick.

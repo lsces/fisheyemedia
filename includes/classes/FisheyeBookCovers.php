@@ -7,12 +7,28 @@
  */
 namespace Bitweaver\Fisheyemedia;
 
+use Bitweaver\Fisheye\FisheyeImage;
+
 class FisheyeBookCovers {
 
 	/** Largest picture taken from an address, in bytes. */
 	const MAX_BYTES = 15000000;
 	/** Seconds each lookup may take. */
 	const TIMEOUT = 12;
+	/** Title of the gallery that holds the scanned cloths a made cover is lettered on. */
+	const SHELF_TITLE = 'Cover Backgrounds';
+	/** Height of a made cover in pixels - stored at no more than FISHEYEBOOK_COVER_MAX, so the lettering is drawn larger and shrunk. */
+	const MADE_HEIGHT = 800;
+	/** Width over height of a made cover, a front board. */
+	const MADE_RATIO = 0.65;
+	/** The lettering colours a made cover offers: name => [ label, red, green, blue ]. */
+	const INKS = [
+		'gold'   => [ 'Gold', 212, 175, 55 ],
+		'cream'  => [ 'Cream', 240, 230, 200 ],
+		'silver' => [ 'Silver', 205, 205, 210 ],
+		'white'  => [ 'White', 250, 250, 250 ],
+		'black'  => [ 'Black', 25, 25, 25 ],
+	];
 
 	/**
 	 * Cover addresses worth trying for a book: Open Library by each of its ISBNs, Google Books at its largest size and
@@ -192,6 +208,140 @@ class FisheyeBookCovers {
 			}
 		}
 		return [ 'width' => (int)$info[0], 'height' => (int)$info[1], 'kb' => (int)round( strlen( $pBytes ) / 1024 ), 'preview' => $preview ];
+	}
+
+	/**
+	 * The scanned cloths on the shelf - the pictures in the gallery titled SHELF_TITLE. Each: 'content_id', 'title', 'thumb' (small
+	 * thumbnail address) and 'file' (the stored original). 'gallery' is where more are uploaded.
+	 *
+	 * @return array{gallery:int,items:list<array{content_id:int,title:string,thumb:string,file:string}>}
+	 */
+	public static function shelf(): array {
+		global $gBitDb;
+		$galleryContentId = (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyegallery' AND `title` = ?", [ self::SHELF_TITLE ] );
+		$out = [ 'gallery' => $galleryContentId ? (int)$gBitDb->getOne( "SELECT `gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ $galleryContentId ] ) : 0, 'items' => [] ];
+		if( !$galleryContentId ) {
+			return $out;
+		}
+		foreach( $gBitDb->getAll(
+			"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id` AND lc.`content_type_guid` <> 'fisheyegallery'
+			 WHERE m.`gallery_content_id` = ? ORDER BY m.`item_position`, lc.`content_id`", [ $galleryContentId ] ) ?: [] as $row ) {
+			$image = FisheyeImage::lookup( [ 'content_id' => (int)$row['content_id'] ] );
+			$file = $image && $image->isValid() ? (string)$image->getSourceFile() : '';
+			if( $file !== '' && is_file( $file ) ) {
+				$out['items'][] = [ 'content_id' => (int)$row['content_id'], 'title' => (string)$image->getTitle(), 'thumb' => (string)$image->getThumbnailUrl( 'small' ), 'file' => $file ];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A front board for a book that has no cover: a scanned cloth, cut to the shape of a book, with a ruled border and the title and
+	 * author lettered on it in a serif face, set a little proud of a darker copy so it reads as stamped.
+	 *
+	 * @param string $pBackgroundFile local path of the cloth scan
+	 * @param string $pInk            a key of INKS
+	 * @return string|null JPEG bytes, null when the picture cannot be made (no GD or font, or the scan cannot be read)
+	 */
+	public static function makeCover( string $pBackgroundFile, string $pTitle, string $pAuthor = '', string $pInk = 'gold', bool $pBorder = true ): ?string {
+		$font = dirname( __DIR__, 2 ).'/fonts/LiberationSerif-Bold.ttf';
+		if( !function_exists( 'imagettftext' ) || !is_file( $font ) || !( $source = @imagecreatefromstring( (string)@file_get_contents( $pBackgroundFile ) ) ) ) {
+			return null;
+		}
+		$h = self::MADE_HEIGHT;
+		$w = (int)round( $h * self::MADE_RATIO );
+		$sw = imagesx( $source );
+		$sh = imagesy( $source );
+		// The largest piece of the scan with a book's proportions, from its middle.
+		$cw = min( $sw, (int)floor( $sh * self::MADE_RATIO ) );
+		$ch = (int)floor( $cw / self::MADE_RATIO );
+		$im = imagecreatetruecolor( $w, $h );
+		imagecopyresampled( $im, $source, 0, 0, (int)( ( $sw - $cw ) / 2 ), (int)( ( $sh - $ch ) / 2 ), $w, $h, $cw, $ch );
+		imagealphablending( $im, true );
+
+		[ , $r, $g, $b ] = self::INKS[$pInk] ?? self::INKS['gold'];
+		$ink = imagecolorallocatealpha( $im, $r, $g, $b, 12 );
+		$shade = imagecolorallocatealpha( $im, (int)( $r * 0.25 ), (int)( $g * 0.25 ), (int)( $b * 0.25 ), 70 );
+
+		if( $pBorder ) {
+			foreach( [ [ 0.045, 5 ], [ 0.075, 2 ] ] as [ $inset, $thick ] ) {
+				$d = (int)round( $w * $inset );
+				imagesetthickness( $im, $thick );
+				imagerectangle( $im, $d, $d, $w - $d, $h - $d, $ink );
+			}
+			imagesetthickness( $im, 1 );
+		}
+
+		$maxW = (int)( $w * 0.70 );
+		$title = mb_strtoupper( trim( $pTitle ) );
+		$size = 70;
+		do {
+			$lines = self::wrapText( $title, $font, $size, $maxW );
+			$fits = count( $lines ) <= 6 && count( $lines ) * $size * 1.3 <= $h * 0.40 && self::widest( $lines, $font, $size ) <= $maxW;
+			if( !$fits ) {
+				$size -= 3;
+			}
+		} while( !$fits && $size > 14 );
+		$author = trim( $pAuthor );
+		$authorSize = max( 18, (int)round( $size * 0.45 ) );
+		$authorLines = $author !== '' ? self::wrapText( $author, $font, $authorSize, $maxW ) : [];
+		$titleH = count( $lines ) * $size * 1.3;
+		$authorH = count( $authorLines ) * $authorSize * 1.4;
+		$gap = $authorLines ? $h * 0.09 : 0;
+		$y = ( $h * 0.46 ) - ( $titleH + $gap + $authorH ) / 2;
+
+		foreach( [ [ $lines, $size, 1.3 ], [ $authorLines, $authorSize, 1.4 ] ] as $n => [ $set, $pt, $leading ] ) {
+			if( $n === 1 && $set ) {
+				// A short rule between the title and the author.
+				$ruleY = (int)round( $y + $gap / 2 );
+				imagesetthickness( $im, 2 );
+				imageline( $im, (int)( $w * 0.40 ), $ruleY, (int)( $w * 0.60 ), $ruleY, $ink );
+				imagesetthickness( $im, 1 );
+				$y += $gap;
+			}
+			foreach( $set as $line ) {
+				$box = imagettfbbox( $pt, 0, $font, $line );
+				$x = (int)round( ( $w - ( $box[2] - $box[0] ) ) / 2 - $box[0] );
+				$base = (int)round( $y + $pt );
+				imagettftext( $im, $pt, 0, $x + 2, $base + 2, $shade, $font, $line );
+				imagettftext( $im, $pt, 0, $x, $base, $ink, $font, $line );
+				$y += $pt * $leading;
+			}
+		}
+		ob_start();
+		imagejpeg( $im, null, 90 );
+		return (string)ob_get_clean();
+	}
+
+	/** Words broken into lines no wider than $pMaxWidth at this size (a single word wider than that is left whole). @return list<string> */
+	private static function wrapText( string $pText, string $pFont, int $pSize, int $pMaxWidth ): array {
+		$lines = [];
+		$line = '';
+		foreach( preg_split( '/\s+/u', $pText, -1, PREG_SPLIT_NO_EMPTY ) ?: [] as $word ) {
+			$try = $line === '' ? $word : $line.' '.$word;
+			$box = imagettfbbox( $pSize, 0, $pFont, $try );
+			if( $line !== '' && ( $box[2] - $box[0] ) > $pMaxWidth ) {
+				$lines[] = $line;
+				$line = $word;
+			} else {
+				$line = $try;
+			}
+		}
+		if( $line !== '' ) {
+			$lines[] = $line;
+		}
+		return $lines;
+	}
+
+	/** The widest of these lines at this size, in pixels. @param list<string> $pLines */
+	private static function widest( array $pLines, string $pFont, int $pSize ): int {
+		$widest = 0;
+		foreach( $pLines as $line ) {
+			$box = imagettfbbox( $pSize, 0, $pFont, $line );
+			$widest = max( $widest, $box[2] - $box[0] );
+		}
+		return $widest;
 	}
 
 	/** True when the bytes are an image at least 40 pixels each way (the sites' "no cover" answers are 1 pixel). */

@@ -107,6 +107,38 @@ if( !empty( $_REQUEST['use'] ) ) {
 	}
 }
 
+// Make a cover: for a book that has none anywhere (a plain cloth binding with the title on the spine), a scanned cloth from the shelf is
+// lettered with the title and author. Previewed first; nothing is stored until Use.
+$shelf = FisheyeBookCovers::shelf();
+$bookAuthor = (string)$gContent->mDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'author' AND `end_date` IS NULL ORDER BY `xorder`", [ $gContent->mContentId ] );
+$making = !empty( $_REQUEST['make_preview'] ) || !empty( $_REQUEST['make_use'] );
+$make = [
+	'bg'     => (int)( $_REQUEST['bg'] ?? ( $shelf['items'][0]['content_id'] ?? 0 ) ),
+	'title'  => $making ? $decode( $_REQUEST['mk_title'] ?? '' ) : (string)$gContent->getTitle(),
+	'author' => $making ? $decode( $_REQUEST['mk_author'] ?? '' ) : $bookAuthor,
+	'ink'    => isset( FisheyeBookCovers::INKS[$_REQUEST['ink'] ?? ''] ) ? $_REQUEST['ink'] : 'gold',
+	'border' => $making ? !empty( $_REQUEST['border'] ) : true,
+];
+$madePreview = '';
+if( $making ) {
+	$cloth = null;
+	foreach( $shelf['items'] as $item ) {
+		if( $item['content_id'] === $make['bg'] ) {
+			$cloth = $item;
+		}
+	}
+	$bytes = $cloth && $make['title'] !== '' ? FisheyeBookCovers::makeCover( $cloth['file'], $make['title'], $make['author'], $make['ink'], $make['border'] ) : null;
+	if( $bytes === null ) {
+		$errors[] = KernelTools::tra( 'Choose a cloth from the shelf and give the cover a title.' );
+	} elseif( !empty( $_REQUEST['make_use'] ) ) {
+		if( $useBytes( $bytes, 'generated:'.$cloth['title'] ) ) {
+			$message = KernelTools::tra( 'The made cover is now the cover.' );
+		}
+	} else {
+		$madePreview = FisheyeBookCovers::describe( $bytes )['preview'];
+	}
+}
+
 // Look at the candidates: fetched together, listed with size; the pasted address is shown beside them for a look before it is used.
 $urls = [];
 foreach( $candidates as $candidate ) {
@@ -141,6 +173,12 @@ $gBitSmarty->assign( 'errors', $errors );
 $gBitSmarty->assign( 'shown', $shown );
 $gBitSmarty->assign( 'customs', $customs );
 $gBitSmarty->assign( 'pasted', $pasted );
+$gBitSmarty->assign( 'shelf', array_map( fn( $i ) => array_diff_key( $i, [ 'file' => 1 ] ), $shelf['items'] ) );
+$gBitSmarty->assign( 'shelfGalleryId', $shelf['gallery'] );
+$gBitSmarty->assign( 'shelfTitle', FisheyeBookCovers::SHELF_TITLE );
+$gBitSmarty->assign( 'make', $make );
+$gBitSmarty->assign( 'inks', array_map( fn( $i ) => $i[0], FisheyeBookCovers::INKS ) );
+$gBitSmarty->assign( 'madePreview', $madePreview );
 $gBitSmarty->assign( 'hasIsbn', $isbn13 !== '' || $isbn10 !== '' );
 $gBitSmarty->assign( 'searchTerm', rawurlencode( $isbn13 ?: $isbn10 ?: $gContent->getTitle() ) );
 $gBitSmarty->assign( 'titleTerm', rawurlencode( $gContent->getTitle() ) );

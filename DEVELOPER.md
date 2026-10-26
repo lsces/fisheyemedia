@@ -697,6 +697,19 @@ The page drops byte-identical duplicates and `FisheyeBook::isBlankCover()` stand
 `FisheyeBook::storeXref()` (check digit, ISBN-13 + ISBN-10), Reload from Open Library is `reloadFromOpenLibrary()`. The Amazon and
 AbeBooks links on the book page are built in `view_book.php` from the ISBN, not stored.
 
+**Make a cover** (same page) is for a book with no picture to be found. `FisheyeBookCovers::shelf()` lists the pictures in the gallery titled
+`Cover Backgrounds` (found by title; uploaded with the normal fisheye upload); `makeCover( file, title, author, ink, border )` cuts the scan
+to a front board (ratio 0.65, 800 px high, from the middle), draws a double border and the title (upper case, wrapped, the size reduced
+until it fits) and author with a short rule between, each set a little proud of a darker copy so it reads as stamped, and returns JPEG
+bytes. It needs GD with FreeType and uses the bundled `fonts/LiberationSerif-Bold.ttf` (SIL Open Font License, `fonts/OFL.txt`) because
+the servers carry no serif face. Preview shows it; **Use as cover** stores it through `replaceCover()` with the source `generated:<cloth>`, so
+a made cover can be told from a found one later.
+
+### Book covers from the shops (Book Details job)
+`load_book_details.php`'s fourth job, 'shops': the books with an ISBN and no image are asked of Amazon and AbeBooks
+(`FisheyeBookCovers::candidates()`), the larger real picture is stored with `replaceCover()` as `shop:<name>`, and the book is marked
+(`shop_covers_checked`). 'Only look' reports what it would take and stores nothing (no mark either).
+
 ### Wikidata series data on the book
 The series plan (`FisheyeSeries::planForRows()` / `proposeFromSources()`) carries, for each book it files, the Wikidata number in the series
 (`wd_ord`) and the work's Wikidata id (`work_q`; `wikidataWorks()` now selects `?work`, cache key `fm_wd_works_v2_`); `planForRows()` returns
