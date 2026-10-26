@@ -96,6 +96,13 @@ foreach( [ 'category' => 'Category', 'genre' => 'Genre', 'subject' => 'Subject',
 $gBitSmarty->assign( 'isbn', $isbn );
 $gBitSmarty->assign( 'creditGroups', $creditGroups );
 $gBitSmarty->assign( 'details', $details );
+// Bookshop links come from the ISBN and are not stored: Amazon's id for a book is its ISBN-10, AbeBooks searches by ISBN-13.
+if( !empty( $isbn['isbn10'] ) ) {
+	$externalLinks[] = [ 'title' => 'Amazon', 'url' => 'https://www.amazon.co.uk/dp/'.$isbn['isbn10'] ];
+}
+if( !empty( $isbn['isbn13'] ) ) {
+	$externalLinks[] = [ 'title' => 'AbeBooks', 'url' => 'https://www.abebooks.co.uk/servlet/SearchResults?isbn='.$isbn['isbn13'] ];
+}
 $gBitSmarty->assign( 'externalLinks', $externalLinks );
 
 $gBitSmarty->assign( 'gContent', $gContent );

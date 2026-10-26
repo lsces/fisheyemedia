@@ -56,6 +56,7 @@
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadOpenLibrary" value="{tr}Reload from Open Library{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadWikidata" value="{tr}Reload from Wikidata{/tr}" />
+				<a class="btn btn-secondary" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}pick_cover.php?content_id={$gContent->mContentId}">{tr}Find a Cover{/tr}</a>
 			</div>
 		{/form}
 	</div><!-- end .body -->

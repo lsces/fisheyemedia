@@ -684,6 +684,19 @@ gallery and `leaveCategoryGalleries()` removes a book from the galleries under t
 one of its own Category values, but only once it is in an author gallery or one of its series. Series affected are put
 in order by the number in each book's series line (`FisheyeSeries::orderByOrdinal()`), as the sheet's order is not to hand.
 
+### Cover picker
+`pick_cover.php?content_id=` (button on `edit_book.tpl`) and `FisheyeBookCovers` (no database access). `candidates( isbn13, isbn10 )`
+gives the fixed addresses (Open Library `/b/isbn/<n>-L.jpg?default=false` for each ISBN, Google Books zoom 0, AbeBooks
+`pictures.abebooks.com/isbn/<isbn13>-uk.jpg`, Amazon `m.media-amazon.com/images/P/<isbn10>.01._SCLZZZZZZZ_.jpg`); `fetchMany()` fetches
+them together (curl_multi) and keeps real pictures only (`isPicture()`: 40 px each way, the sites answer "no cover" with a 1 px image).
+The page drops byte-identical duplicates and `FisheyeBook::isBlankCover()` stand-ins, shows each as a data-address preview
+(`describe()`), and **Use as cover** refetches that one and calls `FisheyeBook::replaceCover()`. A typed or pasted address goes through
+`fetchGuarded()` (http/https only, each redirect re-checked against private/reserved ranges, so it cannot reach the local network);
+`picturesAt()` returns the picture itself or, for a web page, its `og:image` and the `.jpg`/`.png` addresses in it with the size marker
+(`._SL300_`) dropped, skipping logos/icons and anything under 120 px, at most 8. The Add ISBN box saves through
+`FisheyeBook::storeXref()` (check digit, ISBN-13 + ISBN-10), Reload from Open Library is `reloadFromOpenLibrary()`. The Amazon and
+AbeBooks links on the book page are built in `view_book.php` from the ISBN, not stored.
+
 ### Wikidata series data on the book
 The series plan (`FisheyeSeries::planForRows()` / `proposeFromSources()`) carries, for each book it files, the Wikidata number in the series
 (`wd_ord`) and the work's Wikidata id (`work_q`; `wikidataWorks()` now selects `?work`, cache key `fm_wd_works_v2_`); `planForRows()` returns

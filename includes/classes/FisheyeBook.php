@@ -637,7 +637,7 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * Whether an image is a "no cover" stand-in rather than a cover: shrunk to a small grid, almost every cell is white (the
 	 * grey "image not available" page) or none has any colour at all (a flat grey one). A real cover has colour or ink.
 	 */
-	private static function isBlankCover( string $pBytes ): bool {
+	public static function isBlankCover( string $pBytes ): bool {
 		if( !function_exists( 'imagecreatefromstring' ) || !( $im = @imagecreatefromstring( $pBytes ) ) ) {
 			return false;
 		}

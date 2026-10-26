@@ -154,6 +154,15 @@ shows what is loaded, what is next and how many are done, and works in small bat
 - **Cover:** the book's front cover is its tile. It is found automatically (Open Library, then Google Books)
   or added by hand; the first image added to a book with no tile becomes the tile. Covers are kept at no more
   than 400 pixels on the longest side, the size the Library shows.
+- **Find a Cover:** the **Find a Cover** button on a book's edit page opens a picker for that book. It lists the covers
+  found for the book's ISBN - Open Library, Google Books, AbeBooks and Amazon - each with its size in pixels, and
+  **Use as cover** makes the chosen one the front cover and the tile (the book's other pictures are not touched; a
+  picture is kept at no more than 400 pixels). The same page takes a picture from a **web address** - paste the
+  address of a bookseller's page, or of the picture itself, and the pictures on it are listed to choose from - or
+  a **scan or photograph** from your computer. A book with no ISBN gets an **Add ISBN** box (the number is checked
+  and kept as ISBN-13 and ISBN-10), and **Reload from Open Library** fills the format, genre, pages and description
+  where they are blank. Only an editor of the book can use the page, and a web address must be a public site.
+  The book page's **Links** line also carries Amazon and AbeBooks links made from the ISBN.
 - **Covers from a gallery:** **Covers from a gallery** reads a gallery of cover pictures on another
   bitweaver site (images titled with the book's ISBN-13), matches them to books, shows the current cover
   beside the new one and replaces the ones you tick.
