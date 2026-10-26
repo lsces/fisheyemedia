@@ -11,10 +11,12 @@
  * again and again: once asked, a book is marked (the 'ol_details_checked' / 'ol_covers_checked' / 'google_books_checked' content
  * preferences), so a book Open Library has no description, genre or cover for does not stay on the list for ever; 'ask again' lifts the mark.
  *
- * Three jobs, chosen on the page: 'details' - every book with an ISBN, with a cover or without, gets its blanks filled in (covers are
+ * Four jobs, chosen on the page: 'details' - every book with an ISBN, with a cover or without, gets its blanks filled in (covers are
  * left alone); 'covers' - the books with no image yet are looked up for a cover as well (Open Library, then Google Books), a book no
  * source has a cover for waiting for a photograph or scan; 'google' - what Open Library left blank is asked of Google Books (needs its
- * API key). Books with no ISBN cannot be looked up by ISBN at all - the page says how many.
+ * API key); 'shops' - the books still with no image after the covers job are looked for at Amazon and AbeBooks by ISBN (the same
+ * addresses the cover picker uses), the larger real picture becoming the cover; 'only look' reports what it would use and stores nothing.
+ * Books with no ISBN cannot be looked up by ISBN at all - the page says how many.
  *
  * @package fisheyemedia
  */
@@ -45,7 +47,7 @@ const LOAD_BOOK_DETAILS_NOCOVER_SHOWN = 100;
 const LOAD_BOOK_DETAILS_BATCH = 10;
 
 /** Content preference that marks a book already asked about, per job. */
-const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked' ];
+const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked', 'shops' => 'shop_covers_checked' ];
 
 /**
  * The books worth asking Open Library about, in content id order after $pAfter, leaving out those already asked about for this job
@@ -63,11 +65,11 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 	$has = fn( string $pItem ) => "EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = '$pItem' AND $live )";
 	$job = $pJob === 'google'
 		? "( NOT ".$has( 'genre' )." OR NOT ".$has( 'pages' )." OR NOT ".$has( 'language' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
-		: ( $pJob === 'covers'
+		: ( in_array( $pJob, [ 'covers', 'shops' ], true )
 		? "NOT ".$has( 'image' )
 		: "( NOT ".$has( 'ol_edition' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0
 		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" );
-	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google' ], true ) ? $pJob : 'details']."' )";
+	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google', 'shops' ], true ) ? $pJob : 'details']."' )";
 	$rows = $gBitDb->getCol(
 		"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."liberty_content` lc
 		 WHERE lc.`content_type_guid` = 'fisheyebook' AND lc.`content_id` > ? AND ".$has( 'isbn' )." AND $job$mark
@@ -76,13 +78,53 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 	return array_map( 'intval', $rows );
 }
 
+/**
+ * The shops job for one book: Amazon and AbeBooks are asked for its cover by ISBN, the larger real picture (not a 1 pixel or grey
+ * "no cover" stand-in) is kept. $pLook reports it and stores nothing.
+ *
+ * @return array{matched:bool,items:list<string>,error:string}
+ */
+function load_book_details_shop_cover( FisheyeBook $pBook, bool $pLook ): array {
+	global $gBitDb;
+	$isbn = $gBitDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $pBook->mContentId ] );
+	$urls = [];
+	$labels = [];
+	foreach( FisheyeBookCovers::candidates( (string)( $isbn['xkey'] ?? '' ), (string)( $isbn['xkey_ext'] ?? '' ) ) as $candidate ) {
+		if( in_array( $candidate['key'], [ 'amazon', 'abebooks' ], true ) ) {
+			$urls[$candidate['key']] = $candidate['url'];
+			$labels[$candidate['key']] = $candidate['label'];
+		}
+	}
+	$best = null;
+	foreach( $urls ? FisheyeBookCovers::fetchMany( $urls ) : [] as $key => $bytes ) {
+		$info = getimagesizefromstring( $bytes );
+		if( $info && !FisheyeBook::isBlankCover( $bytes ) && ( $best === null || $info[0] * $info[1] > $best['area'] ) ) {
+			$best = [ 'bytes' => $bytes, 'label' => $labels[$key], 'size' => $info[0].'x'.$info[1], 'area' => $info[0] * $info[1] ];
+		}
+	}
+	if( $best === null ) {
+		return [ 'matched' => false, 'items' => [], 'error' => '' ];
+	}
+	if( $pLook ) {
+		return [ 'matched' => true, 'items' => [ 'would take the cover from '.$best['label'].' ('.$best['size'].')' ], 'error' => '' ];
+	}
+	$tmp = tempnam( sys_get_temp_dir(), 'shopcover_' );
+	file_put_contents( $tmp, $best['bytes'] );
+	$stored = $pBook->replaceCover( $tmp, 'shop:'.$best['label'] );
+	@unlink( $tmp );
+	return $stored === null
+		? [ 'matched' => true, 'items' => [], 'error' => 'The picture from '.$best['label'].' could not be stored as the cover.' ]
+		: [ 'matched' => true, 'items' => [ 'cover from '.$best['label'].' ('.$best['size'].')' ], 'error' => '' ];
+}
+
 $after = max( 0, (int)( $_REQUEST['after'] ?? 0 ) );
 $googleKey = trim( (string)$gBitSystem->getConfig( 'fisheyemedia_google_books_api_key' ) ) !== '';
-$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
+$look = !empty( $_REQUEST['look'] );
+$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google', 'shops' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
 $again = !empty( $_REQUEST['again'] );
 $pending = load_book_details_pending( $after, $job, $again );
 $counts = [];
-foreach( array_filter( [ 'details', 'covers', $googleKey ? 'google' : '' ] ) as $name ) {
+foreach( array_filter( [ 'details', 'covers', 'shops', $googleKey ? 'google' : '' ] ) as $name ) {
 	$counts[$name] = $name === $job ? count( $pending ) : count( load_book_details_pending( 0, $name, $again ) );
 }
 $doneBefore = (int)( $_REQUEST['done'] ?? 0 );
@@ -121,12 +163,14 @@ if( !empty( $_REQUEST['fetch'] ) ) {
 					$quota = $found['error'];
 					break;
 				}
+			} elseif( $job === 'shops' ) {
+				$found = load_book_details_shop_cover( $book, $look );
 			} else {
 				// The details job leaves covers alone (a book with a cover repairs its thumbnail, with no request); the covers job looks for them.
 				$found = $book->reloadFromOpenLibrary( $job === 'covers' || (bool)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $contentId ] ) );
 			}
 			// Asked and answered (even "nothing more here"): marked, so it is not asked again - unless the service did not answer.
-			if( empty( $found['error'] ) ) {
+			if( empty( $found['error'] ) && !$look ) {
 				$book->storePreference( LOAD_BOOK_DETAILS_MARK[$job], (string)time() );
 			}
 			$results[] = [ 'title' => $book->getTitle(), 'url' => $book->getDisplayUrl(), 'matched' => $found['matched'], 'items' => $found['items'], 'error' => $found['error'] ?? '' ];
@@ -197,6 +241,7 @@ $gBitSmarty->assign( 'pendingCount', count( $pending ) );
 $gBitSmarty->assign( 'after', $after );
 $gBitSmarty->assign( 'job', $job );
 $gBitSmarty->assign( 'again', $again );
+$gBitSmarty->assign( 'look', $look );
 $gBitSmarty->assign( 'doneCount', $doneBefore );
 $gBitSmarty->assign( 'changedCount', $changedBefore );
 $gBitSmarty->assign( 'more', $more );

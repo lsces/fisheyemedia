@@ -17,7 +17,7 @@
 							{if $made.error}{$made.error|escape}
 							{elseif $made.items}{foreach from=$made.items item=line name=lines}{$line|escape}{if !$smarty.foreach.lines.last}; {/if}{/foreach}
 							{elseif $made.matched}{tr}nothing missing that Open Library holds{/tr}
-							{else}{tr}not on Open Library{/tr}{/if}
+							{elseif $job eq 'shops'}{tr}no cover at Amazon or AbeBooks{/tr}{else}{tr}not on Open Library{/tr}{/if}
 						</li>
 					{/foreach}
 				</ul>
@@ -68,6 +68,7 @@
 			<input type="hidden" name="secs" value="{$totalSeconds|escape}" />
 			<input type="hidden" name="fetch" value="1" />
 			{if $more && $again}<input type="hidden" name="again" value="1" />{/if}
+				{if $more && $look}<input type="hidden" name="look" value="1" />{/if}
 			{if $more}
 				<input type="hidden" name="job" value="{$job|escape}" />
 			{else}
@@ -76,6 +77,8 @@
 					<span class="help-block">{tr}Every book with an ISBN, with a cover or without: whatever Open Library holds that is still blank - its edition id, a description, genres, links to Wikipedia, Goodreads and the like. Only the blanks are filled in; nothing entered is replaced. Covers are not looked for here - that is the next job.{/tr}</span>
 					<label><input type="radio" name="job" value="covers"{if $job eq 'covers'} checked="checked"{/if} /> {tr}Find Missing Covers{/tr} - {$counts.covers} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}The books with no image: Open Library is asked for a cover (then Google Books), and the rest of what it holds is filled in too. A book no source has a cover for is passed over, ready for your own scan.{/tr}</span>
+					<label><input type="radio" name="job" value="shops"{if $job eq 'shops'} checked="checked"{/if} /> {tr}Find Covers at Amazon and AbeBooks{/tr} - {$counts.shops} {tr}to do{/tr}</label>
+					<span class="help-block">{tr}The books still with no image: Amazon and AbeBooks are asked for the cover by ISBN, and the larger real picture becomes the cover (a grey "no cover" stand-in is never taken). Best run after Find Missing Covers. Tick Only look first to see what it would use without storing anything.{/tr}</span>
 					{if $googleKey}
 						<label><input type="radio" name="job" value="google"{if $job eq 'google'} checked="checked"{/if} /> {tr}Fill Gaps from Google Books{/tr} - {$counts.google} {tr}to do{/tr}</label>
 						<span class="help-block">{tr}For what Open Library left blank - the description, genres, pages, language and publisher. Best run after Load Missing Details. Uses the Google Books key (Media Library Settings), about 1,000 lookups a day; it stops by itself when Google says the day's quota is used.{/tr}</span>
@@ -83,6 +86,10 @@
 				</div>
 			{/if}
 			{if !$more}
+				<div class="form-group">
+					<label><input type="checkbox" name="look" value="1"{if $look} checked="checked"{/if} /> {tr}Only look - store nothing{/tr}</label>
+					<span class="help-block">{tr}For the Amazon and AbeBooks job: lists what each book would get and changes nothing, and the books are not marked as checked.{/tr}</span>
+				</div>
 				<div class="form-group">
 					<label><input type="checkbox" name="again" value="1"{if $again} checked="checked"{/if} /> {tr}Ask again about books already checked{/tr}</label>
 					<span class="help-block">{tr}Each book is asked about once, and then marked - a book Open Library has no description, genre or cover for does not come back every run. Tick this to go over them all again, for example after Open Library has been added to.{/tr}</span>
@@ -95,7 +102,7 @@
 					{if $more}<a class="btn btn-default" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php">{tr}Stop{/tr}</a>{/if}
 				</div>
 			{else}
-				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{elseif $job eq 'google'}{tr}Finished - every book with a gap has been looked up on Google Books.{/tr}{else}{tr}Finished - every book with an ISBN has been looked at.{/tr}{/if}</p></div>
+				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{elseif $job eq 'shops'}{tr}Finished - every book without a cover has been looked for at Amazon and AbeBooks.{/tr}{elseif $job eq 'google'}{tr}Finished - every book with a gap has been looked up on Google Books.{/tr}{else}{tr}Finished - every book with an ISBN has been looked at.{/tr}{/if}</p></div>
 			{/if}
 		{/form}
 		<script>/* <![CDATA[ */
