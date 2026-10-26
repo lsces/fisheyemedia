@@ -245,7 +245,7 @@ class FisheyeBookCovers {
 	 * @return string|null JPEG bytes, null when the picture cannot be made (no GD or font, or the scan cannot be read)
 	 */
 	public static function makeCover( string $pBackgroundFile, string $pTitle, string $pAuthor = '', string $pInk = 'gold', bool $pBorder = true ): ?string {
-		$font = dirname( __DIR__, 2 ).'/fonts/LiberationSerif-Bold.ttf';
+		$font = UTIL_PKG_PATH.'fonts/liberation-serif/LiberationSerif-Bold.ttf';
 		if( !function_exists( 'imagettftext' ) || !is_file( $font ) || !( $source = @imagecreatefromstring( (string)@file_get_contents( $pBackgroundFile ) ) ) ) {
 			return null;
 		}

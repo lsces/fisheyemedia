@@ -701,7 +701,7 @@ AbeBooks links on the book page are built in `view_book.php` from the ISBN, not 
 `Cover Backgrounds` (found by title; uploaded with the normal fisheye upload); `makeCover( file, title, author, ink, border )` cuts the scan
 to a front board (ratio 0.65, 800 px high, from the middle), draws a double border and the title (upper case, wrapped, the size reduced
 until it fits) and author with a short rule between, each set a little proud of a darker copy so it reads as stamped, and returns JPEG
-bytes. It needs GD with FreeType and uses the bundled `fonts/LiberationSerif-Bold.ttf` (SIL Open Font License, `fonts/OFL.txt`) because
+bytes. It needs GD with FreeType and uses `util/fonts/liberation-serif/LiberationSerif-Bold.ttf` (the util package; SIL Open Font License, `OFL.txt` beside it) because
 the servers carry no serif face. Preview shows it; **Use as cover** stores it through `replaceCover()` with the source `generated:<cloth>`, so
 a made cover can be told from a found one later.
 
