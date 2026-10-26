@@ -23,6 +23,10 @@ trait FisheyeMediaTrait {
 	// The pictures folder (find / make / list), shared with any other item that has one - fisheye's own small trait.
 	use \Bitweaver\Fisheye\FisheyePicturesFolderTrait;
 
+	/** An item's pictures folder uses the Images Grid layout, whose title links back to the item. */
+	public function picturesFolderLayout(): ?string {
+		return FISHEYE_PAGINATION_IMAGES_GRID;
+	}
 
 	/**
 	 * Every live xref row on this content object, across all groups except liberty's synthetic

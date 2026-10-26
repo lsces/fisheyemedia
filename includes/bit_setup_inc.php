@@ -34,11 +34,16 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 	define( 'FISHEYE_PAGINATION_PROGRAM_GRID', 'program_grid' );
 	define( 'FISHEYE_PAGINATION_MUSIC_GRID', 'music_grid' );
 	define( 'FISHEYE_PAGINATION_LIBRARY_GRID', 'library_grid' );
+	// An item's pictures folder: the plain grid, with the folder's title linking back to the item it belongs to.
+	define( 'FISHEYE_PAGINATION_IMAGES_GRID', 'images_grid' );
 	// Title of the nested gallery load_video.php keeps an artist's videos in - getCategorizedItems()
 	// lists its contents as the artist page's own Videos strip.
 	define( 'FISHEYEMEDIA_VIDEOS_GALLERY_TITLE', 'Videos' );
 
 	global $gLibertySystem;
+
+	// The service functions below (LibertyContent::invokeServices() looks them up in the Bitweaver\Liberty namespace).
+	require_once __DIR__.'/fisheyemedia_services.php';
 
 	// Register sub-type content types at startup so getLibertyObject() can resolve them.
 	// registerContentType() is a no-op in memory once the row exists in the DB - same pattern
@@ -108,6 +113,7 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 			FISHEYE_PAGINATION_PROGRAM_GRID => 'TV Show Grid',
 			FISHEYE_PAGINATION_MUSIC_GRID   => 'Music Grid',
 			FISHEYE_PAGINATION_LIBRARY_GRID => 'Library Grid',
+			FISHEYE_PAGINATION_IMAGES_GRID  => 'Images Grid',
 		],
 		// rows/cols per the 2026-09-24 tuning (film/program trimmed to 3*8; music_grid keeps
 		// 4*8 stored even though its own template no longer paginates - see
@@ -117,6 +123,7 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 			FISHEYE_PAGINATION_PROGRAM_GRID => [ 'rows' => 3, 'cols' => 8 ],
 			FISHEYE_PAGINATION_MUSIC_GRID   => [ 'rows' => 4, 'cols' => 8 ],
 			FISHEYE_PAGINATION_LIBRARY_GRID => [ 'rows' => 4, 'cols' => 8 ],
+			FISHEYE_PAGINATION_IMAGES_GRID  => [ 'rows' => 4, 'cols' => 8 ],
 		],
 	] );
 
@@ -126,5 +133,6 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 	// 'fisheye_gallery_layout' above would overwrite that registration.
 	$gLibertySystem->registerService( FISHEYEMEDIA_PKG_NAME, FISHEYEMEDIA_PKG_NAME, [
 		'fisheye_menu_tpl' => 'bitpackage:fisheyemedia/fisheye_menu_inc.tpl',
+		'content_display_function' => 'fisheyemedia_content_display',
 	] );
 }

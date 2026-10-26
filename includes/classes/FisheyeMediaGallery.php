@@ -351,6 +351,30 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * The item a pictures folder belongs to - the content a '<type>_content_id' preference on the folder points at (see
+	 * FisheyePicturesFolderTrait). Static because a folder is a plain FisheyeGallery. Null when there is no such item or the
+	 * visitor may not view it, so the folder's title then stays plain.
+	 *
+	 * @return array{title:string,url:string}|null
+	 */
+	public static function getPicturesFolderOwner( FisheyeGallery $pFolder ): ?array {
+		$values = $pFolder->mDb->getCol(
+			"SELECT `pref_value` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `content_id` = ? AND `pref_name` LIKE '%!_content!_id' ESCAPE '!'",
+			[ $pFolder->mContentId ]
+		) ?: [];
+		foreach( $values as $value ) {
+			if( !ctype_digit( (string)$value ) || (int)$value === (int)$pFolder->mContentId ) {
+				continue;
+			}
+			$owner = LibertyContent::getLibertyObject( (int)$value );
+			if( $owner && $owner->isValid() && $owner->getContentType() !== 'fisheyegallery' && $owner->hasViewPermission( false ) ) {
+				return [ 'title' => (string)$owner->getTitle(), 'url' => $owner->getDisplayUrl() ];
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Groups this gallery's own items into the artist page's strips (fisheye_music_grid_inc.tpl),
 	 * mirroring the artist folder on disk: everything sitting directly in it first, as an unlabelled
 	 * strip (key ''); then one strip per group folder (FisheyeAlbum::isGroupFolder()), titled with
