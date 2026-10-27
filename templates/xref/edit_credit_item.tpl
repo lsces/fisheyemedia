@@ -1,4 +1,4 @@
-{* Edit one credit row - see view_credit_item.tpl. Same form as liberty's edit_text_item.tpl, with the fields
+{* Edit one credit row - see view_credit_item.tpl. Same form as liberty's edit_text_fields.tpl, with the fields
    named for what a credit holds: the credited name, the contact it is linked to, its Wikidata id. *}
 {strip}
 <div class="edit liberty">
