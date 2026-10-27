@@ -3,7 +3,8 @@
  * The books with no ISBN, for finding one by hand: each with its author and year, search links (AbeBooks, Open Library, Google Books) built
  * from its title and author, and a box to paste the ISBN into. Saving goes through FisheyeBook::storeXref() as the cover picker's Add ISBN
  * does (the check digit is verified, ISBN-13 and ISBN-10 kept), and the book then leaves the list and is picked up by the Book Details jobs.
- * A book with no ISBN can also be given its cover from the Find a Cover page.
+ * A book with no ISBN can also be given its cover from the Find a Cover page. Books that already have a picture (the same test as the Book
+ * Details no-cover list) are left off unless 'all=1' asks for them: a book older than the ISBN that has its cover is finished.
  *
  * @package fisheyemedia
  */
@@ -36,11 +37,13 @@ if( !empty( $_REQUEST['add_isbn'] ) ) {
 	}
 }
 
+$showAll = !empty( $_REQUEST['all'] );
 $books = [];
 foreach( $gBitDb->getAll(
 	"SELECT lc.`content_id`, lc.`title`, lc.`event_time` FROM `".BIT_DB_PREFIX."liberty_content` lc
 	 WHERE lc.`content_type_guid` = 'fisheyebook'
-	 AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'isbn' AND x.`end_date` IS NULL )
+	 AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'isbn' AND x.`end_date` IS NULL )".
+	 ( $showAll ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` )" )."
 	 ORDER BY lc.`title`" ) ?: [] as $row ) {
 	$books[(int)$row['content_id']] = [ 'content_id' => (int)$row['content_id'], 'title' => (string)$row['title'], 'year' => $row['event_time'] ? gmdate( 'Y', (int)$row['event_time'] ) : '', 'authors' => [] ];
 }
@@ -61,6 +64,7 @@ if( $books ) {
 }
 
 $gBitSmarty->assign( 'books', array_values( $books ) );
+$gBitSmarty->assign( 'showAll', $showAll );
 $gBitSmarty->assign( 'message', $message );
 $gBitSmarty->assign( 'errors', $errors );
 

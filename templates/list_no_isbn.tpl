@@ -11,6 +11,7 @@
 		{if $message}<div class="alert alert-success"><p>{$message|escape}</p></div>{/if}
 		{formfeedback error=$errors}
 
+		<p>{if $showAll}{tr}Every book with no ISBN, with or without a cover.{/tr} <a href="{$smarty.server.SCRIPT_NAME}">{tr}Leave out the ones with covers{/tr}</a>{else}{tr}Books that already have a cover are left out.{/tr} <a href="{$smarty.server.SCRIPT_NAME}?all=1">{tr}Show them too{/tr}</a>{/if}</p>
 		{if $books}
 			<p>{tr}Find the ISBN on a bookseller's page or in a catalogue and paste it in; it is checked and kept as ISBN-13 and ISBN-10, and the book then leaves this list. A book with no ISBN at all (older than the number) can have its cover made or found from Find a Cover.{/tr}</p>
 			<table class="table table-condensed">
@@ -44,7 +45,7 @@
 				</tbody>
 			</table>
 		{else}
-			<div class="alert alert-success"><p>{tr}Every book has an ISBN.{/tr}</p></div>
+			<div class="alert alert-success"><p>{if $showAll}{tr}Every book has an ISBN.{/tr}{else}{tr}Every book with no ISBN has a cover.{/tr}{/if}</p></div>
 		{/if}
 	</div>
 </div>
