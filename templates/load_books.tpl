@@ -5,7 +5,7 @@
 
 <div class="admin liberty">
 	<div class="header">
-		<h1>{if $topGalleryUrl}<a href="{$topGalleryUrl|escape}">{tr}Library{/tr}</a> - {/if}{tr}Load Books{/tr}</h1>
+		<h1>{if $topGalleryUrl}<a href="{$topGalleryUrl|escape}">{tr}Library{/tr}</a> - {/if}{tr}Add books from a sheet{/tr}</h1>
 	</div>
 
 	<div class="body">
@@ -14,7 +14,7 @@
 			<div class="alert alert-danger"><p>{tr}There is no top-level Library gallery yet - apply the media xref scheme so it is created.{/tr}</p></div>
 		{/if}
 
-		{if $result}
+		{foreach from=$results item=result}
 			{if $result.errors}
 				<div class="alert alert-danger">
 					<p>{tr}Failed{/tr}:</p>
@@ -22,14 +22,17 @@
 				</div>
 			{/if}
 			{if $result.group}
-				<div class="alert alert-info"><p>{$result.group|escape}: {$result.created} {tr}loaded{/tr}{if $result.already}, {$result.already} {tr}already there{/tr}{/if}.</p></div>
+				<div class="alert alert-{if $result.errors || !$result.created}info{else}success{/if}"><p>{$result.group|escape}: {$result.created} {tr}loaded{/tr}{if $result.already}, {$result.already} {tr}already there{/tr}{/if}.{if $result.group_url} <a href="{$result.group_url|escape}">{tr}Open the gallery{/tr}</a>{/if}</p></div>
 				{if $result.series}<p>{tr}Filed in series{/tr}: {foreach from=$result.series key=seriesName item=count name=sr}{$seriesName|escape} ({$count}){if !$smarty.foreach.sr.last}, {/if}{/foreach}.</p>{/if}
 				{if $result.details}
-					<ul class="list-unstyled">{foreach from=$result.details item=detail}<li>{$detail.title|escape} - {if $detail.matched}{tr}details from Open Library{/tr}{else}{tr}no Open Library record{/tr}{/if}{if $detail.error}: {$detail.error|escape}{/if}</li>{/foreach}</ul>
+					<ul class="list-unstyled">{foreach from=$result.details item=detail}<li><a href="{$detail.url|escape}">{$detail.title|escape}</a> - {if $detail.matched}{tr}details from Open Library{/tr}{else}{tr}no Open Library record{/tr}{/if}{if $detail.error}: {$detail.error|escape}{/if}</li>{/foreach}</ul>
 				{/if}
 			{/if}
-		{/if}
+		{/foreach}
 
+		{if $reviewKey && !$authorGalleryId}
+			<p>{if $reviewUrl}<a href="{$reviewUrl|escape}">&laquo; {$reviewName|escape}</a> | {/if}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php">{tr}Other authors in this sheet{/tr}</a></p>
+		{/if}
 		{if $authorGalleryId}
 			<p><a href="{$authorGalleryUrl|escape}">&laquo; {$authorGalleryTitle|escape}</a></p>
 			{if $filedHere}<div class="alert alert-info"><p>{$filedHere} {tr}books already loaded under another author's name were filed in this gallery too.{/tr}</p></div>{/if}
@@ -62,17 +65,18 @@
 					</div>
 				{/form}
 			{/if}
-			{if $authorGalleryId && $bookList}
+			{if ( $authorGalleryId || $reviewKey ) && $bookList}
 				{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
-					<input type="hidden" name="gallery_id" value="{$authorGalleryId}" />
+					{if $authorGalleryId}<input type="hidden" name="gallery_id" value="{$authorGalleryId}" />{/if}
+					{if $reviewKey}<input type="hidden" name="review_group" value="{$reviewKey|escape}" />{/if}
 					<input type="hidden" name="series_form" value="1" />
 					<input type="hidden" name="picked_form" value="1" />
 					{if $useSeries}<input type="hidden" name="use_series" value="1" />{/if}
 					{if $seriesPlan}{foreach from=$seriesPlan.split item=splitKey}<input type="hidden" name="split[{$splitKey|escape}]" value="1" />{/foreach}{/if}
-					<h3>{tr}This author's books still to load{/tr}</h3>
+					<h3>{if $reviewKey}{tr}Read from the sheet{/tr}: {$reviewName|escape}{else}{tr}This author's books still to load{/tr}{/if}</h3>
 					<p class="help-block">{$booksLoaded}/{$booksTotal} {tr}loaded. The next{/tr} {$batchSize} {tr}are ticked - untick any to leave out; at most{/tr} {$batchSize} {tr}are loaded per press, and loaded books drop off this list.{/tr}</p>
 					<table class="table table-condensed">
-						<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th></tr></thead>
+						<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
 						<tbody>
 							{foreach from=$bookList item=book}
 								<tr>
@@ -81,12 +85,18 @@
 									<td>{$book.year|escape}</td>
 									<td>{foreach from=$book.coauthors item=other name=co}{$other|escape}{if !$smarty.foreach.co.last}, {/if}{/foreach}</td>
 									<td>{$book.series|escape}</td>
+									<td>
+										<a href="https://www.abebooks.co.uk/servlet/SearchResults?tn={$book.titleTerm}{if $book.authorTerm}&amp;an={$book.authorTerm}{/if}" target="_blank" rel="noopener">AbeBooks</a> |
+										<a href="https://openlibrary.org/search?q={$book.terms}" target="_blank" rel="noopener">Open Library</a> |
+										<a href="https://www.google.com/search?tbm=bks&amp;q={$book.terms}" target="_blank" rel="noopener">Google Books</a>
+									</td>
+									<td><input type="text" class="form-control" name="isbn[{$book.index}]" value="{$book.isbn|escape}" placeholder="{tr}ISBN-10 or ISBN-13{/tr}" size="16" /></td>
 								</tr>
 							{/foreach}
 						</tbody>
 					</table>
 					<div class="form-group submit">
-						<button type="submit" class="btn btn-primary" name="process_group" value="{$onlyKey|escape}"{if !$hasTopGallery} disabled="disabled"{/if}>{tr}Load the ticked books{/tr}</button>
+						<button type="submit" class="btn btn-primary" name="process_group" value="{if $reviewKey}{$reviewKey|escape}{else}{$onlyKey|escape}{/if}"{if !$hasTopGallery} disabled="disabled"{/if}>{tr}Load the ticked books{/tr}</button>
 					</div>
 				{/form}
 			{/if}
@@ -95,27 +105,56 @@
 				<ul class="list-unstyled">{foreach from=$coCredited item=book}<li>{$book.title|escape} ({tr}primary author{/tr}: {$book.primary|escape}) - {if $book.loaded}{tr}loaded{/tr}{else}{tr}not loaded yet{/tr}{/if}</li>{/foreach}</ul>
 			{/if}
 
-			{if $authorGalleryId}
+			{if $reviewKey && !$authorGalleryId}
+				{if !$bookList}
+					<div class="alert alert-success">
+						<p><strong>{tr}Completed{/tr}</strong>: {if $reviewUrl}<a href="{$reviewUrl|escape}">{$reviewName|escape}</a>{else}{$reviewName|escape}{/if} - {$booksLoaded} {tr}of{/tr} {$booksTotal} {tr}books are loaded.{/tr}
+						<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}list_no_isbn.php?author={$reviewName|escape:'url'}&amp;newest=1">{tr}Books with no ISBN for this author{/tr}</a></p>
+					</div>
+				{/if}
+				<p><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php">{tr}Back to the list of groups{/tr}</a></p>
+			{elseif $authorGalleryId}
 				{if !$bookList}
 					<p>{if $authorInCatalogue}{tr}Every book on the catalogue for this author is already loaded.{/tr}{else}{tr}This author has no books of their own as primary author - books they co-wrote are filed here when the primary author's books are loaded.{/tr}{/if}</p>
 				{/if}
-			{elseif $pending}
-				{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
-					{if $authorGalleryId}<input type="hidden" name="gallery_id" value="{$authorGalleryId}" />
+			{elseif $allTotal}
+				<form method="get" action="{$smarty.server.SCRIPT_NAME}" class="form-inline">
+					<input type="text" class="form-control" name="find" value="{$findText|escape}" placeholder="{tr}Author or title (any part){/tr}" />
+					<input type="submit" class="btn btn-default" value="{tr}Show{/tr}" />
+					{if $findText}<a href="{$smarty.server.SCRIPT_NAME}">{tr}Show all{/tr}</a>{/if}
+				</form>
+				<p>{$allLoaded}/{$allTotal} {tr}of the books read from the sheet are loaded. The first{/tr} {$batchSize} {tr}books (in bold) are loaded when you press Load; look the ISBN up with the links and type it in first, or use the find box to work through one author. Loaded books drop off this list.{/tr}</p>
+				{if $allList}
+					{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
 						<input type="hidden" name="series_form" value="1" />
+						<input type="hidden" name="find" value="{$findText|escape}" />
 						{if $useSeries}<input type="hidden" name="use_series" value="1" />{/if}
-						{if $seriesPlan}{foreach from=$seriesPlan.split item=splitKey}<input type="hidden" name="split[{$splitKey|escape}]" value="1" />{/foreach}{/if}
-					{/if}
-					<p>{tr}Process one group at a time - it finds or creates the gallery under Library and loads up to{/tr} {$batchSize} {tr}of its books per press; press again to carry on.{/tr}{if $pendingTotal > $groupsShown} {tr}Showing the first{/tr} {$groupsShown} {tr}of{/tr} {$pendingTotal}.{/if}</p>
-					<ul class="list-unstyled">
-						{foreach from=$pending item=group}
-							<li>
-								<button type="submit" class="btn btn-default btn-xs" name="process_group" value="{$group.key|escape}"{if !$hasTopGallery} disabled="disabled"{/if}>{tr}Process{/tr}</button>
-								&nbsp;{$group.name|escape} <span class="help-block">{if $group.kind eq 'author'}{tr}author{/tr}{else}{tr}category{/tr}{/if}, {$group.loaded}/{$group.total} {tr}loaded{/tr}</span>
-							</li>
-						{/foreach}
-					</ul>
-				{/form}
+						<table class="table table-condensed">
+							<thead><tr><th>{tr}Title{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
+							<tbody>
+								{foreach from=$allList item=book}
+									<tr>
+										<td>{if $book.ticked}<input type="hidden" name="book[]" value="{$book.id}" /><strong>{$book.title|escape}</strong>{else}{$book.title|escape}{/if}</td>
+										<td><a href="{$smarty.server.SCRIPT_NAME}?find={$book.group|escape:'url'}">{$book.authors|escape}</a>{if $book.groupUrl} <a href="{$book.groupUrl|escape}" title="{tr}Open the gallery{/tr}">&raquo;</a>{/if}</td>
+										<td>{$book.year|escape}</td>
+										<td>
+											<a href="https://www.abebooks.co.uk/servlet/SearchResults?tn={$book.titleTerm}{if $book.authorTerm}&amp;an={$book.authorTerm}{/if}" target="_blank" rel="noopener">AbeBooks</a> |
+											<a href="https://openlibrary.org/search?q={$book.terms}" target="_blank" rel="noopener">Open Library</a> |
+											<a href="https://www.google.com/search?tbm=bks&amp;q={$book.terms}" target="_blank" rel="noopener">Google Books</a>
+										</td>
+										<td><input type="text" class="form-control" name="isbn[{$book.id}]" value="{$book.isbn|escape}" placeholder="{tr}ISBN-10 or ISBN-13{/tr}" size="16" /></td>
+									</tr>
+								{/foreach}
+							</tbody>
+						</table>
+						<div class="form-group submit">
+							<button type="submit" class="btn btn-primary" name="process_all" value="1"{if !$hasTopGallery} disabled="disabled"{/if}>{tr}Load the books in bold{/tr}</button>
+						</div>
+					{/form}
+				{else}
+					{if $findText}<p>{tr}Nothing in the sheet matches that - or every matching book is already loaded.{/tr}</p>
+					{else}<div class="alert alert-success"><p><strong>{tr}Completed{/tr}</strong>: {$allLoaded} {tr}of{/tr} {$allTotal} {tr}books read from the sheet are loaded.{/tr} <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}list_no_isbn.php?newest=1">{tr}Books with no ISBN{/tr}</a></p></div>{/if}
+				{/if}
 			{else}
 				<p>{tr}Nothing left to load - every book in the catalogue is already there.{/tr}</p>
 			{/if}

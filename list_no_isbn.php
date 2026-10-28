@@ -38,13 +38,17 @@ if( !empty( $_REQUEST['add_isbn'] ) ) {
 }
 
 $showAll = !empty( $_REQUEST['all'] );
+// Narrow the list to work through one author (any part of the name) and/or the books added most recently, so a fresh load is not lost among the old ones.
+$authorFilter = trim( (string)( $_REQUEST['author'] ?? '' ) );
+$newest = !empty( $_REQUEST['newest'] );
 $books = [];
 foreach( $gBitDb->getAll(
 	"SELECT lc.`content_id`, lc.`title`, lc.`event_time` FROM `".BIT_DB_PREFIX."liberty_content` lc
 	 WHERE lc.`content_type_guid` = 'fisheyebook'
 	 AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'isbn' AND x.`end_date` IS NULL )".
 	 ( $showAll ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` )" )."
-	 ORDER BY lc.`title`" ) ?: [] as $row ) {
+	 ".( $authorFilter !== '' ? " AND EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` ax WHERE ax.`content_id` = lc.`content_id` AND ax.`item` = 'author' AND ax.`end_date` IS NULL AND ax.`xkey_ext` LIKE ? )" : '' )."
+	 ORDER BY ".( $newest ? 'lc.`content_id` DESC' : 'lc.`title`' ), $authorFilter !== '' ? [ '%'.$authorFilter.'%' ] : [] ) ?: [] as $row ) {
 	$books[(int)$row['content_id']] = [ 'content_id' => (int)$row['content_id'], 'title' => (string)$row['title'], 'year' => $row['event_time'] ? gmdate( 'Y', (int)$row['event_time'] ) : '', 'authors' => [] ];
 }
 if( $books ) {
@@ -65,6 +69,8 @@ if( $books ) {
 
 $gBitSmarty->assign( 'books', array_values( $books ) );
 $gBitSmarty->assign( 'showAll', $showAll );
+$gBitSmarty->assign( 'authorFilter', $authorFilter );
+$gBitSmarty->assign( 'newest', $newest );
 $gBitSmarty->assign( 'message', $message );
 $gBitSmarty->assign( 'errors', $errors );
 
