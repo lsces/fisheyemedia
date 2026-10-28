@@ -202,7 +202,6 @@ if( $authorGallery ) {
 			$seriesPosition[$i] = $planned['name'].' #'.( $position + 1 );
 		}
 	}
-	$nextBatch = LOAD_BOOKS_BATCH;
 	foreach( $groups[$onlyKey]['rows'] ?? [] as $rowIndex => $row ) {
 		$booksTotal++;
 		if( FisheyeBook::findContentId( $row ) ) {
@@ -210,7 +209,7 @@ if( $authorGallery ) {
 			continue;
 		}
 		$bookList[] = [ 'index' => $rowIndex, 'title' => $row['title'], 'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ), 'isbn' => $row['isbn'] ?? '',
-			'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => $seriesPosition[$rowIndex] ?? '', 'ticked' => $nextBatch-- > 0,
+			'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => $seriesPosition[$rowIndex] ?? '', 'ticked' => false,
 			'terms' => rawurlencode( trim( $row['title'].' '.( $row['authors'][0] ?? '' ) ) ), 'titleTerm' => rawurlencode( $row['title'] ), 'authorTerm' => rawurlencode( (string)( $row['authors'][0] ?? '' ) ) ];
 	}
 	$thisAuthor = mb_strtolower( FisheyeBookCredits::canonicalName( $authorGallery->getTitle() ) );
@@ -228,7 +227,6 @@ if( !$authorGallery && $reviewKey !== null ) {
 	$reviewName = $groups[$reviewKey]['name'];
 	$reviewUrl = $galleryUrlFor( $reviewName );
 	$booksTotal = $booksLoaded = 0;
-	$nextBatch = LOAD_BOOKS_BATCH;
 	foreach( $groups[$reviewKey]['rows'] as $rowIndex => $row ) {
 		$booksTotal++;
 		if( FisheyeBook::findContentId( $row ) ) {
@@ -238,7 +236,7 @@ if( !$authorGallery && $reviewKey !== null ) {
 		$firstAuthor = (string)( $row['authors'][0] ?? '' );
 		$bookList[] = [ 'index' => $rowIndex, 'title' => $row['title'], 'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ),
 			'isbn' => (string)( $row['isbn13'] ?? '' ), 'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => '',
-			'ticked' => $nextBatch-- > 0, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
+			'ticked' => false, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
 			'titleTerm' => rawurlencode( $row['title'] ), 'authorTerm' => rawurlencode( $firstAuthor ) ];
 	}
 }
@@ -247,7 +245,6 @@ if( !$authorGallery && $reviewKey !== null ) {
 $allList = [];
 $allTotal = $allLoaded = 0;
 if( !$authorGallery && $reviewKey === null ) {
-	$nextBatch = LOAD_BOOKS_BATCH;
 	$needle = mb_strtolower( $findText );
 	foreach( $groups as $groupKey => $group ) {
 		$g = array_search( $groupKey, $groupKeys, true );
@@ -264,7 +261,7 @@ if( !$authorGallery && $reviewKey === null ) {
 			$firstAuthor = (string)( $row['authors'][0] ?? '' );
 			$allList[] = [ 'id' => $g.'_'.$rowIndex, 'group' => $group['name'], 'groupUrl' => '', 'kind' => $group['kind'], 'title' => $row['title'],
 				'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ), 'authors' => $names, 'isbn' => (string)( $row['isbn13'] ?? '' ),
-				'ticked' => $nextBatch-- > 0, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
+				'ticked' => false, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
 				'titleTerm' => rawurlencode( $row['title'] ), 'authorTerm' => rawurlencode( $firstAuthor ) ];
 		}
 	}

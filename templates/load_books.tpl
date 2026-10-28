@@ -74,7 +74,7 @@
 					{if $useSeries}<input type="hidden" name="use_series" value="1" />{/if}
 					{if $seriesPlan}{foreach from=$seriesPlan.split item=splitKey}<input type="hidden" name="split[{$splitKey|escape}]" value="1" />{/foreach}{/if}
 					<h3>{if $reviewKey}{tr}Read from the sheet{/tr}: {$reviewName|escape}{else}{tr}This author's books still to load{/tr}{/if}</h3>
-					<p class="help-block">{$booksLoaded}/{$booksTotal} {tr}loaded. The next{/tr} {$batchSize} {tr}are ticked - untick any to leave out; at most{/tr} {$batchSize} {tr}are loaded per press, and loaded books drop off this list.{/tr}</p>
+					<p class="help-block">{$booksLoaded}/{$booksTotal} {tr}loaded. Tick the books to load; at most{/tr} {$batchSize} {tr}are loaded per press, and loaded books drop off this list.{/tr}</p>
 					<table class="table table-condensed">
 						<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
 						<tbody>
@@ -123,18 +123,19 @@
 					<input type="submit" class="btn btn-default" value="{tr}Show{/tr}" />
 					{if $findText}<a href="{$smarty.server.SCRIPT_NAME}">{tr}Show all{/tr}</a>{/if}
 				</form>
-				<p>{$allLoaded}/{$allTotal} {tr}of the books read from the sheet are loaded. The first{/tr} {$batchSize} {tr}books (in bold) are loaded when you press Load; look the ISBN up with the links and type it in first, or use the find box to work through one author. Loaded books drop off this list.{/tr}</p>
+				<p>{$allLoaded}/{$allTotal} {tr}of the books read from the sheet are loaded. Tick the books to load, one line at a time as you deal with each: look the ISBN up with the links and type it in, then Load. At most{/tr} {$batchSize} {tr}are loaded per press; use the find box to work through one author, and loaded books drop off this list.{/tr}</p>
 				{if $allList}
 					{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php"}
 						<input type="hidden" name="series_form" value="1" />
 						<input type="hidden" name="find" value="{$findText|escape}" />
 						{if $useSeries}<input type="hidden" name="use_series" value="1" />{/if}
 						<table class="table table-condensed">
-							<thead><tr><th>{tr}Title{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
+							<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
 							<tbody>
 								{foreach from=$allList item=book}
 									<tr>
-										<td>{if $book.ticked}<input type="hidden" name="book[]" value="{$book.id}" /><strong>{$book.title|escape}</strong>{else}{$book.title|escape}{/if}</td>
+										<td><input type="checkbox" name="book[]" value="{$book.id}" /></td>
+										<td>{$book.title|escape}</td>
 										<td><a href="{$smarty.server.SCRIPT_NAME}?find={$book.group|escape:'url'}">{$book.authors|escape}</a>{if $book.groupUrl} <a href="{$book.groupUrl|escape}" title="{tr}Open the gallery{/tr}">&raquo;</a>{/if}</td>
 										<td>{$book.year|escape}</td>
 										<td>
@@ -148,7 +149,7 @@
 							</tbody>
 						</table>
 						<div class="form-group submit">
-							<button type="submit" class="btn btn-primary" name="process_all" value="1"{if !$hasTopGallery} disabled="disabled"{/if}>{tr}Load the books in bold{/tr}</button>
+							<button type="submit" class="btn btn-primary" name="process_all" value="1"{if !$hasTopGallery} disabled="disabled"{/if}>{tr}Load the ticked books{/tr}</button>
 						</div>
 					{/form}
 				{else}
