@@ -704,7 +704,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 			// otherwise fails validation silently - reloadPlexMetadata() never checked store()'s
 			// return value, so this failed with no visible error until checked directly against
 			// the database.
-			$descriptionStoreHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $plexRow['summary'] ];
+			$descriptionStoreHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $this->keepBbcLines( (string)$plexRow['summary'] ) ];
 			$this->store( $descriptionStoreHash );
 			$summary['items'][] = 'description updated';
 		}

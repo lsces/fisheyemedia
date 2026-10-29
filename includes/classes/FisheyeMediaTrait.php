@@ -23,6 +23,18 @@ trait FisheyeMediaTrait {
 	// The pictures folder (find / make / list), shared with any other item that has one - fisheye's own small trait.
 	use \Bitweaver\Fisheye\FisheyePicturesFolderTrait;
 
+	/**
+	 * A description that is about to be replaced by one read from Plex keeps the BBC's "PLAY: <iPlayer url>" and "INFO: <programme url>" lines the old one
+	 * carried (the BBC downloads put them there; Plex's own summary has none), added at the end unless the new text already holds them.
+	 */
+	protected function keepBbcLines( string $pNewDescription ): string {
+		if( !preg_match_all( '/^(?:PLAY|INFO):[ \t]*\S+[ \t]*$/mi', (string)( $this->mInfo['data'] ?? '' ), $found ) ) {
+			return $pNewDescription;
+		}
+		$lines = array_filter( array_map( 'trim', $found[0] ), fn( $l ) => stripos( $pNewDescription, $l ) === false );
+		return $lines ? rtrim( $pNewDescription )."\n\n".implode( "\n\n", $lines ) : $pNewDescription;
+	}
+
 	/** An item's pictures folder uses the Images Grid layout, whose title links back to the item. */
 	public function picturesFolderLayout(): ?string {
 		return FISHEYE_PAGINATION_IMAGES_GRID;
