@@ -1163,4 +1163,40 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $names[$pTagKey] = $name;
 	}
 
+
+	/** The Extras button counts the book's files (ebooks, audio books, other) along with its pictures. */
+	public function getExtrasCounts(): array {
+		$counts = parent::getExtrasCounts();
+		$counts['extras'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ('ebook','audiobook','extra') AND `end_date` IS NULL", [ $this->mContentId ] );
+		return $counts;
+	}
+
+	/**
+	 * The book's files lead the plain Extras strip: an ebook is simply another item on it, shown with the book's cover and a label saying what it
+	 * is, and opens (downloads) through view_book_file.php; an audio book plays in the browser. Not a tab of its own.
+	 */
+	public function getExtrasGroups(): array {
+		$extras = parent::getExtrasGroups();
+		$rows = $this->mDb->getAll( "SELECT `xref_id`, `item`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ('ebook','audiobook','extra') AND `end_date` IS NULL ORDER BY `item`, `xorder`", [ $this->mContentId ] ) ?: [];
+		if( !$rows ) {
+			return $extras;
+		}
+		$cover = (string)$this->getThumbnailUrl( 'small' );
+		$files = [];
+		foreach( $rows as $row ) {
+			$data = json_decode( (string)$row['data'], true ) ?: [];
+			$format = strtoupper( (string)( $data['format'] ?? pathinfo( (string)$row['xkey_ext'], PATHINFO_EXTENSION ) ) );
+			$label = $row['item'] === 'audiobook' ? 'Audio book '.$format.( !empty( $data['tracks'] ) && $data['tracks'] > 1 ? ' ('.(int)$data['tracks'].' parts)' : '' ) : ( $row['item'] === 'ebook' ? 'Ebook '.$format : $format );
+			if( !empty( $data['edition'] ) ) {
+				$label .= ' - '.$data['edition'];
+			}
+			$files[] = [ 'thumb' => $cover, 'url' => FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'], 'title' => basename( rtrim( (string)$row['xkey_ext'], '/' ) ), 'label' => $label ];
+		}
+		if( $extras['groups'] ) {
+			$extras['groups'][0]['items'] = array_merge( $files, $extras['groups'][0]['items'] );
+		} else {
+			$extras['groups'][] = [ 'id' => 'pictures', 'kind' => 'Extras', 'items' => $files, 'links' => [] ];
+		}
+		return $extras;
+	}
 }

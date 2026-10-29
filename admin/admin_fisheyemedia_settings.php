@@ -33,6 +33,10 @@ $formFisheyeMediaGeneral = [
 		'label' => 'TV Show Storage Path (N-Z)',
 		'note' => 'Filesystem path for TV shows whose title starts N-Z - see the A-M path above.',
 	],
+	"fisheye_library_storage_root" => [
+		'label' => 'Book Library Storage Path',
+		'note' => 'The folder that holds the book Library: one folder per author, then series, then book, with the ebook and audio book files inside (e.g. /home/media1/Library/). Leave blank to use the Library folder under the External Disk Storage Path above. Set it to put the Library on its own disk.',
+	],
 	"fisheye_plex_db_path" => [
 		'label' => 'Plex Library Database File',
 		'note' => 'Unlike the storage paths above, this is the actual database FILE itself, not its containing folder - the full path ending in com.plexapp.plugins.library.db (e.g. /var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db). Read-only lookup, for backfilling genre/director/writer/star/rating/duration when importing a film already known to Plex. Leave blank to skip Plex metadata lookup entirely.',

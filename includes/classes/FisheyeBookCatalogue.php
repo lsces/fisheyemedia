@@ -374,4 +374,43 @@ class FisheyeBookCatalogue {
 		return $ret;
 	}
 
+
+	/**
+	 * The first few Open Library matches for a book with no ISBN, to choose from: a search by title and author (English-language works), each
+	 * result with one valid ISBN-13 from its editions. Read-only and on request only (one search per call), so a list of books costs nothing until
+	 * a row asks.
+	 *
+	 * @return list<array{title:string,authors:string,year:string,isbn:string}>
+	 */
+	public static function suggestEditions( string $pTitle, string $pAuthor, int $pLimit = 3 ): array {
+		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
+		if( !class_exists( $wiki ) || trim( $pTitle ) === '' ) {
+			return [];
+		}
+		$query = [ 'title' => trim( $pTitle ), 'language' => 'eng', 'limit' => 12, 'fields' => 'key,title,author_name,first_publish_year,isbn' ];
+		if( trim( $pAuthor ) !== '' ) {
+			$query['author'] = trim( $pAuthor );
+		}
+		$data = $wiki::fetchOpenLibraryJson( '/search.json?'.http_build_query( $query, '', '&' ) );
+		$out = [];
+		foreach( $data['docs'] ?? [] as $doc ) {
+			$isbn = '';
+			foreach( (array)( $doc['isbn'] ?? [] ) as $candidate ) {
+				$checked = FisheyeBook::normaliseIsbn( (string)$candidate );
+				if( $checked['isbn13'] !== '' ) {
+					$isbn = $checked['isbn13'];
+					break;
+				}
+			}
+			if( $isbn === '' ) {
+				continue;
+			}
+			$out[] = [ 'title' => (string)( $doc['title'] ?? '' ), 'authors' => implode( ', ', array_slice( array_values( array_unique( (array)( $doc['author_name'] ?? [] ) ) ), 0, 2 ) ),
+				'year' => isset( $doc['first_publish_year'] ) ? (string)$doc['first_publish_year'] : '', 'isbn' => $isbn ];
+			if( count( $out ) >= $pLimit ) {
+				break;
+			}
+		}
+		return $out;
+	}
 }

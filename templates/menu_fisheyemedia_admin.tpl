@@ -11,6 +11,7 @@
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}link_book_credits.php">{tr}Link Book Credits to Contacts{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{tr}Add Books from ISBNs{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}list_no_isbn.php">{tr}Books with no ISBN{/tr}</a></li>
+	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_files.php">{tr}Book Files from the Library{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program_links.php">{tr}BBC program links{/tr}</a></li>
 </ul>
 {/strip}
