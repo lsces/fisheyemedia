@@ -24,7 +24,7 @@
 			</div>
 			<div class="col-md-4 film-facts">
 				{if $gContent->mInfo.data}
-					<p class="film-summary">{$gContent->mInfo.data|escape}</p>
+					<p class="film-summary">{$gContent->mInfo.data|escape|autolink|nl2br}</p>
 				{/if}
 				{if $directors|@count || $stars|@count || $narrators|@count}
 					<p class="film-credits">
