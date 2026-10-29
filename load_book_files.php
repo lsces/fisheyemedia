@@ -57,8 +57,11 @@ if( $root !== '' && is_dir( $root ) ) {
 	$where = '';
 	$bind = [];
 	if( $find !== '' ) {
-		$where = " AND ( UPPER( lc.`title` ) LIKE ? OR EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` ax WHERE ax.`content_id` = lc.`content_id` AND ax.`item` = 'author' AND ax.`end_date` IS NULL AND UPPER( ax.`xkey_ext` ) LIKE ? ) )";
-		$bind = [ '%'.strtoupper( $find ).'%', '%'.strtoupper( $find ).'%' ];
+		// The title, an author credit, or a series filed under a gallery with that name (a book in Anne McCaffrey's series credited only to a co-writer).
+		$where = " AND ( UPPER( lc.`title` ) LIKE ? OR EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` ax WHERE ax.`content_id` = lc.`content_id` AND ax.`item` = 'author' AND ax.`end_date` IS NULL AND UPPER( ax.`xkey_ext` ) LIKE ? )
+			OR EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m1 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m2 ON m2.`item_content_id` = m1.`gallery_content_id`
+				JOIN `".BIT_DB_PREFIX."liberty_content` ag ON ag.`content_id` = m2.`gallery_content_id` WHERE m1.`item_content_id` = lc.`content_id` AND ag.`content_type_guid` = 'fisheyemediagal' AND UPPER( ag.`title` ) LIKE ? ) )";
+		$bind = [ '%'.strtoupper( $find ).'%', '%'.strtoupper( $find ).'%', '%'.strtoupper( $find ).'%' ];
 	}
 	$whereFind = $where; // the search alone, for the folder report (the to-do filter below must not shrink it)
 	if( $onlyTodo ) {
