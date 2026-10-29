@@ -1,0 +1,237 @@
+<?php
+/**
+ * The catalogue .csv files kept in the Library tree - Library/<author>/AuthorCatalogue.csv and Library/Various Authors/<series>/SeriesCatalogue.csv - brought up
+ * to date from the database without losing a row. A row whose book is in the database (matched by ISBN-13, else title) gets its EMPTY ISBN-13, ISBN-10, Publisher,
+ * Year and Authors cells filled; a cell that already holds something is never changed (a differing ISBN or year is only reported); database books the file lacks are
+ * added at the end; a row with no book yet (waiting for Add Books) is left exactly as it is. An author folder with no catalogue gets one written from the database.
+ *
+ * Nothing is regenerated from the database alone: that would drop every row still waiting to be loaded.
+ *
+ * @package fisheyemedia
+ */
+namespace Bitweaver\Fisheyemedia;
+
+class FisheyeCatalogueMerge {
+	public const AUTHOR_FILE = 'AuthorCatalogue.csv';
+	public const HEADER = [ 'Ref', 'Category', 'ISBN-13', 'ISBN-10', 'Authors', 'Publisher', 'Title', 'Year', 'Series', 'Series no' ];
+
+	/**
+	 * Called after Add Books has loaded books for an author: the author's catalogue in the Library folder takes up what is now known (ISBNs established by the
+	 * sheet or by Suggest, publisher, year), and one is written when the author has a folder but no catalogue yet. Nothing happens when there is no Library folder
+	 * or no folder for the author.
+	 *
+	 * @return string|null  a line to show with the load result, or null when there was nothing to do
+	 */
+	public static function updateAuthor( string $pName ): ?string {
+		$root = FisheyeBookFiles::libraryRoot();
+		$dir = $root !== '' ? $root.str_replace( '/', '-', trim( $pName ) ).'/' : '';
+		if( $dir === '' || !is_dir( $dir ) ) {
+			return null;
+		}
+		$path = $dir.self::AUTHOR_FILE;
+		$plan = self::plan( [ 'kind' => 'author', 'name' => $pName, 'path' => $path, 'exists' => is_file( $path ) ] );
+		if( $plan['error'] ) {
+			return self::AUTHOR_FILE.': '.$plan['error'];
+		}
+		if( !$plan['changes'] ) {
+			return null;
+		}
+		if( $error = self::write( $plan ) ) {
+			return self::AUTHOR_FILE.': '.$error;
+		}
+		return self::AUTHOR_FILE.' '.\Bitweaver\KernelTools::tra( 'updated' ).': '.count( $plan['filled'] ).' '.\Bitweaver\KernelTools::tra( 'cells filled,' ).' '.count( $plan['added'] ).' '.\Bitweaver\KernelTools::tra( 'books added.' );
+	}
+
+	/** Title as compared: case, punctuation, a leading The/A/An and '&' against 'and' ignored. */
+	private static function titleKey( string $pTitle ): string {
+		$t = str_replace( '&', ' and ', mb_strtolower( $pTitle ) );
+		$t = preg_replace( '/[^a-z0-9 ]/', '', $t );
+		$t = preg_replace( '/^(the|a|an) /', '', trim( $t ) );
+		return trim( preg_replace( '/\s+/', ' ', $t ) );
+	}
+
+	/** The books to compare with: an author folder's gallery, its series, and what is credited to that name; a series folder's gallery under Various Authors. */
+	private static function bookIds( string $pKind, string $pName ): array {
+		global $gBitDb;
+		$ids = [];
+		if( $pKind === 'series' ) {
+			$va = FisheyeBookCredits::libraryGalleryFor( FisheyeMediaGallery::VARIOUS_AUTHORS );
+			$series = $va ? $gBitDb->getOne( "SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				WHERE m.`gallery_content_id` = ? AND lc.`title` = ?", [ $va, $pName ] ) : null;
+			$galleries = $series ? [ (int)$series ] : [];
+		} else {
+			$author = FisheyeBookCredits::libraryGalleryFor( $pName );
+			$galleries = $author ? array_merge( [ (int)$author ], array_map( 'intval', $gBitDb->getCol(
+				"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyeseries'", [ $author ] ) ) ) : [];
+			$ids = array_map( 'intval', $gBitDb->getCol(
+				"SELECT lx.`content_id` FROM `".BIT_DB_PREFIX."liberty_xref` lx INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = lx.`content_id`
+				 WHERE lc.`content_type_guid` = 'fisheyebook' AND lx.`item` = 'author' AND lx.`end_date` IS NULL AND lx.`xkey_ext` = ?", [ $pName ] ) );
+		}
+		foreach( $galleries as $galleryId ) {
+			$ids = array_merge( $ids, array_map( 'intval', $gBitDb->getCol(
+				"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyebook'", [ $galleryId ] ) ) );
+		}
+		return array_values( array_unique( $ids ) );
+	}
+
+	/** What the database holds for these books: id => [ title, isbn13, isbn10, authors[], publisher, year, series, pos ]. */
+	private static function details( array $pIds ): array {
+		global $gBitDb;
+		$books = [];
+		if( !$pIds ) {
+			return $books;
+		}
+		$in = implode( ',', array_map( 'intval', $pIds ) );
+		foreach( $gBitDb->getAll( "SELECT `content_id`, `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` IN ( $in )" ) as $r ) {
+			$books[(int)$r['content_id']] = [ 'title' => trim( (string)$r['title'] ), 'isbn13' => '', 'isbn10' => '', 'authors' => [], 'publisher' => '', 'year' => '', 'series' => '', 'pos' => '' ];
+		}
+		foreach( $gBitDb->getAll( "SELECT `content_id`, `item`, `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref`
+			WHERE `end_date` IS NULL AND `item` IN ( 'isbn', 'author', 'publisher', 'published' ) AND `content_id` IN ( $in ) ORDER BY `xorder`" ) as $r ) {
+			$b =& $books[(int)$r['content_id']];
+			$ext = trim( (string)$r['xkey_ext'] );
+			switch( $r['item'] ) {
+				case 'isbn':
+					$b['isbn13'] = trim( (string)$r['xkey'] );
+					$b['isbn10'] = $ext;
+					break;
+				case 'author':
+					if( $ext !== '' && !in_array( $ext, $b['authors'], true ) ) {
+						$b['authors'][] = $ext;
+					}
+					break;
+				case 'publisher':
+					$b['publisher'] = $b['publisher'] ?: $ext;
+					break;
+				case 'published':
+					if( !$b['year'] && preg_match( '/\d{4}/', $ext, $m ) ) {
+						$b['year'] = $m[0];
+					}
+					break;
+			}
+			unset( $b );
+		}
+		foreach( $gBitDb->getAll( "SELECT m.`item_content_id`, g.`title`, m.`item_position` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+			INNER JOIN `".BIT_DB_PREFIX."liberty_content` g ON g.`content_id` = m.`gallery_content_id`
+			WHERE g.`content_type_guid` = 'fisheyeseries' AND m.`item_content_id` IN ( $in )" ) as $r ) {
+			$b =& $books[(int)$r['item_content_id']];
+			if( $b['series'] === '' ) {
+				$b['series'] = trim( (string)$r['title'] );
+				$b['pos'] = (float)$r['item_position'] ? (string)(float)$r['item_position'] : '';
+			}
+			unset( $b );
+		}
+		return $books;
+	}
+
+	/** The file's rows: [ head[], body[ [column => value] ] ], or null when it does not exist / has no Title column. */
+	private static function read( string $pPath ): ?array {
+		if( !is_file( $pPath ) || !( $fh = fopen( $pPath, 'r' ) ) ) {
+			return null;
+		}
+		$head = null;
+		$body = [];
+		while( ( $cells = fgetcsv( $fh, 0, ',', '"', '' ) ) !== false ) {
+			if( $head === null ) {
+				$cells[0] = preg_replace( '/^\xEF\xBB\xBF/', '', (string)$cells[0] );
+				$head = array_map( 'trim', $cells );
+				continue;
+			}
+			if( !array_filter( $cells, fn( $c ) => trim( (string)$c ) !== '' ) ) {
+				continue;
+			}
+			$cells = array_pad( $cells, count( $head ), '' );
+			$body[] = array_combine( $head, array_slice( $cells, 0, count( $head ) ) );
+		}
+		fclose( $fh );
+		return $head && !array_diff( self::HEADER, $head ) ? [ $head, $body ] : null;
+	}
+
+	/**
+	 * What updating a catalogue would do - read-only.
+	 *
+	 * @return array{kind:string,name:string,path:string,exists:bool,error:?string,head:array,body:array,filled:array,added:array,loose:array,conflicts:array,changes:int}
+	 */
+	public static function plan( array $pFile ): array {
+		$plan = $pFile + [ 'error' => null, 'head' => self::HEADER, 'body' => [], 'filled' => [], 'added' => [], 'loose' => [], 'conflicts' => [], 'changes' => 0 ];
+		$books = self::details( self::bookIds( $pFile['kind'], $pFile['name'] ) );
+		if( $pFile['exists'] ) {
+			if( !( $read = self::read( $pFile['path'] ) ) ) {
+				$plan['error'] = \Bitweaver\KernelTools::tra( 'The file could not be read as a catalogue (it needs the usual columns).' );
+				return $plan;
+			}
+			[ $plan['head'], $plan['body'] ] = $read;
+		}
+		$byIsbn = $byTitle = [];
+		foreach( $books as $id => $b ) {
+			if( $b['isbn13'] !== '' ) {
+				$byIsbn[$b['isbn13']] = $id;
+			}
+			$byTitle[self::titleKey( $b['title'] )] ??= $id;
+		}
+		$used = [];
+		foreach( $plan['body'] as &$row ) {
+			$isbn = trim( $row['ISBN-13'] );
+			$id = $isbn !== '' ? ( $byIsbn[$isbn] ?? null ) : null;
+			$id ??= $byTitle[self::titleKey( $row['Title'] )] ?? null;
+			if( $id === null || isset( $used[$id] ) ) {
+				$plan['loose'][] = $row['Title'];
+				continue;
+			}
+			$used[$id] = true;
+			$b = $books[$id];
+			$want = [ 'ISBN-13' => $b['isbn13'], 'ISBN-10' => $b['isbn10'], 'Publisher' => $b['publisher'], 'Year' => $b['year'], 'Authors' => implode( '|', $b['authors'] ) ];
+			foreach( $want as $col => $val ) {
+				if( $val === '' ) {
+					continue;
+				}
+				if( trim( $row[$col] ) === '' ) {
+					$row[$col] = $val;
+					$plan['filled'][] = [ $row['Title'], $col, $val ];
+				} elseif( trim( $row[$col] ) !== $val && in_array( $col, [ 'ISBN-13', 'Year' ], true ) ) {
+					$plan['conflicts'][] = [ $row['Title'], $col, trim( $row[$col] ), $val ];
+				}
+			}
+		}
+		unset( $row );
+		uasort( $books, fn( $a, $b ) => [ mb_strtolower( $a['series'] ?: '~' ), $a['title'] ] <=> [ mb_strtolower( $b['series'] ?: '~' ), $b['title'] ] );
+		foreach( $books as $id => $b ) {
+			if( !isset( $used[$id] ) ) {
+				$plan['body'][] = [ 'Ref' => '', 'Category' => $b['series'], 'ISBN-13' => $b['isbn13'], 'ISBN-10' => $b['isbn10'], 'Authors' => implode( '|', $b['authors'] ),
+					'Publisher' => $b['publisher'], 'Title' => $b['title'], 'Year' => $b['year'], 'Series' => $b['series'], 'Series no' => $b['pos'] ];
+				$plan['added'][] = $b['title'];
+			}
+		}
+		$plan['changes'] = count( $plan['filled'] ) + count( $plan['added'] );
+		return $plan;
+	}
+
+	/**
+	 * Write a planned catalogue: the old file first goes to storage/fisheyemedia/catalogue backups/, then the merged rows are written, Ref renumbered.
+	 *
+	 * @return string|null  an error, or null on success
+	 */
+	public static function write( array $pPlan ): ?string {
+		if( $pPlan['error'] || !$pPlan['changes'] ) {
+			return $pPlan['error'] ?? \Bitweaver\KernelTools::tra( 'nothing to change' );
+		}
+		if( $pPlan['exists'] ) {
+			$keep = FISHEYEMEDIA_IMPORT_PATH.'catalogue backups/';
+			\Bitweaver\KernelTools::mkdir_p( $keep );
+			if( !copy( $pPlan['path'], $keep.date( 'Ymd-His' ).' - '.basename( dirname( $pPlan['path'] ) ).' - '.basename( $pPlan['path'] ) ) ) {
+				return \Bitweaver\KernelTools::tra( 'the old file could not be kept, nothing changed' );
+			}
+		}
+		if( !( $fh = fopen( $pPlan['path'], 'w' ) ) ) {
+			return \Bitweaver\KernelTools::tra( 'the file could not be written' );
+		}
+		fputcsv( $fh, $pPlan['head'], ',', '"', '' );
+		foreach( array_values( $pPlan['body'] ) as $n => $row ) {
+			$row['Ref'] = (string)( $n + 1 );
+			fputcsv( $fh, array_map( fn( $c ) => $row[$c] ?? '', $pPlan['head'] ), ',', '"', '' );
+		}
+		fclose( $fh );
+		return null;
+	}
+}

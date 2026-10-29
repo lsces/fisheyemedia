@@ -23,6 +23,7 @@
 			{/if}
 			{if $result.group}
 				<div class="alert alert-{if $result.errors || !$result.created}info{else}success{/if}"><p>{$result.group|escape}: {$result.created} {tr}loaded{/tr}{if $result.already}, {$result.already} {tr}already there{/tr}{/if}.{if $result.group_url} <a href="{$result.group_url|escape}">{tr}Open the gallery{/tr}</a>{/if}</p></div>
+				{if $result.catalogue|default:''}<p>{$result.catalogue|escape}</p>{/if}
 				{if $result.series}<p>{tr}Filed in series{/tr}: {foreach from=$result.series key=seriesName item=count name=sr}{$seriesName|escape} ({$count}){if !$smarty.foreach.sr.last}, {/if}{/foreach}.</p>{/if}
 				{if $result.details}
 					<ul class="list-unstyled">{foreach from=$result.details item=detail}<li><a href="{$detail.url|escape}">{$detail.title|escape}</a> - {if $detail.matched}{tr}details from Open Library{/tr}{else}{tr}no Open Library record{/tr}{/if}{if $detail.error}: {$detail.error|escape}{/if}</li>{/foreach}</ul>

@@ -137,6 +137,10 @@ class FisheyeBookLoader {
 				$result['details'][] = [ 'content_id' => $bookContentId, 'url' => $book->getDisplayUrl(), 'title' => $book->getTitle(), 'matched' => !empty( $found['matched'] ), 'items' => $found['items'] ?? [], 'error' => $found['error'] ?? '' ];
 			}
 		}
+		// The author's catalogue in the Library folder takes up the ISBNs etc. this load established.
+		if( $pGroup['kind'] === 'author' && ( $result['created'] || $result['already'] ) ) {
+			$result['catalogue'] = FisheyeCatalogueMerge::updateAuthor( $pGroup['name'] );
+		}
 		return $result;
 	}
 
