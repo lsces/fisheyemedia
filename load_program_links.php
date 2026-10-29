@@ -4,9 +4,9 @@
  * taken from there and the BBC's own programme record walked up (episode, series, brand) to the id of the whole programme, which is what the
  * program's 'iplayer' external link holds (bbc.co.uk/programmes/<pid>, a page that stays up after the episodes leave iPlayer).
  *
- * 'Look up' asks the BBC about the next twenty programs and lists what came back with nothing ticked - the BBC title is shown beside yours, and a
- * program that is only a folder of your own (BBC Documentaries) will find nothing sensible, so each line is ticked by hand and the pid can be
- * corrected in its box. 'Add the ticked' saves them through the program's own xref item (the scheme item 'iplayer' must have been applied).
+ * 'Look up' asks the BBC about the next twenty programs and lists what came back - the BBC title is shown beside yours. Lines are ticked when the BBC's title is the
+ * same as yours and the id is a brand or series; any other line (a folder of your own such as BBC Documentaries, a differently spelt title) is left
+ * unticked and shaded to be looked at, and the pid can be corrected in its box. 'Add the ticked' saves them through the program's own xref item (the scheme item 'iplayer' must have been applied).
  *
  * @package fisheyemedia
  */
@@ -60,6 +60,8 @@ if( !empty( $_REQUEST['add'] ) ) {
 			'pid' => $top['pid'] ?? '', 'bbc_title' => $top['title'] ?? '', 'bbc_type' => $top['type'] ?? '',
 			'match' => $top && FisheyeBbc::sameTitle( $p['title'], $top['title'] ),
 			'failed' => !$top,
+			// ticked unless something is off: same title as the BBC's, and the top of the tree is a brand or series (not a lone episode)
+			'ticked' => $top && FisheyeBbc::sameTitle( $p['title'], $top['title'] ) && in_array( $top['type'], [ 'brand', 'series' ], true ),
 		];
 	}
 	if( !$rows ) {
