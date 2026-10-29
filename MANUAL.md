@@ -142,12 +142,61 @@ shows what is loaded, what is next and how many are done, and works in small bat
    (using Wikidata and Open Library where they know the person). Tick the authors to create. Authors with one
    or two books can have those loaded in the same step.
 2. **Add Books** (or **Add this author's books** on an author's gallery) - a tick-list of that author's books still to load, ten at a
-   time. Each book is filled from the sheet and from Open Library.
+   time. Each book is filled from the sheet and from Open Library. A row with no ISBN has a **Suggest** link: it asks Open Library for
+   English editions of that title and author, and picking one fills the ISBN and ticks the row. The first ten empty rows are looked up
+   for you, typing an ISBN ticks the row and clearing it unticks.
 3. **Series from Wikidata and Open Library** and **Series from folders** - propose series, let you choose the
    grouping, put a book into an existing series and rearrange the order. Books in a series are filed under
    the series rather than in the author's own gallery.
 4. **Book details from Open Library** - fills blank fields from Open Library, finds covers, lists the books with no image at
    all and has a box for replacing placeholder covers.
+
+### Catalogue files
+
+A catalogue is either an `.ods` spreadsheet (a sheet named `Books`) or a plain `.csv` with the columns `Ref`, `Category`,
+`ISBN-13`, `ISBN-10`, `Authors`, `Publisher`, `Title`, `Year`, `Series` and `Series no`. Several authors in the Authors cell are
+separated by `|`, never commas. The ISBNs can be left empty and filled in with **Suggest**.
+
+Catalogues are kept in the Library folder beside the books: `Library/<author>/AuthorCatalogue.csv` lists every book credited to that
+author (Category is the series the book is in), and a series by several authors has a `SeriesCatalogue.csv` in its folder (below).
+When **Add Books** finishes loading books for an author whose folder exists, that author's `AuthorCatalogue.csv` takes up what is now
+known: empty ISBN, publisher, year and author cells are filled for books that now have a record, and books in the database that the
+file lacks are added at the end. A cell that already holds something is never changed (a differing ISBN or year is only reported on
+the screen), and a row whose book is not loaded yet is left exactly as it is. The old file is kept first, in
+`storage/fisheyemedia/catalogue backups/`. An author folder with no catalogue gets one.
+
+### Book files from the Library folder
+
+A book's ebooks, audio books and other files are its **Extras**, listed on the book's page beside its pictures. They live in the
+Library folder (the **Book Library Storage Path** in Media Library Settings; otherwise `Library/` inside the disk root) as
+`Library/<author>/<series>/<book>/`, with the ebook files at the top of the book's folder, an `Audio/` folder (a single `.m4b`, or one
+folder per recording for many files) and anything else beside them. A book with no series is `Library/<author>/<book>/`. Folder names are
+the gallery and book titles exactly.
+
+**Book Files from the Library** (the folder icon on an author's gallery, or the Media menu) finds each book's folder from the
+galleries the book is filed in, shows what is in it, and ticks the books whose folder holds files. **Scan** writes the ticked books'
+ebook, audio book and other-file rows (twenty books a press). A scan rebuilds only those three kinds; a book whose folder is not found
+keeps what it has. Pictures and cover files are left to the pictures folder. With a search, the folders under the matching authors that no
+listed book found are listed too: those are the books still to catalogue. Files are served through the site, to anyone who may view the book.
+
+### A series by several authors
+
+A series written by more than one author (a shared world, a ship series) is kept once, under **Various Authors**:
+`Library/Various Authors/<series>/<book>/` with a `SeriesCatalogue.csv` in the series folder listing every book of the series, whoever wrote it.
+Its files live there once; an author's own folder does not hold a copy.
+
+**Various Authors series** (Media menu) reads each series catalogue and shows what filing it would do. Tick the series and it:
+
+- creates the **Various Authors** gallery under Library, and the series gallery under that, when they are missing;
+- finds each catalogue book already in the database (by ISBN, else title and author) and adds it to the series in catalogue order - added,
+  not moved, so the book stays in its own author's series as well; books it cannot find are listed, not made;
+- makes a series gallery of the same name under each contributing author who has a gallery and none yet, and links every author's series
+  gallery under the combined one;
+- moves an author's loose books of the series from the author's own list into the author's series - only when you tick the box offered
+  for that author.
+
+On an author's series page a **Full Series** tile leads to the combined series; inside the combined series each author's gallery is
+labelled "<Author>'s <series>". Running it again changes nothing that is already done.
 
 ### Covers and pictures
 

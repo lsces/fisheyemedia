@@ -794,6 +794,56 @@ removed. A failure to file leaves the row and file where they were.
 The item's own `image` xref rows are separate: they are the pictures the item's own page and tile use, stored in
 the item's storage and size-capped (book covers at `FISHEYEBOOK_COVER_MAX`). The folder holds everything else.
 
+### Book files as Extras
+`FisheyeBookFiles` ties a book to its folder in the Library tree and writes the file rows. `libraryRoot()` is the `fisheye_library_storage_root`
+setting, else the disk storage root plus `Library/`. `candidateFolders( FisheyeBook )` builds `author/series/book` and `author/book` paths from the
+galleries the book is in (a series gallery's parent is the author; a series under Various Authors gives `Various Authors/<series>/<book>`);
+`folderFor()` returns the first that exists on disk. `safe()` replaces only `/` in a title, so colons and apostrophes stay.
+
+`scan()` sorts the top level of a book's folder into **ebook** files, **audiobook** (an `Audio/` folder: single files, or wrapper folders with a
+track count) and **extra**, ignoring pictures, covers and `Pictures/`. `register()` rebuilds just the `ebook`, `audiobook` and `extra` rows (items in
+the `images` group of the `fisheyebook` scheme: `xkey_ext` is the path under the root, `data` a small JSON blob) with `storeXref()`, `'edit'` carrying
+the JSON. `pathFor( xkey_ext, track )` resolves a row to a file and refuses anything whose `realpath()` is outside the root.
+`view_book_file.php` serves a file by `xref_id` only (`verifyViewPermission()`, `liberty_serve_range_file()`).
+
+`load_book_files.php` is the page: `LOAD_BOOK_FILES_BATCH` (20) books per press, `LOAD_BOOK_FILES_LIST` (60) listed. A search matches the title, an
+author credit, or a series filed under a gallery of that name; the folders-with-no-record report compares with every book the search matches, not
+the rows shown. `FisheyeBook::getExtrasCounts()` / `getExtrasGroups()` put the file items first on the Extras strip.
+
+### Series by several authors and the library layout
+`FisheyeVariousAuthors` (`load_various_authors.php`) reads `Library/Various Authors/<series>/SeriesCatalogue.csv` through
+`FisheyeBookCatalogue::readBooks()` (which takes `.ods` or `.csv`; the separator and a BOM are detected). `plan()` is read-only: it finds each
+book (`FisheyeBook::findContentId()`, ISBN then title, retried without the ISBN), the combined series, and for each author credited who has a
+library gallery, whether that author has a series gallery of that name, whether it is linked, and which of the catalogue's books sit loose in the
+author's own gallery. `apply()` makes Various Authors and the series (`FisheyeBookCredits::findOrCreateLibraryGallery()`,
+`FisheyeSeries::findOrCreateUnder()`), adds the books and `setOrder()`s them, creates and links the author series, and moves loose books only for the
+authors the request ticked. It is idempotent.
+
+`FisheyeMediaGallery::getFullSeries()` returns the combined series when this gallery is a series filed under a series that is itself in the gallery
+titled `FisheyeMediaGallery::VARIOUS_AUTHORS`; `library_full_series_tile_inc.tpl` draws the tile (a template facet, not a gallery item, so counts,
+catalogues and scans never see it). `getAuthorLabels()` names the author-series tiles of a combined series `"<Author>'s <series>"`.
+
+**The layout, not the content type, decides a library page.** Galleries made by hand are plain `fisheyegallery`; the loaders make `fisheyemediagal`
+and `fisheyeseries`. The `fisheyemedia_content_display` service function assigns `{$libraryGallery}` for any gallery whose layout is
+`library_grid` - the gallery itself when it already has the media methods, else a `FisheyeMediaGallery` loaded on the same ids - and
+`fisheye_library_grid_inc.tpl` / `library_gallery_icons_inc.tpl` call the author, full-series and categorized-strip methods on that. Nothing in the
+templates tests the class. (fisheye's own gallery-tree query lists only plain `fisheyegallery` rows, so the edit page's parent picker does not show
+the media types; the loaders do the filing.) The `fisheyemedia_content_list_sql` service function narrows Image Order's Copy/Move gallery lists to
+`library_grid` galleries when the gallery being ordered is one - literal values in the join, because the list's own binds come ahead of a service
+join's; it must apply only to the picker (`getList()`), since `loadImages()` calls the same service for the gallery's own items.
+
+### Catalogue files
+`FisheyeCatalogueMerge::updateAuthor( name )` is called by `FisheyeBookLoader::loadGroup()` when an author group finishes. It plans against the books
+in the author's gallery, its series and any credited to that name, and rewrites `Library/<author>/AuthorCatalogue.csv` (kept to the loader's columns)
+by filling empty ISBN-13 / ISBN-10 / Publisher / Year / Authors cells of rows whose book now exists (ISBN, else title with case, punctuation, a
+leading The/A/An and `&`/`and` ignored), adding database books the file lacks, and leaving every other row untouched; a differing ISBN or year is
+reported in the plan, never changed. The old file is copied to `storage/fisheyemedia/catalogue backups/` first. The result line is
+`$result['catalogue']`. Never regenerate a catalogue from the database alone: rows waiting to be loaded would be lost.
+
+### Film and programme descriptions
+A film's description is shown through `|autolink|nl2br`, so the `PLAY: <url>` / `INFO: <url>` lines the BBC downloads put there are live links.
+`FisheyeMediaTrait::keepBbcLines()` keeps those lines when `reloadPlexMetadata()` replaces a film's or programme's description with Plex's summary.
+
 ### Site-specific importers
 Importing book pictures from a particular source (a gallery on another site, a scanned collection, a folder of
 files) is a one-off that depends on that site's names and addresses, so it is not part of this package. It
