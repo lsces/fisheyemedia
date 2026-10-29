@@ -9,10 +9,10 @@
 
 {form legend="Catalogue spreadsheet" enctype="multipart/form-data"}
 		<div class="form-group">
-			{formlabel label="Spreadsheet (.ods)" for="catalogue_file"}
+			{formlabel label="Spreadsheet (.ods) or .csv" for="catalogue_file"}
 			{forminput}
-				<input type="file" name="catalogue_file" id="catalogue_file" accept=".ods" />
-				{formhelp note="A 'Books' sheet with one row per book - Title is the only required column. Each upload is archived and the newest is the one loaded from; books already loaded are recognised and not loaded twice."}
+				<input type="file" name="catalogue_file" id="catalogue_file" accept=".ods,.csv" />
+				{formhelp note="A 'Books' sheet (or a .csv with a header row) with one row per book - Title is the only required column. Each upload is archived and the newest is the one loaded from; books already loaded are recognised and not loaded twice."}
 			{/forminput}
 		</div>
 		<div class="form-group submit">

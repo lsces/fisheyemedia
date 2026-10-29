@@ -44,13 +44,13 @@ class FisheyeBookCatalogue {
 	 * The newest archived sheet, if any has been uploaded yet.
 	 */
 	public static function latestArchive(): ?string {
-		$files = glob( self::archiveDir().'*.ods' ) ?: [];
+		$files = array_merge( glob( self::archiveDir().'*.ods' ) ?: [], glob( self::archiveDir().'*.csv' ) ?: [] );
 		sort( $files, SORT_NATURAL );
 		return $files ? end( $files ) : null;
 	}
 
 	/**
-	 * Check an uploaded .ods reads as a catalogue and, if it does, archive it as the newest sheet.
+	 * Check an uploaded .ods or .csv reads as a catalogue and, if it does, archive it as the newest sheet.
 	 *
 	 * @return array{rows:int,error:?string,file:?string}
 	 */
@@ -60,7 +60,7 @@ class FisheyeBookCatalogue {
 			return [ 'rows' => 0, 'error' => $parsed['error'], 'file' => null ];
 		}
 		\Bitweaver\KernelTools::mkdir_p( self::archiveDir() );
-		$dest = self::archiveDir().'Books Catalogue '.date( 'Ymd-His' ).'.ods';
+		$dest = self::archiveDir().'Books Catalogue '.date( 'Ymd-His' ).( self::isOds( $pPath ) ? '.ods' : '.csv' );
 		$ok = is_uploaded_file( $pPath ) ? move_uploaded_file( $pPath, $dest ) : copy( $pPath, $dest );
 		return $ok
 			? [ 'rows' => count( $parsed['rows'] ), 'error' => null, 'file' => basename( $dest ) ]
@@ -109,8 +109,8 @@ class FisheyeBookCatalogue {
 		if( empty( $_FILES['catalogue_file']['tmp_name'] ) ) {
 			return null;
 		}
-		if( !is_uploaded_file( $_FILES['catalogue_file']['tmp_name'] ) || strtolower( pathinfo( (string)$_FILES['catalogue_file']['name'], PATHINFO_EXTENSION ) ) !== 'ods' ) {
-			return [ 'rows' => 0, 'error' => \Bitweaver\KernelTools::tra( 'Please choose an .ods spreadsheet.' ), 'file' => null ];
+		if( !is_uploaded_file( $_FILES['catalogue_file']['tmp_name'] ) || !in_array( strtolower( pathinfo( (string)$_FILES['catalogue_file']['name'], PATHINFO_EXTENSION ) ), [ 'ods', 'csv' ], true ) ) {
+			return [ 'rows' => 0, 'error' => \Bitweaver\KernelTools::tra( 'Please choose an .ods spreadsheet or a .csv file.' ), 'file' => null ];
 		}
 		return self::importFile( $_FILES['catalogue_file']['tmp_name'] );
 	}
@@ -126,12 +126,27 @@ class FisheyeBookCatalogue {
 		return [ 'imported' => $file ? (int)filemtime( $file ) : 0, 'file' => $file ? basename( $file ) : null, 'rows' => $parsed['rows'] ?? [] ];
 	}
 
+	/** An OpenDocument spreadsheet is a zip file; anything else is read as a csv. Judged from the content, since an upload has a temp name. */
+	public static function isOds( string $pPath ): bool {
+		$fh = @fopen( $pPath, 'rb' );
+		$magic = $fh ? fread( $fh, 2 ) : '';
+		if( $fh ) {
+			fclose( $fh );
+		}
+		return $magic === 'PK';
+	}
+
 	/**
-	 * Read the 'Books' sheet of an .ods into rows for FisheyeBook::registerFromRow().
+	 * Read the catalogue into rows for FisheyeBook::registerFromRow(): the 'Books' sheet of an .ods, or a plain .csv (comma, semicolon or tab separated,
+	 * header row first, columns in any order and extra ones ignored - the same columns as the sheet).
 	 *
 	 * @return array{rows:list<array>}|array{error:string}
 	 */
 	public static function readBooks( string $pPath ): array {
+		if( !self::isOds( $pPath ) ) {
+			$cellRows = self::csvCellRows( $pPath );
+			return $cellRows === null ? [ 'error' => 'That file could not be read as an .ods spreadsheet or a .csv file.' ] : self::rowsFromCells( $cellRows );
+		}
 		$zip = new \ZipArchive();
 		if( $zip->open( $pPath ) !== true || ( $xml = $zip->getFromName( 'content.xml' ) ) === false ) {
 			return [ 'error' => 'That is not an OpenDocument spreadsheet (.ods).' ];
@@ -153,9 +168,7 @@ class FisheyeBookCatalogue {
 			return [ 'error' => 'There is no sheet named "'.self::SHEET.'" in that spreadsheet.' ];
 		}
 
-		$header = null;
-		$rows = [];
-		$seen = [];
+		$cellRows = [];
 		foreach( $sheet->getElementsByTagNameNS( self::NS_TABLE, 'table-row' ) as $tableRow ) {
 			$cells = [];
 			foreach( $tableRow->childNodes as $cell ) {
@@ -171,6 +184,43 @@ class FisheyeBookCatalogue {
 					$cells[] = trim( implode( "\n", $text ) );
 				}
 			}
+			$cellRows[] = $cells;
+		}
+		return self::rowsFromCells( $cellRows );
+	}
+
+	/** A csv file as rows of trimmed cells, or null when it cannot be read. The separator is taken from the header line; a leading BOM is dropped. */
+	private static function csvCellRows( string $pPath ): ?array {
+		$fh = @fopen( $pPath, 'rb' );
+		if( !$fh ) {
+			return null;
+		}
+		$first = (string)fgets( $fh );
+		rewind( $fh );
+		$first = preg_replace( '/^\xEF\xBB\xBF/', '', $first );
+		$delimiter = ',';
+		foreach( [ ';' => substr_count( $first, ';' ), "\t" => substr_count( $first, "\t" ) ] as $candidate => $count ) {
+			if( $count > substr_count( $first, $delimiter ) ) {
+				$delimiter = $candidate;
+			}
+		}
+		$rows = [];
+		while( ( $line = fgetcsv( $fh, 0, $delimiter, '"', '' ) ) !== false ) {
+			if( $rows === [] && isset( $line[0] ) ) {
+				$line[0] = preg_replace( '/^\xEF\xBB\xBF/', '', (string)$line[0] );
+			}
+			$rows[] = array_map( fn( $c ) => trim( (string)$c ), $line );
+		}
+		fclose( $fh );
+		return $rows ?: null;
+	}
+
+	/** Rows of cells (the first with any content is the header) to catalogue rows. */
+	private static function rowsFromCells( array $pCellRows ): array {
+		$header = null;
+		$rows = [];
+		$seen = [];
+		foreach( $pCellRows as $cells ) {
 			if( !array_filter( $cells, fn( $c ) => $c !== '' ) ) {
 				continue;
 			}
@@ -182,7 +232,7 @@ class FisheyeBookCatalogue {
 					}
 				}
 				if( !in_array( 'title', $header, true ) ) {
-					return [ 'error' => 'The "'.self::SHEET.'" sheet has no Title column.' ];
+					return [ 'error' => 'The catalogue has no Title column.' ];
 				}
 				continue;
 			}
