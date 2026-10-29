@@ -20,7 +20,7 @@
 				<label><input type="checkbox" name="todo" value="1"{if $onlyTodo} checked="checked"{/if} /> {tr}Only books with no files registered yet{/tr}</label>
 				<input type="submit" class="btn btn-default" value="{tr}Show{/tr}" />
 			</form>
-			<p>{tr}Each book's folder is found from its series and author galleries. Books whose folder holds files are ticked; Scan writes their ebook, audio book and other files as Extras (a rebuild of just those, at most{/tr} {$batch} {tr}per press). Pictures and cover files are left alone. Showing at most{/tr} {$listLimit}.</p>
+			<p>{tr}Each book's folder is found from its series and author galleries. Books whose folder holds files are ticked; Scan writes their ebook, audio book and other files as Extras (a rebuild of just those, at most{/tr} {$batch} {tr}per press). Pictures and cover files are left alone. Showing at most{/tr} {$listLimit}{if $find} ({$totalMatching} {tr}match{/tr}){/if}.</p>
 			{if $books}
 				{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`load_book_files.php"}
 					<input type="hidden" name="find" value="{$find|escape}" />

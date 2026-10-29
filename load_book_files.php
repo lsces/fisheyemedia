@@ -60,6 +60,7 @@ if( $root !== '' && is_dir( $root ) ) {
 		$where = " AND ( UPPER( lc.`title` ) LIKE ? OR EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` ax WHERE ax.`content_id` = lc.`content_id` AND ax.`item` = 'author' AND ax.`end_date` IS NULL AND UPPER( ax.`xkey_ext` ) LIKE ? ) )";
 		$bind = [ '%'.strtoupper( $find ).'%', '%'.strtoupper( $find ).'%' ];
 	}
+	$whereFind = $where; // the search alone, for the folder report (the to-do filter below must not shrink it)
 	if( $onlyTodo ) {
 		$where .= " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` fx WHERE fx.`content_id` = lc.`content_id` AND fx.`item` IN ('ebook','audiobook','extra') AND fx.`end_date` IS NULL )";
 	}
@@ -83,7 +84,20 @@ if( $root !== '' && is_dir( $root ) ) {
 	}
 }
 
-// Folders under the authors that match the search which no listed book resolved to: the books still to catalogue.
+// The report below compares the folders with every book the search matches, not just the rows shown above (an author can have more than the list holds).
+$totalMatching = count( $books );
+if( $find !== '' && $root !== '' && is_dir( $root ) ) {
+	$all = $gBitDb->getAll( "SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."liberty_content` lc WHERE lc.`content_type_guid` = 'fisheyebook' $whereFind", $bind ) ?: [];
+	$totalMatching = count( $all );
+	foreach( $all as $row ) {
+		$book = FisheyeImage::lookup( [ 'content_id' => (int)$row['content_id'] ] );
+		if( $book instanceof FisheyeBook && ( $folder = FisheyeBookFiles::folderFor( $book ) ) ) {
+			$matchedFolders[rtrim( $folder['rel'], '/' )] = true;
+		}
+	}
+}
+
+// Folders under the authors that match the search which no book resolved to: the books still to catalogue.
 $unmatched = [];
 if( $find !== '' && $root !== '' && is_dir( $root ) ) {
 	foreach( array_diff( scandir( $root ) ?: [], [ '.', '..' ] ) as $authorDir ) {
@@ -106,6 +120,7 @@ if( $find !== '' && $root !== '' && is_dir( $root ) ) {
 }
 
 $gBitSmarty->assign( 'books', $books );
+$gBitSmarty->assign( 'totalMatching', $totalMatching );
 $gBitSmarty->assign( 'unmatched', $unmatched );
 $gBitSmarty->assign( 'find', $find );
 $gBitSmarty->assign( 'onlyTodo', $onlyTodo );
