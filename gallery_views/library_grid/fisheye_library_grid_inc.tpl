@@ -11,7 +11,7 @@
 	<header>
 		{include file="bitpackage:fisheyemedia/library_gallery_icons_inc.tpl"}
 		{* An author's gallery: the name goes on to the author's own page once the authors pass has linked their books. *}
-		{if $gContent->getTitle() ne 'Library'}{assign var=authorUrl value=$gContent->getAuthorContactUrl()}{/if}
+		{if $gContent->getTitle() ne 'Library'}{assign var=authorUrl value=$libraryGallery->getAuthorContactUrl()}{/if}
 		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{if $authorUrl}<a href="{$authorUrl|escape}">{$gContent->getTitle()|escape}</a>{else}{$gContent->getTitle()|escape}{/if}</h1>
 	</header>
 
@@ -56,23 +56,28 @@
 			{pagination gallery_id=$gContent->mGalleryId ?? 0}
 		{else}
 			{* One author's (or category's) own books - the categorized strip layout. *}
-			{foreach from=$gContent->getCategorizedItems() item=stripItems key=stripKey}
+			{assign var=fullSeries value=$libraryGallery->getFullSeries()}
+			{assign var=authorLabels value=$libraryGallery->getAuthorLabels()}
+			{foreach from=$libraryGallery->getCategorizedItems() item=stripItems key=stripKey name=strips}
 				{* '' = items with no category (unlabelled); otherwise the category as written *}
 				{if $stripKey neq ''}<h3 class="media-strip-title">{$stripKey|escape}</h3>{/if}
 				<div class="media-strip">
+				{if $fullSeries && $smarty.foreach.strips.first}{include file="bitpackage:fisheyemedia/library_full_series_tile_inc.tpl"}{/if}
 				{foreach from=$stripItems item=galItem key=itemContentId}
+					{assign var=tileTitle value=$galItem->mInfo.title}
+					{if $authorLabels.$itemContentId|default:''}{assign var=tileTitle value="`$authorLabels.$itemContentId`'s `$galItem->mInfo.title`"}{/if}
 					<div class="media-grid-item">
 						{box class="box `$galItem->mInfo.content_type_guid`"}
 							{assign var="tileThumb" value=$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}
 							<a href="{$galItem->getDisplayUrl()|escape}">
 								{if $tileThumb && $tileThumb neq $smarty.const.BIT_ROOT_URI}
-									<img class="thumb img-responsive center-block media-cover" src="{$tileThumb}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
+									<img class="thumb img-responsive center-block media-cover" src="{$tileThumb}" alt="{$tileTitle|escape|default:'image'}" />
 								{else}
-									<div class="media-name-tile"><span>{$galItem->mInfo.title|escape}</span></div>
+									<div class="media-name-tile"><span>{$tileTitle|escape}</span></div>
 								{/if}
 							</a>
 							{if $gBitSystem->isFeatureActive('fisheye_gallery_list_image_titles')}
-								<h4>{$galItem->mInfo.title|escape}</h4>
+								<h4>{$tileTitle|escape}</h4>
 							{/if}
 							{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='body' serviceHash=$galItem->mInfo type=mini}
 						{/box}
@@ -80,6 +85,7 @@
 				{/foreach}
 				</div>
 			{foreachelse}
+				{if $fullSeries}<div class="media-strip">{include file="bitpackage:fisheyemedia/library_full_series_tile_inc.tpl"}</div>{/if}
 				<p class="norecords">{tr}This gallery is empty{/tr}.</p>
 			{/foreach}
 		{/if}

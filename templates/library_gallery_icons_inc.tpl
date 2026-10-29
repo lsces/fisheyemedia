@@ -11,7 +11,7 @@
 			<a title="{tr}Add Books from ISBNs{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{biticon ipackage="icons" iname="list-add" iexplain="Add Books from ISBNs"}</a>
 		{else}
 			{* The author's contact: the contact page itself once one is linked, else the page that creates it. *}
-			{assign var=authorContactUrl value=$gContent->getAuthorContactUrl()}
+			{assign var=authorContactUrl value=$libraryGallery->getAuthorContactUrl()}
 			{if $authorContactUrl}
 				<a title="{tr}Author's contact page{/tr}" href="{$authorContactUrl|escape}">{biticon ipackage="icons" iname="system-users" iexplain="Author's contact page"}</a>
 			{else}

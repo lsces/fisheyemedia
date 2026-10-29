@@ -374,6 +374,55 @@ class FisheyeMediaGallery extends FisheyeGallery {
 		return null;
 	}
 
+	/** The top-level gallery that holds the series spanning several authors (Library/Various Authors/<series>/<book>/). */
+	public const VARIOUS_AUTHORS = 'Various Authors';
+
+	/**
+	 * For a series gallery filed under Various Authors, whose gallery each author-series tile in it belongs to: [ content_id => author gallery title ].
+	 * Those tiles carry the series' own title, so every contributing author's is called the same - the grid labels them "<Author>'s <series>".
+	 * Empty for any other gallery.
+	 *
+	 * @return array<int,string>
+	 */
+	public function getAuthorLabels(): array {
+		if( !$this->isValid() || !(int)$this->mDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` v ON v.`content_id` = m.`gallery_content_id`
+			 WHERE m.`item_content_id` = ? AND v.`title` = ?", [ $this->mContentId, self::VARIOUS_AUTHORS ] ) ) {
+			return [];
+		}
+		return $this->mDb->getAssoc(
+			"SELECT c.`content_id`, a.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` c ON c.`content_id` = m.`item_content_id` AND c.`content_type_guid` IN ( 'fisheyeseries', 'fisheyemediagal', 'fisheyegallery' )
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m2 ON m2.`item_content_id` = c.`content_id`
+			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` a ON a.`content_id` = m2.`gallery_content_id`
+			 WHERE m.`gallery_content_id` = ? AND a.`content_id` <> ? AND a.`title` NOT IN ( ?, 'Library' )",
+			[ $this->mContentId, $this->mContentId, self::VARIOUS_AUTHORS ] ) ?: [];
+	}
+
+	/**
+	 * The full series this gallery is one author's part of: when this gallery is filed under a series gallery that is itself in the Various Authors
+	 * gallery, that series (title and address). A rendering facet only - the layout shows it as a "Full Series" tile ahead of the books; it is not
+	 * content of this gallery and changes nothing in its lists.
+	 *
+	 * @return array{id:int,title:string,url:string}|null
+	 */
+	public function getFullSeries(): ?array {
+		if( !$this->mContentId ) {
+			return null;
+		}
+		$row = $this->mDb->getRow(
+			"SELECT p.`content_id`, p.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+			 JOIN `".BIT_DB_PREFIX."liberty_content` p ON p.`content_id` = m.`gallery_content_id`
+			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m2 ON m2.`item_content_id` = p.`content_id`
+			 JOIN `".BIT_DB_PREFIX."liberty_content` v ON v.`content_id` = m2.`gallery_content_id`
+			 WHERE m.`item_content_id` = ? AND p.`content_id` <> ? AND v.`title` = ?", [ $this->mContentId, $this->mContentId, static::VARIOUS_AUTHORS ] );
+		if( !$row ) {
+			return null;
+		}
+		$series = \Bitweaver\Fisheye\FisheyeGallery::lookup( [ 'content_id' => (int)$row['content_id'] ] );
+		return $series && $series->isValid() ? [ 'id' => (int)$row['content_id'], 'title' => (string)$row['title'], 'url' => $series->getDisplayUrl() ] : null;
+	}
+
 	/**
 	 * Groups this gallery's own items into the artist page's strips (fisheye_music_grid_inc.tpl),
 	 * mirroring the artist folder on disk: everything sitting directly in it first, as an unlabelled
