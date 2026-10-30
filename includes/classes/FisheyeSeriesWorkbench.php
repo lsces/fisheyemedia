@@ -253,10 +253,10 @@ class FisheyeSeriesWorkbench {
 	/**
 	 * Step 3: register the files of the picked books.
 	 *
-	 * @return array{books:int,files:int,errors:list<string>}
+	 * @return array{books:int,files:int,errors:list<string>,titles:list<string>}  titles: each book loaded with its file count
 	 */
 	public static function registerFiles( array $pBookIds ): array {
-		$done = [ 'books' => 0, 'files' => 0, 'errors' => [] ];
+		$done = [ 'books' => 0, 'files' => 0, 'errors' => [], 'titles' => [] ];
 		foreach( $pBookIds as $id ) {
 			$book = FisheyeImage::lookup( [ 'content_id' => $id ] );
 			if( !( $book instanceof FisheyeBook ) ) {
@@ -270,6 +270,7 @@ class FisheyeSeriesWorkbench {
 			}
 			$done['books']++;
 			$done['files'] += $one['ebook'] + $one['audiobook'] + $one['extra'];
+			$done['titles'][] = $book->getTitle().' ('.( $one['ebook'] + $one['audiobook'] + $one['extra'] ).')';
 			foreach( $one['errors'] as $error ) {
 				$done['errors'][] = $book->getTitle().' - '.$error;
 			}

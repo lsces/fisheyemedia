@@ -95,7 +95,7 @@ if( !$st['error'] ) {
 	if( !$st['files']['blocked'] && $st['files']['todo'] ) {
 		$todo = array_column( array_filter( $st['files']['books'], fn( $b ) => $b['todo'] ), 'id' );
 		$done = FisheyeSeriesWorkbench::registerFiles( $todo );
-		$messages[] = $done['books'].' '.KernelTools::tra( 'books had their files loaded,' ).' '.$done['files'].' '.KernelTools::tra( 'files.' );
+		$messages[] = KernelTools::tra( 'Files loaded as this page opened' ).': '.implode( ', ', $done['titles'] ).' - '.$done['books'].' '.KernelTools::tra( 'books,' ).' '.$done['files'].' '.KernelTools::tra( 'files.' );
 		$errors = array_merge( $errors, $done['errors'] );
 		$st = FisheyeAuthorWorkbench::status( $contentId );
 	}

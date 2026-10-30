@@ -60,7 +60,7 @@ if( $series !== '' ) {
 	// Loading files is quick, so it needs no button: any book whose folder holds files not yet loaded is loaded now (at most a batch per view).
 	if( !$st['error'] && !$st['files']['blocked'] && $st['files']['todo'] ) {
 		$done = FisheyeSeriesWorkbench::registerFiles( array_column( array_filter( $st['files']['books'], fn( $b ) => $b['todo'] ), 'id' ) );
-		$messages[] = $done['books'].' '.KernelTools::tra( 'books had their files loaded,' ).' '.$done['files'].' '.KernelTools::tra( 'files.' );
+		$messages[] = KernelTools::tra( 'Files loaded as this page opened' ).': '.implode( ', ', $done['titles'] ).' - '.$done['books'].' '.KernelTools::tra( 'books,' ).' '.$done['files'].' '.KernelTools::tra( 'files.' );
 		$errors = array_merge( $errors, $done['errors'] );
 		$st = FisheyeSeriesWorkbench::status( $series, $catalogues[$series] );
 	}
