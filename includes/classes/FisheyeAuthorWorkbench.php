@@ -151,7 +151,7 @@ class FisheyeAuthorWorkbench {
 		$abs = $folder !== null ? FisheyeBookFiles::libraryRoot().$folder.'/' : '';
 		$csv = $abs !== '' ? $abs.self::CATALOGUE : '';
 		$st = [ 'contentId' => $pContentId, 'name' => $name, 'folder' => $folder, 'abs' => $abs, 'error' => null, 'hasCatalogue' => $csv !== '' && is_file( $csv ),
-			'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'noIsbn' => 0, 'galleryId' => 0, 'galleryUrl' => '', 'qid' => '', 'hasContact' => false,
+			'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'noIsbn' => 0, 'aliases' => [], 'galleryId' => 0, 'galleryUrl' => '', 'qid' => '', 'hasContact' => false,
 			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'direct' => [], 'children' => [], 'proposal' => [ 'series' => [], 'unmatched' => [], 'empty' => [] ], 'singleFolders' => 0, 'moves' => [], 'seriesPending' => false,
 			'files' => [ 'blocked' => true, 'todo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
 		if( $name === '' ) {
@@ -190,6 +190,27 @@ class FisheyeAuthorWorkbench {
 		}
 
 		$st['catalogue'] = self::catalogueDrift( $folder, $csv, $st['hasCatalogue'] );
+
+		// A row whose title is the other half of a two-form title on a loaded row ("Treaty Planet" beside "Treaty at Doona / Treaty Planet") is that book
+		// under its other name: it counts as loaded and is not offered, so it cannot be made a second time.
+		$st['aliases'] = [];
+		$halves = [];
+		foreach( $st['rows'] as $row ) {
+			if( $row['book'] && str_contains( $row['title'], ' / ' ) ) {
+				foreach( explode( ' / ', $row['title'] ) as $half ) {
+					$halves[FisheyeSeries::titleKey( $half )] = $row['title'];
+				}
+			}
+		}
+		foreach( $st['missing'] as $n => $i ) {
+			$key = FisheyeSeries::titleKey( $st['rows'][$i]['title'] );
+			if( $key !== '' && isset( $halves[$key] ) && !str_contains( $st['rows'][$i]['title'], ' / ' ) ) {
+				$st['aliases'][] = [ 'title' => $st['rows'][$i]['title'], 'isbn' => $st['rows'][$i]['isbn'], 'of' => $halves[$key] ];
+				unset( $st['missing'][$n] );
+				$st['loaded']++;
+			}
+		}
+		$st['missing'] = array_values( $st['missing'] );
 
 		// A missing row that looks like a book the author already has under a fuller title ("His Dark Materials Northern Lights" for "Northern Lights") is
 		// shown against it and left unticked, so it is a choice and not a second copy.

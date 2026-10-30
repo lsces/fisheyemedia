@@ -25,6 +25,9 @@
 			{* ---- 1. Books ---- *}
 			<h3>1. {tr}Books{/tr}{if $st.hasCatalogue} <small>{$st.loaded} {tr}of{/tr} {$st.total} {tr}loaded{/tr}</small>{/if}</h3>
 			{include file="bitpackage:fisheyemedia/catalogue_drift_inc.tpl" catalogue=$st.catalogue actionUrl="`$smarty.const.FISHEYEMEDIA_PKG_URL`author_workbench.php" hidden=['gallery_id' => $st.galleryId]}
+			{if $st.aliases}
+				<p class="help-block">{tr}Another title of a book already loaded (not loaded again){/tr}: {foreach from=$st.aliases item=a name=al}{$a.title|escape}{if $a.isbn} ({$a.isbn|escape}){/if} - {tr}see{/tr} {$a.of|escape}{if !$smarty.foreach.al.last}; {/if}{/foreach}. {tr}Its row can be removed from the catalogue file.{/tr}</p>
+			{/if}
 			{if !$st.hasCatalogue}
 				<p class="text-muted">{tr}There is no AuthorCatalogue.csv in the author's folder, so the books are the ones already loaded.{/tr}</p>
 			{elseif $st.missing}
