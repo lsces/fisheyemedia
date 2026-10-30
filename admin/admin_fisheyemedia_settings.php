@@ -35,7 +35,7 @@ $formFisheyeMediaGeneral = [
 	],
 	"fisheye_library_storage_root" => [
 		'label' => 'Book Library Storage Path',
-		'note' => 'The folder that holds the book Library: one folder per author, then series, then book, with the ebook and audio book files inside (e.g. /home/media1/Library/). Leave blank to use the Library folder under the External Disk Storage Path above. Set it to put the Library on its own disk.',
+		'note' => 'The folder that holds the book Library: one folder per author, then series, then book, with the ebook and audio book files inside (e.g. /srv/media/Library/). Leave blank to use the Library folder under the External Disk Storage Path above. Set it to put the Library on its own disk.',
 	],
 	"fisheye_plex_db_path" => [
 		'label' => 'Plex Library Database File',
