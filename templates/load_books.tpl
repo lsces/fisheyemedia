@@ -77,12 +77,13 @@
 					<h3>{if $reviewKey}{tr}Read from the sheet{/tr}: {$reviewName|escape}{else}{tr}This author's books still to load{/tr}{/if}</h3>
 					<p class="help-block">{$booksLoaded}/{$booksTotal} {tr}loaded. Tick the books to load; at most{/tr} {$batchSize} {tr}are loaded per press, and loaded books drop off this list.{/tr}</p>
 					<table class="table table-condensed">
-						<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
+						<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Status{/tr}</th><th>{tr}Published{/tr}</th><th>{tr}With{/tr}</th><th>{tr}Series{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
 						<tbody>
 							{foreach from=$bookList item=book}
 								<tr>
 									<td><input type="checkbox" name="book[]" value="{$book.index}"{if $book.ticked} checked="checked"{/if} /></td>
 									<td>{$book.title|escape}</td>
+									<td>{if $book.ver.status == 'similar'}<strong>{tr}Possible duplicate{/tr}</strong>: {tr}already loaded as{/tr} <a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$book.ver.likeId}">#{$book.ver.likeId}</a>{if $book.ver.likeIsbn} ({$book.ver.likeIsbn|escape}){/if}{elseif $book.ver.status == 'repeat'}<strong>{tr}Repeated in the sheet{/tr}</strong>{else}{tr}New{/tr}{/if}</td>
 									<td>{$book.year|escape}</td>
 									<td>{foreach from=$book.coauthors item=other name=co}{$other|escape}{if !$smarty.foreach.co.last}, {/if}{/foreach}</td>
 									<td>{$book.series|escape}</td>
@@ -93,7 +94,7 @@
 											<a href="#" class="isbn-suggest" data-title="{$book.titleTerm}" data-author="{$book.authorTerm}">{tr}Suggest{/tr}</a>
 											<div class="isbn-options"></div>
 									</td>
-									<td><input type="text" class="form-control" name="isbn[{$book.index}]" value="{$book.isbn|escape}" placeholder="{tr}ISBN-10 or ISBN-13{/tr}" size="16" /></td>
+									<td><input type="text" class="form-control" name="isbn[{$book.index}]" value="{$book.isbn|escape}" data-sheet="{$book.isbn|escape}" placeholder="{tr}ISBN-10 or ISBN-13{/tr}" size="16" /></td>
 								</tr>
 							{/foreach}
 						</tbody>
@@ -133,12 +134,13 @@
 						<input type="hidden" name="find" value="{$findText|escape}" />
 						{if $useSeries}<input type="hidden" name="use_series" value="1" />{/if}
 						<table class="table table-condensed">
-							<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
+							<thead><tr><th></th><th>{tr}Title{/tr}</th><th>{tr}Status{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}Look for it{/tr}</th><th>{tr}ISBN{/tr}</th></tr></thead>
 							<tbody>
 								{foreach from=$allList item=book}
 									<tr>
 										<td><input type="checkbox" name="book[]" value="{$book.id}" /></td>
 										<td>{$book.title|escape}</td>
+										<td>{if $book.ver.status == 'similar'}<strong>{tr}Possible duplicate{/tr}</strong>: {tr}already loaded as{/tr} <a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$book.ver.likeId}">#{$book.ver.likeId}</a>{if $book.ver.likeIsbn} ({$book.ver.likeIsbn|escape}){/if}{elseif $book.ver.status == 'repeat'}<strong>{tr}Repeated in the sheet{/tr}</strong>{else}{tr}New{/tr}{/if}</td>
 										<td><a href="{$smarty.server.SCRIPT_NAME}?find={$book.group|escape:'url'}">{$book.authors|escape}</a>{if $book.groupUrl} <a href="{$book.groupUrl|escape}" title="{tr}Open the gallery{/tr}">&raquo;</a>{/if}</td>
 										<td>{$book.year|escape}</td>
 										<td>
@@ -148,7 +150,7 @@
 											<a href="#" class="isbn-suggest" data-title="{$book.titleTerm}" data-author="{$book.authorTerm}">{tr}Suggest{/tr}</a>
 											<div class="isbn-options"></div>
 										</td>
-										<td><input type="text" class="form-control" name="isbn[{$book.id}]" value="{$book.isbn|escape}" placeholder="{tr}ISBN-10 or ISBN-13{/tr}" size="16" /></td>
+										<td><input type="text" class="form-control" name="isbn[{$book.id}]" value="{$book.isbn|escape}" data-sheet="{$book.isbn|escape}" placeholder="{tr}ISBN-10 or ISBN-13{/tr}" size="16" /></td>
 									</tr>
 								{/foreach}
 							</tbody>
@@ -207,7 +209,13 @@
 		}
 	});
 	document.addEventListener('input', function (e) {
-		if (e.target.matches && e.target.matches('input[name^="isbn"]')) { tickFor(e.target); }
+		if (e.target.matches && e.target.matches('input[name^="isbn"]')) {
+			tickFor(e.target);
+			var sheet = (e.target.dataset.sheet || '').replace(/[^0-9Xx]/g, ''), typed = e.target.value.replace(/[^0-9Xx]/g, '');
+			var warn = e.target.parentNode.querySelector('.isbn-differs');
+			if (!warn) { warn = document.createElement('span'); warn.className = 'isbn-differs help-block'; e.target.parentNode.appendChild(warn); }
+			warn.textContent = sheet && typed && typed !== sheet ? 'Differs from the sheet (' + e.target.dataset.sheet + ') - this book will not be loaded.' : '';
+		}
 	});
 	document.addEventListener('DOMContentLoaded', function () {
 		var todo = Array.prototype.filter.call(document.querySelectorAll('.isbn-suggest'), function (l) { var i = rowInput(l); return i && i.value.trim() === ''; }).slice(0, 10);

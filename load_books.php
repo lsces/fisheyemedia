@@ -93,6 +93,16 @@ if( !empty( $_REQUEST['process_group'] ) ) {
 				}
 				continue;
 			}
+			// The sheet's own ISBN is the master: a different number posted for a row that has one is refused, not loaded under that other
+			// edition (how a second copy of a book got in). A row with no ISBN in the sheet takes the typed one.
+			$sheetIsbn = (string)( $groups[$groupKey]['rows'][$typedIndex]['isbn13'] ?? '' );
+			if( $sheetIsbn !== '' && $normalised['isbn13'] !== $sheetIsbn ) {
+				$typedErrors[] = $groups[$groupKey]['rows'][$typedIndex]['title'].': '.KernelTools::tra( 'not loaded - the ISBN typed differs from the sheet\'s' ).' ('.$normalised['isbn13'].' / '.$sheetIsbn.')';
+				if( $pickedRows !== null ) {
+					$pickedRows = array_values( array_diff( $pickedRows, [ $typedIndex ] ) );
+				}
+				continue;
+			}
 			$groups[$groupKey]['rows'][$typedIndex]['isbn13'] = $normalised['isbn13'];
 			$groups[$groupKey]['rows'][$typedIndex]['isbn10'] = $normalised['isbn10'];
 		}
@@ -125,6 +135,14 @@ if( !empty( $_REQUEST['process_all'] ) ) {
 		$normalised = FisheyeBook::normaliseIsbn( $typedIsbn );
 		if( $normalised['isbn13'] === '' ) {
 			$typedErrors[] = $groups[$groupKeys[$g]]['rows'][$ri]['title'].': '.KernelTools::tra( 'not a valid ISBN' ).' ('.$typedIsbn.')';
+			if( isset( $byGroup[$g] ) ) {
+				$byGroup[$g] = array_values( array_diff( $byGroup[$g], [ $ri ] ) );
+			}
+			continue;
+		}
+		$sheetIsbn = (string)( $groups[$groupKeys[$g]]['rows'][$ri]['isbn13'] ?? '' );
+		if( $sheetIsbn !== '' && $normalised['isbn13'] !== $sheetIsbn ) {
+			$typedErrors[] = $groups[$groupKeys[$g]]['rows'][$ri]['title'].': '.KernelTools::tra( 'not loaded - the ISBN typed differs from the sheet\'s' ).' ('.$normalised['isbn13'].' / '.$sheetIsbn.')';
 			if( isset( $byGroup[$g] ) ) {
 				$byGroup[$g] = array_values( array_diff( $byGroup[$g], [ $ri ] ) );
 			}
@@ -190,6 +208,23 @@ foreach( $groups as $key => $group ) {
 // From an author's gallery: the books still to load (this author as primary author, in catalogue order, the
 // next batch pre-ticked; loaded ones are left off), and those they only co-wrote - filed here when the primary author's books are loaded, so they
 // are listed for information, not processed from this page.
+// What loading a listed row would do: 'new', 'similar' (a book with the same title and first author is already loaded under another
+// ISBN - another edition, or the same book twice) or 'repeat' (an earlier row of this same sheet read has that title and author).
+// Nothing is ticked for 'similar' or 'repeat' without a decision here.
+$statusSeen = [];
+$statusFor = function( array $pRow ) use ( &$statusSeen ): array {
+	$key = mb_strtolower( trim( (string)$pRow['title'] ).'|'.( $pRow['authors'][0] ?? '' ) );
+	if( $like = FisheyeBook::findLookalike( $pRow ) ) {
+		$statusSeen[$key] = true;
+		return [ 'status' => 'similar', 'likeId' => $like['id'], 'likeTitle' => $like['title'], 'likeIsbn' => $like['isbn'] ];
+	}
+	if( isset( $statusSeen[$key] ) ) {
+		return [ 'status' => 'repeat' ];
+	}
+	$statusSeen[$key] = true;
+	return [ 'status' => 'new' ];
+};
+
 $bookList = [];
 $booksTotal = $booksLoaded = 0;
 $coCredited = [];
@@ -210,6 +245,7 @@ if( $authorGallery ) {
 		}
 		$bookList[] = [ 'index' => $rowIndex, 'title' => $row['title'], 'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ), 'isbn' => $row['isbn'] ?? '',
 			'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => $seriesPosition[$rowIndex] ?? '', 'ticked' => false,
+			'ver' => $statusFor( $row ),
 			'terms' => rawurlencode( trim( $row['title'].' '.( $row['authors'][0] ?? '' ) ) ), 'titleTerm' => rawurlencode( $row['title'] ), 'authorTerm' => rawurlencode( (string)( $row['authors'][0] ?? '' ) ) ];
 	}
 	$thisAuthor = mb_strtolower( FisheyeBookCredits::canonicalName( $authorGallery->getTitle() ) );
@@ -236,7 +272,7 @@ if( !$authorGallery && $reviewKey !== null ) {
 		$firstAuthor = (string)( $row['authors'][0] ?? '' );
 		$bookList[] = [ 'index' => $rowIndex, 'title' => $row['title'], 'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ),
 			'isbn' => (string)( $row['isbn13'] ?? '' ), 'coauthors' => array_slice( (array)( $row['authors'] ?? [] ), 1 ), 'series' => '',
-			'ticked' => false, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
+			'ver' => $statusFor( $row ), 'ticked' => false, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
 			'titleTerm' => rawurlencode( $row['title'] ), 'authorTerm' => rawurlencode( $firstAuthor ) ];
 	}
 }
@@ -261,7 +297,7 @@ if( !$authorGallery && $reviewKey === null ) {
 			$firstAuthor = (string)( $row['authors'][0] ?? '' );
 			$allList[] = [ 'id' => $g.'_'.$rowIndex, 'group' => $group['name'], 'groupUrl' => '', 'kind' => $group['kind'], 'title' => $row['title'],
 				'year' => substr( (string)( $row['published'] ?? '' ), 0, 4 ), 'authors' => $names, 'isbn' => (string)( $row['isbn13'] ?? '' ),
-				'ticked' => false, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
+				'ver' => $statusFor( $row ), 'ticked' => false, 'terms' => rawurlencode( trim( $row['title'].' '.$firstAuthor ) ),
 				'titleTerm' => rawurlencode( $row['title'] ), 'authorTerm' => rawurlencode( $firstAuthor ) ];
 		}
 	}
