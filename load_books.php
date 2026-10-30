@@ -188,15 +188,26 @@ $galleryUrlFor = function( string $pName ): string {
 	return $gallery->isValid() ? (string)$gallery->getDisplayUrl() : '';
 };
 
+// A plain visit - no author, no review, no search, no press, no upload - only says which sheet is loaded. Matching every row of a big sheet against the
+// database before anything has been asked for was the wait this page opened with, even when the visit was to upload a different sheet; "Show the books
+// still to load" (list=1), a search, a press or an upload does the matching.
+$lazy = !$authorGallery && $reviewKey === null && empty( $_REQUEST['list'] ) && $findText === '' && ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) !== 'POST';
+// Whether a row's book is loaded, looked up once however many lists ask.
+$loadedCache = [];
+$isLoaded = function( array $pRow ) use ( &$loadedCache ): bool {
+	$key = (string)( $pRow['isbn13'] ?? '' ).'|'.mb_strtolower( (string)( $pRow['title'] ?? '' ).'|'.( $pRow['authors'][0] ?? '' ) );
+	return $loadedCache[$key] ??= (bool)FisheyeBook::findContentId( $pRow );
+};
+
 // What is still to do per group - recounted after any processing above.
 $pending = [];
-foreach( $groups as $key => $group ) {
+foreach( $lazy ? [] : $groups as $key => $group ) {
 	if( $onlyKey !== null && $key !== $onlyKey ) {
 		continue;
 	}
 	$loaded = 0;
 	foreach( $group['rows'] as $row ) {
-		if( FisheyeBook::findContentId( $row ) ) {
+		if( $isLoaded( $row ) ) {
 			$loaded++;
 		}
 	}
@@ -280,13 +291,13 @@ if( !$authorGallery && $reviewKey !== null ) {
 // The combined list: every book still to load across all groups (narrowed by the find box), grouped by author, the first LOAD_BOOKS_BATCH ticked.
 $allList = [];
 $allTotal = $allLoaded = 0;
-if( !$authorGallery && $reviewKey === null ) {
+if( !$authorGallery && $reviewKey === null && !$lazy ) {
 	$needle = mb_strtolower( $findText );
 	foreach( $groups as $groupKey => $group ) {
 		$g = array_search( $groupKey, $groupKeys, true );
 		foreach( $group['rows'] as $rowIndex => $row ) {
 			$allTotal++;
-			if( FisheyeBook::findContentId( $row ) ) {
+			if( $isLoaded( $row ) ) {
 				$allLoaded++;
 				continue;
 			}
@@ -342,6 +353,7 @@ if( $result ) {
 	$results[] = $result;
 }
 $gBitSmarty->assign( 'results', $results );
+$gBitSmarty->assign( 'lazy', $lazy );
 $gBitSmarty->assign( 'allList', $allList );
 $gBitSmarty->assign( 'allTotal', $allTotal );
 $gBitSmarty->assign( 'allLoaded', $allLoaded );

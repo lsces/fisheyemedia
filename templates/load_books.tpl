@@ -121,6 +121,12 @@
 				{if !$bookList}
 					<p>{if $authorInCatalogue}{tr}Every book on the catalogue for this author is already loaded.{/tr}{else}{tr}This author has no books of their own as primary author - books they co-wrote are filed here when the primary author's books are loaded.{/tr}{/if}</p>
 				{/if}
+			{elseif $lazy && $catalogueRows}
+				<form method="get" action="{$smarty.server.SCRIPT_NAME}" class="form-inline">
+					<input type="text" class="form-control" name="find" value="" placeholder="{tr}Author or title (any part){/tr}" />
+					<input type="submit" class="btn btn-default" value="{tr}Show{/tr}" />
+				</form>
+				<p>{tr}The sheet loaded is{/tr} <code>{$catalogueFile|escape}</code> ({$catalogueRows} {tr}rows{/tr}). <a href="{$smarty.server.SCRIPT_NAME}?list=1">{tr}Show the books still to load{/tr}</a> {tr}(checks each row against the database), search for an author or title, or upload another sheet above.{/tr}</p>
 			{elseif $allTotal}
 				<form method="get" action="{$smarty.server.SCRIPT_NAME}" class="form-inline">
 					<input type="text" class="form-control" name="find" value="{$findText|escape}" placeholder="{tr}Author or title (any part){/tr}" />
