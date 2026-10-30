@@ -2,7 +2,7 @@
 /**
  * The catalogue .csv files kept in the Library tree - Library/<author>/AuthorCatalogue.csv and Library/Various Authors/<series>/SeriesCatalogue.csv - brought up
  * to date from the database without losing a row. A row whose book is in the database (matched by ISBN-13, else title) gets its EMPTY ISBN-13, ISBN-10, Publisher,
- * Year and Authors cells filled; a cell that already holds something is never changed (a differing ISBN or year is only reported); database books the file lacks are
+ * Year, Authors, Series and Series no cells filled (the series and place the book has been given in the galleries); a cell that already holds something is never changed (a differing ISBN or year is only reported); database books the file lacks are
  * added at the end; a row with no book yet (waiting for Add Books) is left exactly as it is. An author folder with no catalogue gets one written from the database.
  *
  * Nothing is regenerated from the database alone: that would drop every row still waiting to be loaded.
@@ -13,6 +13,9 @@ namespace Bitweaver\Fisheyemedia;
 
 class FisheyeCatalogueMerge {
 	public const AUTHOR_FILE = 'AuthorCatalogue.csv';
+	public const SERIES_FILE = 'SeriesCatalogue.csv';
+	/** Copies of a catalogue kept before it is rewritten - the newest few, as the database backups keep the newest few. */
+	public const BACKUPS_KEPT = 5;
 	public const HEADER = [ 'Ref', 'Category', 'ISBN-13', 'ISBN-10', 'Authors', 'Publisher', 'Title', 'Year', 'Series', 'Series no' ];
 
 	/**
@@ -40,6 +43,51 @@ class FisheyeCatalogueMerge {
 			return self::AUTHOR_FILE.': '.$error;
 		}
 		return self::AUTHOR_FILE.' '.\Bitweaver\KernelTools::tra( 'updated' ).': '.count( $plan['filled'] ).' '.\Bitweaver\KernelTools::tra( 'cells filled,' ).' '.count( $plan['added'] ).' '.\Bitweaver\KernelTools::tra( 'books added.' );
+	}
+
+	/**
+	 * The same for a Various Authors series' catalogue (Library/Various Authors/<series>/SeriesCatalogue.csv).
+	 *
+	 * @return string|null  a line to show, or null when there was nothing to do
+	 */
+	public static function updateSeries( string $pName ): ?string {
+		$root = FisheyeBookFiles::libraryRoot();
+		$path = $root !== '' ? $root.FisheyeMediaGallery::VARIOUS_AUTHORS.'/'.str_replace( '/', '-', trim( $pName ) ).'/'.self::SERIES_FILE : '';
+		if( $path === '' || !is_file( $path ) ) {
+			return null;
+		}
+		$plan = self::plan( [ 'kind' => 'series', 'name' => $pName, 'path' => $path, 'exists' => true ] );
+		if( $plan['error'] ) {
+			return self::SERIES_FILE.': '.$plan['error'];
+		}
+		if( !$plan['changes'] ) {
+			return null;
+		}
+		if( $error = self::write( $plan ) ) {
+			return self::SERIES_FILE.': '.$error;
+		}
+		return self::SERIES_FILE.' '.\Bitweaver\KernelTools::tra( 'updated' ).': '.count( $plan['filled'] ).' '.\Bitweaver\KernelTools::tra( 'cells filled,' ).' '.count( $plan['added'] ).' '.\Bitweaver\KernelTools::tra( 'books added.' );
+	}
+
+	/**
+	 * Put the file's year into the database for the books given (a catalogue and the database disagreeing on a year, the file being right): each book's
+	 * published row and event_time are set together. Recomputed from the file now; only a Year conflict of a listed book is touched.
+	 *
+	 * @param list<int> $pBookIds
+	 * @return int  books changed
+	 */
+	public static function useFileYears( array $pFile, array $pBookIds ): int {
+		$done = 0;
+		foreach( self::plan( $pFile )['conflicts'] as $conflict ) {
+			if( $conflict[1] !== 'Year' || !in_array( (int)$conflict[4], $pBookIds, true ) ) {
+				continue;
+			}
+			$book = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => (int)$conflict[4] ] );
+			if( $book instanceof FisheyeBook && $book->setPublished( $conflict[2] ) ) {
+				$done++;
+			}
+		}
+		return $done;
 	}
 
 	/** Title as compared: case, punctuation, a leading The/A/An and '&' against 'and' ignored. */
@@ -181,7 +229,8 @@ class FisheyeCatalogueMerge {
 			}
 			$used[$id] = true;
 			$b = $books[$id];
-			$want = [ 'ISBN-13' => $b['isbn13'], 'ISBN-10' => $b['isbn10'], 'Publisher' => $b['publisher'], 'Year' => $b['year'], 'Authors' => implode( '|', $b['authors'] ) ];
+			$want = [ 'ISBN-13' => $b['isbn13'], 'ISBN-10' => $b['isbn10'], 'Publisher' => $b['publisher'], 'Year' => $b['year'], 'Authors' => implode( '|', $b['authors'] ),
+				'Series' => $b['series'], 'Series no' => $b['pos'] ];
 			foreach( $want as $col => $val ) {
 				if( $val === '' ) {
 					continue;
@@ -190,7 +239,7 @@ class FisheyeCatalogueMerge {
 					$row[$col] = $val;
 					$plan['filled'][] = [ $row['Title'], $col, $val ];
 				} elseif( trim( $row[$col] ) !== $val && in_array( $col, [ 'ISBN-13', 'Year' ], true ) ) {
-					$plan['conflicts'][] = [ $row['Title'], $col, trim( $row[$col] ), $val ];
+					$plan['conflicts'][] = [ $row['Title'], $col, trim( $row[$col] ), $val, $id ];
 				}
 			}
 		}
@@ -208,7 +257,7 @@ class FisheyeCatalogueMerge {
 	}
 
 	/**
-	 * Write a planned catalogue: the old file first goes to storage/fisheyemedia/catalogue backups/, then the merged rows are written, Ref renumbered.
+	 * Write a planned catalogue: the old file first goes to storage/fisheyemedia/catalogue backups/ (the newest BACKUPS_KEPT per catalogue are kept), then the merged rows are written, Ref renumbered.
 	 *
 	 * @return string|null  an error, or null on success
 	 */
@@ -219,8 +268,15 @@ class FisheyeCatalogueMerge {
 		if( $pPlan['exists'] ) {
 			$keep = FISHEYEMEDIA_IMPORT_PATH.'catalogue backups/';
 			\Bitweaver\KernelTools::mkdir_p( $keep );
-			if( !copy( $pPlan['path'], $keep.date( 'Ymd-His' ).' - '.basename( dirname( $pPlan['path'] ) ).' - '.basename( $pPlan['path'] ) ) ) {
+			$suffix = ' - '.basename( dirname( $pPlan['path'] ) ).' - '.basename( $pPlan['path'] );
+			if( !copy( $pPlan['path'], $keep.date( 'Ymd-His' ).$suffix ) ) {
 				return \Bitweaver\KernelTools::tra( 'the old file could not be kept, nothing changed' );
+			}
+			// Only the newest few copies of this catalogue are kept (the names start with the date and time).
+			$copies = glob( $keep.'*'.$suffix ) ?: [];
+			rsort( $copies );
+			foreach( array_slice( $copies, self::BACKUPS_KEPT ) as $old ) {
+				@unlink( $old );
 			}
 		}
 		if( !( $fh = fopen( $pPlan['path'], 'w' ) ) ) {

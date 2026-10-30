@@ -423,6 +423,24 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $counts;
 	}
 
+	/**
+	 * Set the published date of an existing book from a text such as '2017': the 'published' row and event_time (which dates it in a series and the
+	 * calendar) together, so the two cannot disagree. A text that is not a date is refused.
+	 */
+	public function setPublished( string $pPublished ): bool {
+		$pPublished = trim( $pPublished );
+		$timestamp = self::publishedToTimestamp( $pPublished );
+		if( $pPublished === '' || $timestamp === null || !$this->isValid() ) {
+			return false;
+		}
+		$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => (string)$this->getField( 'data' ), 'event_time' => $timestamp ];
+		if( !$this->store( $storeHash ) ) {
+			return false;
+		}
+		$this->reconcileXrefItem( 'published', [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => $pPublished ] ], null );
+		return true;
+	}
+
 	// ---- Images -------------------------------------------------------------------------------
 	// A book keeps its covers and scans in its own storage/attachments/<branch>/, as an album does:
 	// each an 'image' row (the Images tab), the chosen one also its thumbnail. The artwork helpers
