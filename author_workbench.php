@@ -23,6 +23,10 @@ if( !$gContent || !$gContent->isValid() ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No gallery exists with the given ID' ) );
 }
 $contentId = (int)$gContent->mContentId;
+// The Various Authors gallery and a series filed under it are worked in the series workbench, whose steps run from a SeriesCatalogue.csv.
+if( $toSeries = FisheyeSeriesWorkbench::redirectFor( $contentId ) ) {
+	KernelTools::bit_redirect( $toSeries );
+}
 $messages = [];
 $errors = [];
 

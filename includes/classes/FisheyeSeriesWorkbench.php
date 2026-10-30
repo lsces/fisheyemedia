@@ -20,6 +20,27 @@ class FisheyeSeriesWorkbench {
 	public const BATCH = 10;
 
 	/**
+	 * Where a gallery's workbench is when it is a Various Authors one: the Various Authors gallery itself goes to the list of series, and a series
+	 * filed directly under it to that series. Anything else (an author's gallery, an author's own series) has no answer here.
+	 *
+	 * @return ?string  a url, or null
+	 */
+	public static function redirectFor( int $pContentId ): ?string {
+		global $gBitDb;
+		$vaId = FisheyeBookCredits::libraryGalleryFor( FisheyeMediaGallery::VARIOUS_AUTHORS );
+		if( !$vaId ) {
+			return null;
+		}
+		if( $pContentId === (int)$vaId ) {
+			return FISHEYEMEDIA_PKG_URL.'series_workbench.php';
+		}
+		$title = $gBitDb->getOne(
+			"SELECT lc.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+			 WHERE m.`gallery_content_id` = ? AND m.`item_content_id` = ? AND lc.`content_type_guid` = 'fisheyeseries'", [ (int)$vaId, $pContentId ] );
+		return (string)$title !== '' ? FISHEYEMEDIA_PKG_URL.'series_workbench.php?series='.rawurlencode( (string)$title ) : null;
+	}
+
+	/**
 	 * Where a series stands.
 	 *
 	 * @return array{name:string,error:?string,plan:array,parsed:list<array>,rows:list<array>,total:int,loaded:int,missing:list<int>,
