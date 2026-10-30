@@ -53,6 +53,7 @@
 
 				{* ---- 1. Books ---- *}
 				<h3>1. {tr}Books{/tr} <small>{$st.loaded} {tr}of{/tr} {$st.total} {tr}loaded{/tr}</small></h3>
+				{include file="bitpackage:fisheyemedia/catalogue_drift_inc.tpl" catalogue=$st.catalogue actionUrl="`$smarty.const.FISHEYEMEDIA_PKG_URL`series_workbench.php" hidden=['series' => $series]}
 				{if $st.missing}
 					<p class="help-block">{tr}These books are in the catalogue but not in the database. Each is filed in its author's Library gallery under the ISBN the catalogue gives; at most{/tr} {$batch} {tr}are loaded per press. A book already there under the same title and first author is counted as loaded, not made again.{/tr}</p>
 					{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`series_workbench.php"}
@@ -110,29 +111,22 @@
 					<p class="text-muted">{tr}Once the series is filed, each book's folder is found through it.{/tr}</p>
 				{else}
 					{if $st.files.books}
-						<p class="help-block">{tr}Ticked books have files in their folder that are not all loaded yet. Loading rebuilds the book's ebook, audio book and extra rows; at most{/tr} {$filesBatch} {tr}per press.{/tr}</p>
-						{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`series_workbench.php"}
-							<input type="hidden" name="series" value="{$series|escape}" />
-							<table class="table table-condensed">
-								<thead><tr><th></th><th>{tr}Book{/tr}</th><th>{tr}Folder{/tr}</th><th>{tr}In the folder{/tr}</th><th>{tr}Loaded{/tr}</th></tr></thead>
-								<tbody>
-									{foreach from=$st.files.books item=b}
-										<tr>
-											<td><input type="checkbox" name="book[]" value="{$b.id}"{if $b.todo} checked="checked"{/if} /></td>
-											<td><a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$b.id}">{$b.title|escape}</a></td>
-											<td>{$b.folder|escape}</td>
-											<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}</td>
-											<td>{$b.have}{if $b.todo} <span class="label label-warning">{tr}to load{/tr}</span>{/if}</td>
-										</tr>
-									{/foreach}
-								</tbody>
-							</table>
-							<div class="form-group submit">
-								<input type="submit" class="btn btn-primary" name="register_files" value="{tr}Load the ticked books' files{/tr}" />
-							</div>
-						{/form}
-					{/if}
-					{if $st.files.noFolder}
+					<p class="help-block">{tr}Files load by themselves: a book whose folder holds files that are not all loaded yet is loaded when this page opens (rebuilding its ebook, audio book and extra rows, at most{/tr} {$filesBatch} {tr}books a time).{/tr}</p>
+					<table class="table table-condensed">
+						<thead><tr><th>{tr}Book{/tr}</th><th>{tr}Folder{/tr}</th><th>{tr}In the folder{/tr}</th><th>{tr}Loaded{/tr}</th></tr></thead>
+						<tbody>
+							{foreach from=$st.files.books item=b}
+								<tr>
+									<td><a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$b.id}">{$b.title|escape}</a></td>
+									<td>{$b.folder|escape}</td>
+									<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}</td>
+									<td>{$b.have}{if $b.todo} <span class="label label-warning">{tr}to load{/tr}</span>{/if}</td>
+								</tr>
+							{/foreach}
+						</tbody>
+					</table>
+				{/if}
+{if $st.files.noFolder}
 						<p>{tr}No folder, so no files to load for{/tr}: {foreach from=$st.files.noFolder item=b}<a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$b.id}">{$b.title|escape}</a>{if !$b@last}, {/if}{/foreach}</p>
 					{/if}
 					{if $st.files.unmatched}

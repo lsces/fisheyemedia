@@ -38,20 +38,32 @@ if( $series !== '' ) {
 				$errors[] = $error;
 			}
 		}
+	} elseif( !empty( $_REQUEST['update_catalogue'] ) && !$st['error'] ) {
+		$messages[] = FisheyeCatalogueMerge::updateSeries( $series ) ?? KernelTools::tra( 'The catalogue file had nothing to change.' );
+	} elseif( !empty( $_REQUEST['use_file_years'] ) && !$st['error'] ) {
+		$n = FisheyeCatalogueMerge::useFileYears( [ 'kind' => 'series', 'name' => $series, 'path' => $catalogues[$series], 'exists' => true ], array_map( 'intval', array_keys( (array)( $_REQUEST['year_book'] ?? [] ) ) ) );
+		$messages[] = $n.' '.KernelTools::tra( 'books now have the catalogue file\'s year.' );
 	} elseif( !empty( $_REQUEST['file_series'] ) && !$st['error'] ) {
 		$done = FisheyeSeriesWorkbench::fileSeries( $st, array_keys( (array)( $_REQUEST['move'] ?? [] ) ) );
+		$line = FisheyeCatalogueMerge::updateSeries( $series );
+		if( $line ) {
+			$messages[] = $line;
+		}
 		if( $done['error'] ) {
 			$errors[] = $done['error'];
 		} else {
 			$messages[] = $done['added'].' '.KernelTools::tra( 'books filed' ).', '.$done['made'].' '.KernelTools::tra( 'author series made' ).', '.$done['linked'].' '.KernelTools::tra( 'linked' ).', '
 				.$done['moved'].' '.KernelTools::tra( 'books moved into them' ).( $done['missing'] ? ', '.$done['missing'].' '.KernelTools::tra( 'not in the database' ) : '' ).'.';
 		}
-	} elseif( !empty( $_REQUEST['register_files'] ) && !$st['error'] ) {
-		$done = FisheyeSeriesWorkbench::registerFiles( array_map( 'intval', (array)( $_REQUEST['book'] ?? [] ) ) );
-		$messages[] = $done['books'].' '.KernelTools::tra( 'books scanned,' ).' '.$done['files'].' '.KernelTools::tra( 'files loaded.' );
-		$errors = array_merge( $errors, $done['errors'] );
 	}
 	$st = FisheyeSeriesWorkbench::status( $series, $catalogues[$series] );
+	// Loading files is quick, so it needs no button: any book whose folder holds files not yet loaded is loaded now (at most a batch per view).
+	if( !$st['error'] && !$st['files']['blocked'] && $st['files']['todo'] ) {
+		$done = FisheyeSeriesWorkbench::registerFiles( array_column( array_filter( $st['files']['books'], fn( $b ) => $b['todo'] ), 'id' ) );
+		$messages[] = $done['books'].' '.KernelTools::tra( 'books had their files loaded,' ).' '.$done['files'].' '.KernelTools::tra( 'files.' );
+		$errors = array_merge( $errors, $done['errors'] );
+		$st = FisheyeSeriesWorkbench::status( $series, $catalogues[$series] );
+	}
 	$gBitSmarty->assign( 'st', $st );
 } else {
 	$overview = [];

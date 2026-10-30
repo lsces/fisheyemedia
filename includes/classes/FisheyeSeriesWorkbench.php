@@ -31,12 +31,14 @@ class FisheyeSeriesWorkbench {
 		global $gBitDb;
 		$plan = FisheyeVariousAuthors::plan( $pName, $pFile );
 		$st = [ 'name' => $pName, 'error' => $plan['error'], 'plan' => $plan, 'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'differs' => [],
-			'seriesUrl' => '', 'filing' => [ 'pending' => false, 'notes' => [] ], 'files' => [ 'blocked' => true, 'todo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
+			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'seriesUrl' => '', 'filing' => [ 'pending' => false, 'notes' => [] ], 'files' => [ 'blocked' => true, 'todo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
 		if( $plan['error'] ) {
 			return $st;
 		}
 		$parsed = FisheyeBookCatalogue::readBooks( $pFile );
 		$st['parsed'] = $parsed['rows'] ?? [];
+		$merge = FisheyeCatalogueMerge::plan( [ 'kind' => 'series', 'name' => $pName, 'path' => $pFile, 'exists' => true ] );
+		$st['catalogue'] = [ 'filled' => count( $merge['filled'] ), 'added' => $merge['added'], 'conflicts' => $merge['conflicts'], 'changes' => $merge['changes'], 'error' => $merge['error'] ];
 		// The series' own gallery under Various Authors, once it exists.
 		$st['seriesUrl'] = '';
 		if( $plan['seriesId'] && ( $seriesGallery = \Bitweaver\Liberty\LibertyContent::getLibertyObject( (int)$plan['seriesId'] ) ) && $seriesGallery->isValid() ) {
@@ -85,7 +87,7 @@ class FisheyeSeriesWorkbench {
 
 		// Files: only once the series is filed, since a book's folder is found through its galleries.
 		if( !$st['filing']['pending'] ) {
-			$st['files'] = self::filesStatus( $pName, $st['rows'] );
+			$st['files'] = self::filesStatus( $st['rows'], FisheyeMediaGallery::VARIOUS_AUTHORS.'/'.$pName.'/' );
 		}
 
 		if( $st['missing'] ) {
@@ -101,8 +103,14 @@ class FisheyeSeriesWorkbench {
 		return $st;
 	}
 
-	/** The files step: for each loaded book, its folder, what is in it and how many rows it has already. */
-	private static function filesStatus( string $pName, array $pRows ): array {
+	/**
+	 * The files step: for each loaded book, its folder, what is in it and how many rows it has already.
+	 *
+	 * @param list<array{book:?int,title:string}> $pRows  the books to look at (rows with no book are passed over)
+	 * @param string $pBaseRel  the folder under the Library root the books live in, with its closing slash ('Various Authors/<series>/', '<author>/'),
+	 *                          used to list the folders in it that no book resolved to
+	 */
+	public static function filesStatus( array $pRows, string $pBaseRel ): array {
 		global $gBitDb;
 		$files = [ 'blocked' => false, 'todo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ];
 		$matched = [];
@@ -127,16 +135,36 @@ class FisheyeSeriesWorkbench {
 			$files['books'][] = [ 'id' => (int)$row['book'], 'title' => $row['title'], 'folder' => $preview['folder'], 'ebook' => $preview['ebook'], 'audiobook' => $preview['audiobook'],
 				'extra' => $preview['extra'], 'have' => $have, 'todo' => $todo ];
 		}
-		// Folders in the series folder that no loaded book resolved to: the books still to catalogue.
-		$base = FisheyeBookFiles::libraryRoot().FisheyeMediaGallery::VARIOUS_AUTHORS.'/'.$pName.'/';
-		if( is_dir( $base ) ) {
-			foreach( array_diff( scandir( $base ) ?: [], [ '.', '..' ] ) as $dir ) {
-				if( $dir[0] !== '.' && is_dir( $base.$dir ) && !in_array( strtolower( $dir ), [ 'pictures', 'audio' ], true ) && !isset( $matched[FisheyeMediaGallery::VARIOUS_AUTHORS.'/'.$pName.'/'.$dir] ) ) {
-					$files['unmatched'][] = $dir;
+		$files['unmatched'] = self::unmatchedFolders( $pBaseRel, $matched );
+		return $files;
+	}
+
+	/**
+	 * Folders under a Library folder that no loaded book resolved to - the books still to catalogue. A folder that holds folders of its own is a
+	 * series folder and its folders are the books; one that does not is a book.
+	 *
+	 * @param array<string,bool> $pMatched  the book folders found, without closing slash, relative to the Library root
+	 * @return list<string>  relative to $pBaseRel
+	 */
+	private static function unmatchedFolders( string $pBaseRel, array $pMatched ): array {
+		$base = FisheyeBookFiles::libraryRoot().$pBaseRel;
+		$out = [];
+		if( !is_dir( $base ) ) {
+			return $out;
+		}
+		$skip = fn( string $pDir ): bool => $pDir === '' || $pDir[0] === '.' || in_array( strtolower( $pDir ), [ 'pictures', 'audio' ], true );
+		foreach( array_diff( scandir( $base ) ?: [], [ '.', '..' ] ) as $dir ) {
+			if( $skip( $dir ) || !is_dir( $base.$dir ) ) {
+				continue;
+			}
+			$inner = array_filter( array_diff( scandir( $base.$dir ) ?: [], [ '.', '..' ] ), fn( $d ) => !$skip( $d ) && is_dir( $base.$dir.'/'.$d ) );
+			foreach( $inner ? array_map( fn( $d ) => $dir.'/'.$d, $inner ) : [ $dir ] as $rel ) {
+				if( !isset( $pMatched[rtrim( $pBaseRel.$rel, '/' )] ) ) {
+					$out[] = $rel;
 				}
 			}
 		}
-		return $files;
+		return $out;
 	}
 
 	/**
@@ -144,15 +172,33 @@ class FisheyeSeriesWorkbench {
 	 * books from a sheet does; the series step then puts it in the series.
 	 *
 	 * @param list<int> $pPicked
+	 * @param array<int,string> $pIsbns  ISBNs typed or picked per row index
 	 * @return list<array>  the loader's result per author gallery
 	 */
-	public static function loadMissing( array $pStatus, array $pPicked ): array {
+	public static function loadMissing( array $pStatus, array $pPicked, array $pIsbns = [] ): array {
 		$groups = [];
+		$typedErrors = [];
 		foreach( $pPicked as $i ) {
 			if( !in_array( $i, $pStatus['missing'], true ) || !isset( $pStatus['parsed'][$i] ) ) {
 				continue;
 			}
 			$row = $pStatus['parsed'][$i];
+			// An ISBN typed or picked for a row. The catalogue's own ISBN is the master: a row that has one is never loaded under another, and a number
+			// that fails its check digit is reported, not loaded. A row with none takes the typed one.
+			$typed = htmlspecialchars_decode( trim( (string)( $pIsbns[$i] ?? '' ) ), ENT_NOQUOTES );
+			if( $typed !== '' ) {
+				$normalised = FisheyeBook::normaliseIsbn( $typed );
+				if( $normalised['isbn13'] === '' ) {
+					$typedErrors[] = $row['title'].': not a valid ISBN ('.$typed.')';
+					continue;
+				}
+				if( $row['isbn13'] !== '' && $normalised['isbn13'] !== $row['isbn13'] ) {
+					$typedErrors[] = $row['title'].': not loaded - the ISBN typed differs from the catalogue\'s ('.$normalised['isbn13'].' / '.$row['isbn13'].')';
+					continue;
+				}
+				$row['isbn13'] = $normalised['isbn13'];
+				$row['isbn10'] = $normalised['isbn10'];
+			}
 			$author = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
 			if( $author !== '' && FisheyeBookCredits::libraryGalleryFor( $author ) ) {
 				$groups['a|'.mb_strtolower( $author )] ??= [ 'kind' => 'author', 'name' => $author, 'rows' => [] ];
@@ -173,6 +219,9 @@ class FisheyeSeriesWorkbench {
 			$one = FisheyeBookLoader::loadGroup( $group, null, false, null, $left );
 			$left -= $one['created'] + $one['already'] + count( $one['errors'] );
 			$results[] = $one;
+		}
+		if( $typedErrors ) {
+			$results[] = [ 'created' => 0, 'already' => 0, 'errors' => $typedErrors, 'group' => '', 'details' => [] ];
 		}
 		return $results;
 	}
