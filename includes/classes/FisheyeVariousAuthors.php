@@ -37,11 +37,11 @@ class FisheyeVariousAuthors {
 	/**
 	 * What filing a series would do - read-only.
 	 *
-	 * @return array{series:string,error:?string,rows:list<array>,authorSeries:list<array>,seriesExists:bool}
+	 * @return array{series:string,error:?string,rows:list<array>,authorSeries:list<array>,seriesExists:bool,seriesId:?int}
 	 */
 	public static function plan( string $pSeries, string $pFile ): array {
 		global $gBitDb;
-		$plan = [ 'series' => $pSeries, 'error' => null, 'rows' => [], 'authorSeries' => [], 'seriesExists' => false ];
+		$plan = [ 'series' => $pSeries, 'error' => null, 'rows' => [], 'authorSeries' => [], 'seriesExists' => false, 'seriesId' => null ];
 		$parsed = FisheyeBookCatalogue::readBooks( $pFile );
 		if( isset( $parsed['error'] ) ) {
 			$plan['error'] = $parsed['error'];
@@ -63,6 +63,7 @@ class FisheyeVariousAuthors {
 			"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
 			 WHERE m.`gallery_content_id` = ? AND lc.`title` = ?", [ $vaId, $pSeries ] ) : null;
 		$plan['seriesExists'] = (bool)$seriesId;
+		$plan['seriesId'] = $seriesId ? (int)$seriesId : null;
 		foreach( array_keys( $authors ) as $name ) {
 			$authorId = $name !== '' ? FisheyeBookCredits::libraryGalleryFor( $name ) : null;
 			if( !$authorId ) {
