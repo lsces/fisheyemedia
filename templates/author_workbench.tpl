@@ -238,7 +238,18 @@
 					<p>{tr}No folder, so no files to load for{/tr}: {foreach from=$st.files.noFolder item=b}<a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$b.id}">{$b.title|escape}</a>{if !$b@last}, {/if}{/foreach}</p>
 				{/if}
 				{if $st.files.unmatched}
-					<p>{tr}Folders with no book in the database (books still to catalogue){/tr}: {foreach from=$st.files.unmatched item=dir}{$dir|escape}{if !$dir@last}, {/if}{/foreach}</p>
+					{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`author_workbench.php"}
+						<input type="hidden" name="gallery_id" value="{$st.galleryId}" />
+						<p>{tr}Folders with no book in the database (books still to catalogue). Tick the ones that are books to add them to the catalogue file; they then come up in step 1 to load, with the ISBN to find. A folder that is only a short story or an extra belongs inside another book's folder instead.{/tr}</p>
+						<ul class="list-unstyled">
+							{foreach from=$st.files.unmatched item=dir}
+								<li><label><input type="checkbox" name="add_folder[]" value="{$dir|escape}" /> {$dir|escape}</label></li>
+							{/foreach}
+						</ul>
+						<div class="form-group submit">
+							<input type="submit" class="btn btn-default" name="add_folders" value="{tr}Add the ticked folders to the catalogue{/tr}" />
+						</div>
+					{/form}
 				{/if}
 				{if !$st.files.books && !$st.files.noFolder}
 					<p class="text-muted">{tr}No book of this author has a folder yet.{/tr}</p>

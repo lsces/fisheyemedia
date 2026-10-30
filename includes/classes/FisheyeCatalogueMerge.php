@@ -90,6 +90,56 @@ class FisheyeCatalogueMerge {
 		return $done;
 	}
 
+	/**
+	 * Add catalogue rows for folders in the Library tree that have no book - the books still to catalogue. A folder directly under the author is a book of that
+	 * name; one inside a series folder is a book of that series, numbered after the series' last. The ISBN, publisher and year are left blank for the
+	 * workbench to find; the title is the folder's name so the book finds its folder. A folder whose title is already in the file is not added twice.
+	 *
+	 * @param list<string> $pFolders  paths relative to the author's folder ('Series/Book' or 'Book')
+	 * @return array{added:list<string>,error:?string}
+	 */
+	public static function addFolders( string $pPath, string $pAuthor, array $pFolders ): array {
+		$read = is_file( $pPath ) ? self::read( $pPath ) : [ self::HEADER, [] ];
+		if( !$read ) {
+			return [ 'added' => [], 'error' => \Bitweaver\KernelTools::tra( 'The file could not be read as a catalogue (it needs the usual columns).' ) ];
+		}
+		[ $head, $body ] = $read;
+		$have = [];
+		foreach( $body as $row ) {
+			$have[self::titleKey( $row['Title'] )] = true;
+		}
+		$added = [];
+		foreach( $pFolders as $rel ) {
+			$title = basename( trim( $rel, '/' ) );
+			$series = str_contains( trim( $rel, '/' ), '/' ) ? basename( dirname( $rel ) ) : '';
+			if( $title === '' || isset( $have[self::titleKey( $title )] ) ) {
+				continue;
+			}
+			$number = 0;
+			$at = count( $body );
+			foreach( $body as $i => $row ) {
+				if( $series !== '' && $row['Series'] === $series ) {
+					$number = max( $number, (int)$row['Series no'] );
+					$at = $i + 1;
+				}
+			}
+			$new = array_fill_keys( $head, '' );
+			$new['Category'] = $series;
+			$new['Authors'] = $pAuthor;
+			$new['Title'] = $title;
+			$new['Series'] = $series;
+			$new['Series no'] = $series !== '' ? (string)( $number + 1 ) : '';
+			array_splice( $body, $at, 0, [ $new ] );
+			$have[self::titleKey( $title )] = true;
+			$added[] = $title;
+		}
+		if( !$added ) {
+			return [ 'added' => [], 'error' => null ];
+		}
+		$error = self::write( [ 'error' => null, 'exists' => is_file( $pPath ), 'path' => $pPath, 'head' => $head, 'body' => $body, 'changes' => count( $added ) ] );
+		return [ 'added' => $error ? [] : $added, 'error' => $error ];
+	}
+
 	/** Title as compared: case, punctuation, a leading The/A/An and '&' against 'and' ignored. */
 	private static function titleKey( string $pTitle ): string {
 		$t = str_replace( '&', ' and ', mb_strtolower( $pTitle ) );

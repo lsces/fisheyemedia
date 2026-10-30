@@ -58,6 +58,15 @@ if( !$st['error'] ) {
 	} elseif( !empty( $_REQUEST['use_file_years'] ) && $st['folder'] !== null ) {
 		$n = FisheyeCatalogueMerge::useFileYears( [ 'kind' => 'author', 'name' => $st['folder'], 'path' => $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, 'exists' => true ], array_map( 'intval', array_keys( (array)( $_REQUEST['year_book'] ?? [] ) ) ) );
 		$messages[] = $n.' '.KernelTools::tra( 'books now have the catalogue file\'s year.' );
+	} elseif( !empty( $_REQUEST['add_folders'] ) && $st['folder'] !== null ) {
+		// Only folders the page is listing as having no book are taken.
+		$wanted = array_values( array_filter( array_map( fn( $v ) => htmlspecialchars_decode( trim( (string)$v ), ENT_NOQUOTES ), (array)( $_REQUEST['add_folder'] ?? [] ) ), fn( $v ) => in_array( $v, $st['files']['unmatched'], true ) ) );
+		$made = FisheyeCatalogueMerge::addFolders( $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, $st['name'], $wanted );
+		if( $made['error'] ) {
+			$errors[] = $made['error'];
+		} else {
+			$messages[] = count( $made['added'] ).' '.KernelTools::tra( 'folders added to the catalogue file as books to load' ).( $made['added'] ? ': '.implode( ', ', $made['added'] ) : '' ).'.';
+		}
 	} elseif( !empty( $_REQUEST['move_folders'] ) ) {
 		$moved = FisheyeAuthorWorkbench::applyMoves( $st, array_map( 'intval', array_keys( (array)( $_REQUEST['move_book'] ?? [] ) ) ) );
 		$messages[] = $moved['moved'].' '.KernelTools::tra( 'folders moved to match their series.' );
