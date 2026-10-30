@@ -160,7 +160,8 @@ class FisheyeSeriesWorkbench {
 
 	/**
 	 * Folders under a Library folder that no loaded book resolved to - the books still to catalogue. A folder that holds folders of its own is a
-	 * series folder and its folders are the books; one that does not is a book.
+	 * series folder and its folders are the books; one that does not is a book. Pictures/, Audio/ and Optional/ (the spare formats of a book,
+	 * see the library-tree README) inside a book are not books.
 	 *
 	 * @param array<string,bool> $pMatched  the book folders found, without closing slash, relative to the Library root
 	 * @return list<string>  relative to $pBaseRel
@@ -171,7 +172,7 @@ class FisheyeSeriesWorkbench {
 		if( !is_dir( $base ) ) {
 			return $out;
 		}
-		$skip = fn( string $pDir ): bool => $pDir === '' || $pDir[0] === '.' || in_array( strtolower( $pDir ), [ 'pictures', 'audio' ], true );
+		$skip = fn( string $pDir ): bool => $pDir === '' || $pDir[0] === '.' || in_array( strtolower( $pDir ), [ 'pictures', 'audio', 'optional' ], true );
 		foreach( array_diff( scandir( $base ) ?: [], [ '.', '..' ] ) as $dir ) {
 			if( $skip( $dir ) || !is_dir( $base.$dir ) ) {
 				continue;
