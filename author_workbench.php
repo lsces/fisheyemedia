@@ -52,6 +52,9 @@ if( !$st['error'] ) {
 				$messages[] = $one['group'].': '.$one['created'].' '.KernelTools::tra( 'books created' ).( $one['already'] ? ', '.$one['already'].' '.KernelTools::tra( 'already there' ) : '' ).'.';
 			}
 			$errors = array_merge( $errors, $one['errors'] );
+			if( !empty( $one['details_left'] ) ) {
+				$messages[] = $one['details_left'].' '.KernelTools::tra( 'books were made but their Open Library details were left for the Book Details page (this press ran out of time).' );
+			}
 		}
 	} elseif( !empty( $_REQUEST['update_catalogue'] ) && $st['folder'] !== null ) {
 		$messages[] = FisheyeCatalogueMerge::updateAuthor( $st['folder'] ) ?? KernelTools::tra( 'The catalogue file had nothing to change.' );

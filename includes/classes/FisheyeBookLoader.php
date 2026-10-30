@@ -17,6 +17,9 @@ use Bitweaver\Fisheye\FisheyeImage;
 
 class FisheyeBookLoader {
 
+	/** Seconds into a request after which the Open Library details of books just made are left for the Book Details page (the web server gives up at 150). */
+	public const DETAILS_STOP_AFTER = 60;
+
 	/** @var resource|false|null the press lock, held to the end of the request once taken */
 	private static $pressLock = null;
 
@@ -129,8 +132,15 @@ class FisheyeBookLoader {
 			}
 		}
 		// Details and the cover for the books just loaded, as the Book Details page does - so a press leaves
-		// them complete rather than needing a second trip.
+		// them complete rather than needing a second trip. Each is a trip to Open Library, and the web server gives up on a page at
+		// 150 seconds, so once the request has run DETAILS_STOP_AFTER seconds the rest are left for the Book Details page (which finds
+		// books still missing their details) instead of the whole press timing out after the books are already made.
+		$result['details_left'] = 0;
 		foreach( $newBooks as $bookContentId ) {
+			if( microtime( true ) - (float)( $_SERVER['REQUEST_TIME_FLOAT'] ?? microtime( true ) ) > self::DETAILS_STOP_AFTER ) {
+				$result['details_left']++;
+				continue;
+			}
 			$book = FisheyeImage::lookup( [ 'content_id' => $bookContentId ] );
 			if( $book && $book->isValid() && method_exists( $book, 'reloadFromOpenLibrary' ) ) {
 				$found = $book->reloadFromOpenLibrary();

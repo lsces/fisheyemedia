@@ -37,6 +37,9 @@ if( $series !== '' ) {
 			foreach( $one['errors'] as $error ) {
 				$errors[] = $error;
 			}
+			if( !empty( $one['details_left'] ) ) {
+				$messages[] = $one['details_left'].' '.KernelTools::tra( 'books were made but their Open Library details were left for the Book Details page (this press ran out of time).' );
+			}
 		}
 	} elseif( !empty( $_REQUEST['update_catalogue'] ) && !$st['error'] ) {
 		$messages[] = FisheyeCatalogueMerge::updateSeries( $series ) ?? KernelTools::tra( 'The catalogue file had nothing to change.' );
