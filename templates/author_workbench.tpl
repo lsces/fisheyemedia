@@ -77,7 +77,7 @@
 						<div class="form-group">
 							<input type="hidden" name="fs_folder[{$smarty.foreach.series.index}]" value="{$entry.folder|escape}" />
 							<label>
-								<input type="checkbox" name="fs_create[{$smarty.foreach.series.index}]" value="1"{if $entry.books|@count >= $folderPreTick && !$entry.collection} checked="checked"{/if} />
+								<input type="checkbox" name="fs_create[{$smarty.foreach.series.index}]" value="1"{if ($entry.books|@count >= $folderPreTick || $entry.target) && !$entry.collection} checked="checked"{/if} />
 								{tr}Create{/tr}
 							</label>
 							<input type="text" class="form-control" name="fs_name[{$smarty.foreach.series.index}]" value="{$entry.name|escape}" size="40" />
@@ -160,7 +160,7 @@
 								<div class="form-group">
 									<input type="hidden" name="ws_key[{$smarty.foreach.wseries.index}]" value="{$entry.key|escape}" />
 									<label>
-										<input type="checkbox" name="ws_create[{$smarty.foreach.wseries.index}]" value="1"{if $entry.books|@count >= $sourcesPreTick} checked="checked"{/if} />
+										<input type="checkbox" name="ws_create[{$smarty.foreach.wseries.index}]" value="1"{if $entry.books|@count >= $sourcesPreTick || $entry.target} checked="checked"{/if} />
 										{tr}Create{/tr}
 									</label>
 									<input type="text" class="form-control" name="ws_name[{$smarty.foreach.wseries.index}]" value="{$entry.name|escape}" size="40" />

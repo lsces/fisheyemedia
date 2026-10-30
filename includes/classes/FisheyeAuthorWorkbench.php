@@ -205,9 +205,7 @@ class FisheyeAuthorWorkbench {
 		$st['children'] = self::children( $pContentId );
 		if( $st['direct'] && $abs !== '' && is_dir( $abs ) ) {
 			$st['proposal'] = self::annotate( FisheyeSeries::proposeFromFolder( $abs, $st['direct'] ), $st['children'] );
-			// A folder holding one of the author's books is just that book, not a series of one: counted, not offered.
-			$st['singleFolders'] = count( array_filter( $st['proposal']['series'], fn( $e ) => count( $e['books'] ) < 2 ) );
-			$st['proposal']['series'] = array_values( array_filter( $st['proposal']['series'], fn( $e ) => count( $e['books'] ) >= 2 ) );
+			[ $st['proposal']['series'], $st['singleFolders'] ] = self::offered( $st['proposal']['series'] );
 		}
 		$st['seriesPending'] = (bool)$st['proposal']['series'];
 
@@ -268,6 +266,18 @@ class FisheyeAuthorWorkbench {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The folder proposals worth offering. A folder holding one of the author's books is just that book, not a series of one - unless it names a series
+	 * the author already has (a new book of a series, and it then belongs in it).
+	 *
+	 * @param list<array> $pSeries  proposals as annotate() leaves them
+	 * @return array{0:list<array>,1:int}  the ones offered, and how many single-book folders were left out
+	 */
+	public static function offered( array $pSeries ): array {
+		$kept = array_values( array_filter( $pSeries, fn( $e ) => count( $e['books'] ) >= 2 || $e['target'] ) );
+		return [ $kept, count( $pSeries ) - count( $kept ) ];
 	}
 
 	/** A folder proposal with the year of each book and the existing series of this author it would go into (the same name, else one the name starts with). */
@@ -424,6 +434,13 @@ class FisheyeAuthorWorkbench {
 					$proposal['series'][$i][$field] = array_map( fn( $b ) => $b + [ 'year' => substr( (string)$b['date'], 0, 4 ) ], $proposal['series'][$i][$field] );
 				}
 			}
+		}
+		$exists = [];
+		foreach( self::children( (int)$pStatus['contentId'] ) as $child ) {
+			$exists[FisheyeSeries::seriesKey( $child['title'] )] = $child['content_id'];
+		}
+		foreach( $proposal['series'] as $i => $entry ) {
+			$proposal['series'][$i]['target'] = $exists[FisheyeSeries::seriesKey( $entry['name'] )] ?? 0;
 		}
 		$out['proposal'] = $proposal;
 		return $out;
