@@ -255,6 +255,33 @@ class FisheyeBook extends FisheyeMediaImage {
 	}
 
 	/**
+	 * A book with the same title and first author as a row but not matched by findContentId() - on a row
+	 * with an ISBN that means a different ISBN (another edition, or a mistyped number). Shown on the load
+	 * lists so a second copy of a book is a choice, not an accident.
+	 *
+	 * @return array|null  content_id, title and isbn of the look-alike
+	 */
+	public static function findLookalike( array $pRow ): ?array {
+		global $gBitDb;
+		$title = trim( (string)( $pRow['title'] ?? '' ) );
+		$authors = array_values( array_filter( (array)( $pRow['authors'] ?? [] ) ) );
+		if( $title === '' || !$authors ) {
+			return null;
+		}
+		$found = $gBitDb->getRow(
+			"SELECT lc.`content_id`, lc.`title`, ( SELECT MIN( ix.`xkey` ) FROM `".BIT_DB_PREFIX."liberty_xref` ix
+				WHERE ix.`content_id` = lc.`content_id` AND ix.`item` = 'isbn' AND ix.`end_date` IS NULL ) AS `isbn`
+			 FROM `".BIT_DB_PREFIX."liberty_content` lc
+			 WHERE lc.`content_type_guid` = ? AND lc.`title` = ?
+			 AND EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` lx WHERE lx.`content_id` = lc.`content_id`
+				AND lx.`item` = 'author' AND lx.`end_date` IS NULL AND lx.`xkey_ext` = ? )
+			 ORDER BY lc.`content_id`",
+			[ FISHEYEBOOK_CONTENT_TYPE_GUID, $title, $authors[0] ]
+		);
+		return $found ? [ 'id' => (int)$found['content_id'], 'title' => $found['title'], 'isbn' => (string)$found['isbn'] ] : null;
+	}
+
+	/**
 	 * Register one book from a plain row (the shape of the clean catalogue sheet), link it into a
 	 * gallery if given, and write its xrefs. Idempotent: a book already registered (see
 	 * findContentId()) is reported, not duplicated.
@@ -435,10 +462,15 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * left alone - a later image only adds to the Images tab.
 	 */
 	public function xrefAdded( string $pItem, string $pXkeyExt ): void {
-		if( $pItem === 'image' && $pXkeyExt !== ''
-			&& !$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] ) ) {
+		if( $pItem === 'image' && $pXkeyExt !== '' && !$this->hasThumbnail() ) {
 			$this->promoteImageToThumbnail( $pXkeyExt );
 		}
+	}
+
+	/** A book's tile is its thumbs/ files; an attachment row without them (a failed or never-made tile) counts as none. */
+	public function hasThumbnail(): bool {
+		return (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] )
+			&& !empty( glob( $this->getImageStorageBranchPath().'thumbs/*' ) );
 	}
 
 	/**

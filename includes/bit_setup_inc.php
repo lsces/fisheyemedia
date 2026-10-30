@@ -134,6 +134,7 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 	$gLibertySystem->registerService( FISHEYEMEDIA_PKG_NAME, FISHEYEMEDIA_PKG_NAME, [
 		'fisheye_menu_tpl' => 'bitpackage:fisheyemedia/fisheye_menu_inc.tpl',
 		'content_display_function' => 'fisheyemedia_content_display',
+		'content_post_upload_function' => 'fisheyemedia_content_post_upload',
 		'content_list_sql_function' => 'fisheyemedia_content_list_sql',
 	] );
 }

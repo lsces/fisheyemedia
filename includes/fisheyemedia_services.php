@@ -58,3 +58,28 @@ function fisheyemedia_content_list_sql( $pObject, $pParamHash = null ) {
 		'join_sql'  => " INNER JOIN `".BIT_DB_PREFIX."liberty_content_prefs` fmlg ON( fmlg.`content_id`=lc.`content_id` AND fmlg.`pref_name`='gallery_pagination' AND fmlg.`pref_value`='".FISHEYE_PAGINATION_LIBRARY_GRID."' ) ",
 	];
 }
+
+/**
+ * Pictures uploaded into an item's pictures folder: the first becomes the item's thumbnail when it has none (see
+ * FisheyeMediaTrait::folderImageAdded()). Runs for every upload, so a gallery that is not a pictures folder is left alone at once.
+ */
+function fisheyemedia_content_post_upload( $pGallery, &$pParamHash ) {
+	$uploaded = reset( $pParamHash['uploaded_objects'] );
+	if( !$pGallery->isValid() || $pGallery->getContentType() !== 'fisheyegallery' || !$uploaded || empty( $uploaded->mContentId ) ) {
+		return;
+	}
+	$values = $pGallery->mDb->getCol(
+		"SELECT `pref_value` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `content_id` = ? AND `pref_name` LIKE '%!_content!_id' ESCAPE '!'",
+		[ $pGallery->mContentId ]
+	) ?: [];
+	foreach( $values as $value ) {
+		if( !ctype_digit( (string)$value ) || (int)$value === (int)$pGallery->mContentId ) {
+			continue;
+		}
+		$owner = LibertyContent::getLibertyObject( (int)$value );
+		if( $owner && $owner->isValid() && method_exists( $owner, 'folderImageAdded' ) ) {
+			$owner->folderImageAdded( (int)$uploaded->mContentId );
+			return;
+		}
+	}
+}

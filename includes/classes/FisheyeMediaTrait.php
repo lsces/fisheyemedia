@@ -232,6 +232,24 @@ trait FisheyeMediaTrait {
 		return $this->supportsAddImage() ? FISHEYEMEDIA_PKG_URL.'add_image_xref.php?content_id='.$this->mContentId : null;
 	}
 
+	/** Whether the item's tile has a thumbnail - an attachment row; a type whose tile is a file on disk checks for that as well. */
+	public function hasThumbnail(): bool {
+		return (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] );
+	}
+
+	/**
+	 * Called after pictures are uploaded into this item's pictures folder: the first one becomes the item's thumbnail when it has
+	 * none yet, as for an image added on the Images tab. An item that already has a thumbnail is left alone - Set as Thumbnail
+	 * on the Images tab replaces one.
+	 *
+	 * @param int $pImageContentId  content_id of the first picture uploaded
+	 */
+	public function folderImageAdded( int $pImageContentId ): void {
+		if( !$this->hasThumbnail() ) {
+			$this->promoteFolderImageToThumbnail( $pImageContentId );
+		}
+	}
+
 	/**
 	 * Make one of the pictures folder's images this item's thumbnail: its file is copied into the item's own image
 	 * storage for the moment, handed to the type's promoteImageToThumbnail() (the call the Images tab's Set as
