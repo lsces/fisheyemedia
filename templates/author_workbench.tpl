@@ -202,7 +202,7 @@
 				<p class="text-muted">{tr}Once the books are loaded and sorted into series, each book's folder is found through its galleries.{/tr}</p>
 			{else}
 				{if $st.files.books}
-					<p class="help-block">{tr}Files load by themselves: a book whose folder holds files that are not all loaded yet is loaded when this page opens (rebuilding its ebook, audio book and extra rows, at most{/tr} {$filesBatch} {tr}books a time).{/tr}</p>
+					<p class="help-block">{tr}Files load by themselves: a book whose folder holds files that are not all loaded yet is loaded when this page opens, all of them at once (rebuilding its ebook, audio book and extra rows).{/tr}</p>
 					<table class="table table-condensed">
 						<thead><tr><th>{tr}Book{/tr}</th><th>{tr}Folder{/tr}</th><th>{tr}In the folder{/tr}</th><th>{tr}Loaded{/tr}</th></tr></thead>
 						<tbody>

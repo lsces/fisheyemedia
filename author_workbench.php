@@ -94,7 +94,6 @@ $gBitSmarty->assign( 'wd', $wd );
 $gBitSmarty->assign( 'messages', $messages );
 $gBitSmarty->assign( 'errors', $errors );
 $gBitSmarty->assign( 'batch', FisheyeSeriesWorkbench::BATCH );
-$gBitSmarty->assign( 'filesBatch', FisheyeSeriesWorkbench::FILES_BATCH );
 $gBitSmarty->assign( 'folderPreTick', FisheyeAuthorWorkbench::FOLDER_PRETICK_MIN );
 $gBitSmarty->assign( 'sourcesPreTick', FisheyeAuthorWorkbench::SOURCES_PRETICK_MIN );
 $gBitSystem->display( 'bitpackage:fisheyemedia/author_workbench.tpl', KernelTools::tra( 'Author workbench' ), [ 'display_mode' => 'edit' ] );

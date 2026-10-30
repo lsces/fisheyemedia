@@ -94,5 +94,4 @@ $gBitSmarty->assign( 'libraryRoot', $root );
 $gBitSmarty->assign( 'messages', $messages );
 $gBitSmarty->assign( 'errors', $errors );
 $gBitSmarty->assign( 'batch', FisheyeSeriesWorkbench::BATCH );
-$gBitSmarty->assign( 'filesBatch', FisheyeSeriesWorkbench::FILES_BATCH );
 $gBitSystem->display( 'bitpackage:fisheyemedia/series_workbench.tpl', KernelTools::tra( 'Series workbench' ), [ 'display_mode' => 'admin' ] );

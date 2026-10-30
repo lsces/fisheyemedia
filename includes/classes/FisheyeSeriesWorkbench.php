@@ -18,8 +18,6 @@ use Bitweaver\Fisheye\FisheyeImage;
 class FisheyeSeriesWorkbench {
 	/** Books loaded per press, as the loader pages do. */
 	public const BATCH = 10;
-	/** Books whose files are registered per press. */
-	public const FILES_BATCH = 20;
 
 	/**
 	 * Where a series stands.
@@ -238,7 +236,7 @@ class FisheyeSeriesWorkbench {
 	 */
 	public static function registerFiles( array $pBookIds ): array {
 		$done = [ 'books' => 0, 'files' => 0, 'errors' => [] ];
-		foreach( array_slice( $pBookIds, 0, self::FILES_BATCH ) as $id ) {
+		foreach( $pBookIds as $id ) {
 			$book = FisheyeImage::lookup( [ 'content_id' => $id ] );
 			if( !( $book instanceof FisheyeBook ) ) {
 				$done['errors'][] = $id.' - not a book.';
