@@ -140,6 +140,37 @@ class FisheyeCatalogueMerge {
 		return [ 'added' => $error ? [] : $added, 'error' => $error ];
 	}
 
+	/**
+	 * Put the database's value into the catalogue file for the disagreements given (the file is wrong, the database right): only those cells of the
+	 * rows named change, nothing else the merge might fill. An ISBN-13 takes its ISBN-10 with it. Recomputed from the file now.
+	 *
+	 * @param list<string> $pKeys  "<book id>_<column>", as a conflict is keyed on the page
+	 * @return array{changed:int,error:?string}
+	 */
+	public static function useDatabaseValues( array $pFile, array $pKeys ): array {
+		$read = is_file( $pFile['path'] ) ? self::read( $pFile['path'] ) : null;
+		if( !$read ) {
+			return [ 'changed' => 0, 'error' => \Bitweaver\KernelTools::tra( 'The file could not be read as a catalogue (it needs the usual columns).' ) ];
+		}
+		[ $head, $body ] = $read;
+		$changed = 0;
+		foreach( self::plan( $pFile )['conflicts'] as $conflict ) {
+			if( !in_array( $conflict[4].'_'.$conflict[1], $pKeys, true ) || !isset( $body[$conflict[5]] ) ) {
+				continue;
+			}
+			$body[$conflict[5]][$conflict[1]] = $conflict[3];
+			foreach( $conflict[6] as $column => $value ) {
+				$body[$conflict[5]][$column] = $value;
+			}
+			$changed++;
+		}
+		if( !$changed ) {
+			return [ 'changed' => 0, 'error' => null ];
+		}
+		$error = self::write( [ 'error' => null, 'exists' => true, 'path' => $pFile['path'], 'head' => $head, 'body' => $body, 'changes' => $changed ] );
+		return [ 'changed' => $error ? 0 : $changed, 'error' => $error ];
+	}
+
 	/** Title as compared: case, punctuation, a leading The/A/An and '&' against 'and' ignored. */
 	private static function titleKey( string $pTitle ): string {
 		$t = str_replace( '&', ' and ', mb_strtolower( $pTitle ) );
@@ -269,7 +300,7 @@ class FisheyeCatalogueMerge {
 			$byTitle[self::titleKey( $b['title'] )] ??= $id;
 		}
 		$used = [];
-		foreach( $plan['body'] as &$row ) {
+		foreach( $plan['body'] as $ri => &$row ) {
 			$isbn = trim( $row['ISBN-13'] );
 			$id = $isbn !== '' ? ( $byIsbn[$isbn] ?? null ) : null;
 			$id ??= $byTitle[self::titleKey( $row['Title'] )] ?? null;
@@ -289,7 +320,8 @@ class FisheyeCatalogueMerge {
 					$row[$col] = $val;
 					$plan['filled'][] = [ $row['Title'], $col, $val ];
 				} elseif( trim( $row[$col] ) !== $val && in_array( $col, [ 'ISBN-13', 'Year' ], true ) ) {
-					$plan['conflicts'][] = [ $row['Title'], $col, trim( $row[$col] ), $val, $id ];
+					// [ title, column, the file's value, the database's value, book id, the row of the file, the other cells that go with this one ]
+					$plan['conflicts'][] = [ $row['Title'], $col, trim( $row[$col] ), $val, $id, $ri, $col === 'ISBN-13' && $b['isbn10'] !== '' ? [ 'ISBN-10' => $b['isbn10'] ] : [] ];
 				}
 			}
 		}

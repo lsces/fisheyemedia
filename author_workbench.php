@@ -58,6 +58,14 @@ if( !$st['error'] ) {
 		}
 	} elseif( !empty( $_REQUEST['update_catalogue'] ) && $st['folder'] !== null ) {
 		$messages[] = FisheyeCatalogueMerge::updateAuthor( $st['folder'] ) ?? KernelTools::tra( 'The catalogue file had nothing to change.' );
+	} elseif( !empty( $_REQUEST['use_database_values'] ) && $st['folder'] !== null ) {
+		$put = FisheyeCatalogueMerge::useDatabaseValues( [ 'kind' => 'author', 'name' => $st['folder'], 'path' => $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, 'exists' => true ],
+			array_map( fn( $v ) => htmlspecialchars_decode( (string)$v, ENT_NOQUOTES ), array_keys( (array)( $_REQUEST['db_value'] ?? [] ) ) ) );
+		if( $put['error'] ) {
+			$errors[] = $put['error'];
+		} else {
+			$messages[] = $put['changed'].' '.KernelTools::tra( 'catalogue cells now have the database\'s value.' );
+		}
 	} elseif( !empty( $_REQUEST['use_file_years'] ) && $st['folder'] !== null ) {
 		$n = FisheyeCatalogueMerge::useFileYears( [ 'kind' => 'author', 'name' => $st['folder'], 'path' => $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, 'exists' => true ], array_map( 'intval', array_keys( (array)( $_REQUEST['year_book'] ?? [] ) ) ) );
 		$messages[] = $n.' '.KernelTools::tra( 'books now have the catalogue file\'s year.' );
