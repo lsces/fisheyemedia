@@ -20,7 +20,7 @@ class FisheyeBookFiles {
 	public const ITEMS = [ 'ebook', 'audiobook', 'extra' ];
 	private const EBOOK = [ 'epub', 'mobi', 'azw', 'azw3', 'prc', 'lit', 'pdf', 'fb2', 'djvu' ];
 	private const AUDIO = [ 'm4b', 'm4a', 'mp3', 'flac', 'ogg', 'opus', 'wma' ];
-	private const PICTURE = [ 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp' ];
+	private const PICTURE = [ 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'tif', 'tiff', 'heic', 'svg' ];
 	private const MIME = [ 'epub' => 'application/epub+zip', 'mobi' => 'application/x-mobipocket-ebook', 'azw' => 'application/vnd.amazon.ebook', 'azw3' => 'application/vnd.amazon.ebook',
 		'prc' => 'application/x-mobipocket-ebook', 'lit' => 'application/x-ms-reader', 'fb2' => 'application/x-fictionbook+xml', 'djvu' => 'image/vnd.djvu', 'm4b' => 'audio/mp4' ];
 
