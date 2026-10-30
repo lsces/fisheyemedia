@@ -139,6 +139,85 @@ class FisheyeAuthorWorkbench {
 	}
 
 	/**
+	 * Every author folder in the Library and what is left to do for each, for the front page. An author with no Library gallery yet can only be
+	 * given one; otherwise the status of the author decides: books to load, series to sort, folders with no book, files to load, a catalogue file
+	 * behind the database - in that order of next step. A finished author has nothing in needs.
+	 *
+	 * @return array<string,array{name:string,contentId:?int,galleryId:int,total:int,loaded:int,needs:list<string>,next:string,done:bool,hasCatalogue:bool}>
+	 */
+	public static function overview(): array {
+		$root = FisheyeBookFiles::libraryRoot();
+		$out = [];
+		if( $root === '' || !is_dir( $root ) ) {
+			return $out;
+		}
+		foreach( scandir( $root ) as $dir ) {
+			if( $dir[0] === '.' || $dir === FisheyeMediaGallery::VARIOUS_AUTHORS || !is_dir( $root.$dir ) ) {
+				continue;
+			}
+			$contentId = FisheyeBookCredits::libraryGalleryFor( $dir );
+			$row = [ 'name' => $dir, 'contentId' => $contentId, 'galleryId' => 0, 'total' => 0, 'loaded' => 0, 'needs' => [], 'next' => 'done', 'done' => false,
+				'hasCatalogue' => is_file( $root.$dir.'/'.self::CATALOGUE ) ];
+			if( !$contentId ) {
+				$parsed = $row['hasCatalogue'] ? FisheyeBookCatalogue::readBooks( $root.$dir.'/'.self::CATALOGUE ) : [];
+				$row['total'] = count( $parsed['rows'] ?? [] );
+				$row['needs'][] = 'no Library gallery yet'.( $row['total'] ? ' ('.$row['total'].' catalogue rows)' : '' );
+				$row['next'] = 'gallery';
+				$out[$dir] = $row;
+				continue;
+			}
+			$st = self::status( $contentId );
+			$row['galleryId'] = $st['galleryId'];
+			$row['total'] = $st['total'];
+			$row['loaded'] = $st['loaded'];
+			if( $st['error'] ) {
+				$row['needs'][] = $st['error'];
+			}
+			if( $st['missing'] ) {
+				$row['needs'][] = count( $st['missing'] ).' book'.( count( $st['missing'] ) === 1 ? '' : 's' ).' to load';
+				$row['next'] = 'books';
+			}
+			if( $st['seriesPending'] ) {
+				$row['needs'][] = count( $st['proposal']['series'] ).' series to sort';
+				$row['next'] = $row['next'] === 'done' ? 'series' : $row['next'];
+			}
+			if( $st['files']['unmatched'] ) {
+				$row['needs'][] = count( $st['files']['unmatched'] ).' folder'.( count( $st['files']['unmatched'] ) === 1 ? '' : 's' ).' with no book';
+				$row['next'] = $row['next'] === 'done' ? 'folders' : $row['next'];
+			}
+			if( $st['files']['todo'] ) {
+				$row['needs'][] = $st['files']['todo'].' book'.( $st['files']['todo'] === 1 ? '' : 's' ).' with files to load';
+				$row['next'] = $row['next'] === 'done' ? 'files' : $row['next'];
+			}
+			if( $st['catalogue']['changes'] || $st['catalogue']['conflicts'] ) {
+				$row['needs'][] = 'catalogue file behind the database'.( $st['catalogue']['conflicts'] ? ' ('.count( $st['catalogue']['conflicts'] ).' disagreements)' : '' );
+				$row['next'] = $row['next'] === 'done' ? 'catalogue' : $row['next'];
+			}
+			$row['done'] = !$row['needs'];
+			$out[$dir] = $row;
+		}
+		return $out;
+	}
+
+	/**
+	 * Make an author's Library gallery from the front page - for an author with a folder (and usually a catalogue) but nothing loaded yet, so no gallery
+	 * for the books step to load into. Linked to the author's contact when there is one, as the loaders do.
+	 *
+	 * @return array{galleryId:int,error:?string}
+	 */
+	public static function createGallery( string $pName ): array {
+		global $gBitDb;
+		$made = FisheyeBookCredits::findOrCreateLibraryGallery( $pName );
+		if( !$made['content_id'] ) {
+			return [ 'galleryId' => 0, 'error' => (string)( $made['error'] ?: 'The gallery could not be made.' ) ];
+		}
+		if( $contactId = FisheyeBookCredits::authorContactFor( $pName ) ) {
+			FisheyeBookCredits::linkGalleryToContact( (int)$made['content_id'], $contactId );
+		}
+		return [ 'galleryId' => (int)$gBitDb->getOne( "SELECT `gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ (int)$made['content_id'] ] ), 'error' => null ];
+	}
+
+	/**
 	 * Where the author stands.
 	 *
 	 * @return array<string,mixed>

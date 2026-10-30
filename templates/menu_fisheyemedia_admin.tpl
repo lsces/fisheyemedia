@@ -12,6 +12,7 @@
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{tr}Add Books from ISBNs{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}list_no_isbn.php">{tr}Books with no ISBN{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_files.php">{tr}Book Files from the Library{/tr}</a></li>
+	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php">{tr}Author workbench{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}series_workbench.php">{tr}Series workbench{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_various_authors.php">{tr}Various Authors series{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program_links.php">{tr}BBC program links{/tr}</a></li>

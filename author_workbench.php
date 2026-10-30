@@ -18,6 +18,35 @@ global $gBitSystem, $gBitSmarty;
 
 $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 
+// No gallery asked for: the front page, every author folder in the Library and what is left for each.
+if( empty( $_REQUEST['gallery_id'] ) ) {
+	$errors = [];
+	$messages = [];
+	if( !empty( $_REQUEST['create_gallery'] ) ) {
+		$made = FisheyeAuthorWorkbench::createGallery( htmlspecialchars_decode( trim( (string)$_REQUEST['create_gallery'] ), ENT_NOQUOTES ) );
+		if( $made['error'] ) {
+			$errors[] = $made['error'];
+		} else {
+			KernelTools::bit_redirect( FISHEYEMEDIA_PKG_URL.'author_workbench.php?gallery_id='.$made['galleryId'] );
+		}
+	}
+	$all = FisheyeAuthorWorkbench::overview();
+	$showAll = !empty( $_REQUEST['all'] );
+	$shown = $showAll ? $all : array_filter( $all, fn( $r ) => !$r['done'] );
+	$seriesLeft = 0;
+	foreach( FisheyeVariousAuthors::catalogues() as $seriesName => $seriesFile ) {
+		$seriesLeft += FisheyeSeriesWorkbench::status( $seriesName, $seriesFile )['done'] ? 0 : 1;
+	}
+	$gBitSmarty->assign( 'overview', $shown );
+	$gBitSmarty->assign( 'finished', count( array_filter( $all, fn( $r ) => $r['done'] ) ) );
+	$gBitSmarty->assign( 'showAll', $showAll );
+	$gBitSmarty->assign( 'seriesLeft', $seriesLeft );
+	$gBitSmarty->assign( 'libraryRoot', FisheyeBookFiles::libraryRoot() );
+	$gBitSmarty->assign( 'errors', $errors );
+	$gBitSystem->display( 'bitpackage:fisheyemedia/author_index.tpl', KernelTools::tra( 'Author workbench' ), [ 'display_mode' => 'admin' ] );
+	exit;
+}
+
 $gContent = FisheyeGallery::lookup( [ 'gallery_id' => $_REQUEST['gallery_id'] ?? 0 ] );
 if( !$gContent || !$gContent->isValid() ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No gallery exists with the given ID' ) );
