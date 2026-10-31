@@ -746,6 +746,69 @@ class FisheyeSeason extends FisheyeMediaImage {
 	}
 
 	/**
+	 * One episode file sitting in a season's own folder, as a row for reconcileXrefItem(): the title read from the file name
+	 * ("Show - SnnEnn - Title"), TheTVDB's people from the show's cache, duration/resolution/audio from the file's own
+	 * container via ffprobe and a thumbnail from a local frame grab - nothing from Plex. Shared by the no-Plex-match branch
+	 * (registerEpisodesFromFilesystem()) and by a Plex reload for files Plex has not scanned yet (reloadPlexEpisodes()).
+	 *
+	 * @param array $pExisting  keptEpisodeData() for a data-only reload (an episode already registered is left exactly as it is), else empty.
+	 * @return array{row:array,title:?string}  title is null when the episode was kept as it was.
+	 */
+	private function diskEpisodeRow( string $pSeasonDir, string $pRelativeSeasonDir, string $pFile, int $pXorder, bool $pDataOnly, bool $pRefreshThumbs, array $pExisting ): array {
+		$key = $pRelativeSeasonDir.'/'.$pFile;
+		// Data-only: nothing here comes from Plex, so an episode already registered is left exactly as it is.
+		if( $pDataOnly && isset( $pExisting[$key] ) ) {
+			return [ 'row' => [ 'key' => $key, 'xkey_ext' => $key, 'xorder' => $pXorder, 'data' => $pExisting[$key] ], 'title' => null ];
+		}
+		// Same per-episode thumbnail the Plex-match branch of reloadPlexEpisodes() stores (its own 'thumb' key, resolved later by
+		// view_extra_image.php) - sourced from a local ffmpeg/ffmpegthumbnailer frame grab (mime_film_grab_video_frame(), the same
+		// engine FisheyeMediaTrait::grabVideoFrameIntoImageXref() uses) since there is no Plex metadata_item id to fetch one from.
+		$imagesDir = $this->getImageStorageBranchPath();
+		KernelTools::mkdir_p( $imagesDir );
+		$stem = pathinfo( $pFile, PATHINFO_FILENAME );
+		// "Show - SnnEnn - Episode Title" -> keep the title; "Show - SnnEnn" alone (no per-
+		// episode title, common for documentaries) -> keep the SnnEnn tag itself rather than
+		// the whole filename stem.
+		$episodeTitle = $stem;
+		if( preg_match( '/ - (S\d+E[\dE&-]+)(?: - (.+))?$/i', $stem, $m ) ) {
+			$episodeTitle = $m[2] ?? $m[1];
+		}
+		$episodeData = [ 'title' => $episodeTitle ];
+		$this->tvdbFill( $episodeData, preg_match( '/S\d+E(\d+)/i', $stem, $epMatch ) ? (int)$epMatch[1] : $pXorder );
+		// Plex never gets a chance to supply this for a no-match show - straight from the
+		// file's own container via ffprobe instead (same helper as the featurette fallback,
+		// FisheyeMediaTrait::registerFeaturettesFromFolder()).
+		$durationMs = \Bitweaver\Liberty\mime_film_get_duration_ms( $pSeasonDir.$pFile );
+		if( $durationMs !== null ) {
+			$episodeData['duration'] = $durationMs;
+		}
+		$qualityInfo = \Bitweaver\Liberty\mime_film_get_quality_info( $pSeasonDir.$pFile );
+		if( $qualityInfo['resolution'] !== null ) {
+			$episodeData['resolution'] = $qualityInfo['resolution'];
+		}
+		if( $qualityInfo['audio'] !== null ) {
+			$episodeData['audio'] = $qualityInfo['audio'];
+		}
+		// Named after the episode's own source file (unique within this folder), not its
+		// xorder position - same reasoning as the featurette fallback's identical fix: a
+		// position-based name mis-attaches an old thumb the moment episode numbering shifts,
+		// and forces an expensive re-grab on every reload even when nothing changed.
+		$thumbName = $stem.'.jpg';
+		if( !$pRefreshThumbs && is_file( $imagesDir.$thumbName ) ) {
+			$episodeData['thumb'] = $thumbName;
+		} else {
+			$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_ep_thumb_' );
+			if( \Bitweaver\Liberty\mime_film_grab_video_frame( $pSeasonDir.$pFile, $tmpFile ) ) {
+				if( self::resizeImageFile( $tmpFile, $imagesDir.$thumbName, 400 ) ) {
+					$episodeData['thumb'] = $thumbName;
+				}
+			}
+			@unlink( $tmpFile );
+		}
+		return [ 'row' => [ 'key' => $key, 'xkey_ext' => $key, 'xorder' => $pXorder, 'data' => $episodeData ], 'title' => $episodeTitle ];
+	}
+
+	/**
 	 * registerFromDisk()'s single seed episode is only ever meant to be temporary - matched
 	 * against Plex, then replaced by reloadPlexEpisodes()'s real full list. When a show has no
 	 * Plex/TVDB entry at all, that replacement never happens, so this exists to register every
@@ -779,14 +842,6 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// Reconciled, never wiped - see reloadPlexEpisodes(). Rows are collected, then reconciled once.
 		$wantedEpisodes = [];
 
-		// Same per-episode thumbnail this season's Plex-match branch above stores (its own
-		// 'thumb' key, resolved later by view_extra_image.php) - just sourced from a local
-		// ffmpeg/ffmpegthumbnailer frame grab (mime_film_grab_video_frame(), the same engine
-		// FisheyeMediaTrait::grabVideoFrameIntoImageXref() already uses) instead of Plex's HTTP API,
-		// since there's no Plex metadata_item id to fetch one from here.
-		$imagesDir = $this->getImageStorageBranchPath();
-		KernelTools::mkdir_p( $imagesDir );
-
 		$existingEpisodes = $pDataOnly && !$pRefreshThumbs ? $this->keptEpisodeData() : [];
 		$xorder = 1;
 		// A Local Videos show is numbered by its file names (gaps and all), not 1..n - there is no Plex list to renumber it from.
@@ -796,63 +851,11 @@ class FisheyeSeason extends FisheyeMediaImage {
 			if( $fileNumber > 0 ) {
 				$xorder = $fileNumber;
 			}
-			// Data-only: nothing here comes from Plex, so an episode already registered is left exactly as it is.
-			if( $pDataOnly && isset( $existingEpisodes[$relativeSeasonDir.'/'.$file] ) ) {
-				$wantedEpisodes[] = [
-					'key'      => $relativeSeasonDir.'/'.$file,
-					'xkey_ext' => $relativeSeasonDir.'/'.$file,
-					'xorder'   => $xorder++,
-					'data'     => $existingEpisodes[$relativeSeasonDir.'/'.$file],
-				];
-				continue;
+			$built = $this->diskEpisodeRow( $seasonDir, $relativeSeasonDir, $file, $xorder++, $pDataOnly, $pRefreshThumbs, $existingEpisodes );
+			$wantedEpisodes[] = $built['row'];
+			if( $built['title'] !== null ) {
+				$summary['items'][] = $built['title'];
 			}
-			$stem = pathinfo( $file, PATHINFO_FILENAME );
-			// "Show - SnnEnn - Episode Title" -> keep the title; "Show - SnnEnn" alone (no per-
-			// episode title, common for documentaries) -> keep the SnnEnn tag itself rather than
-			// the whole filename stem.
-			$episodeTitle = $stem;
-			if( preg_match( '/ - (S\d+E[\dE&-]+)(?: - (.+))?$/i', $stem, $m ) ) {
-				$episodeTitle = $m[2] ?? $m[1];
-			}
-			$episodeData = [ 'title' => $episodeTitle ];
-			$this->tvdbFill( $episodeData, preg_match( '/S\d+E(\d+)/i', $stem, $epMatch ) ? (int)$epMatch[1] : $xorder );
-			// Plex never gets a chance to supply this for a no-match show - straight from the
-			// file's own container via ffprobe instead (same helper as the featurette fallback,
-			// FisheyeMediaTrait::registerFeaturettesFromFolder()).
-			$durationMs = \Bitweaver\Liberty\mime_film_get_duration_ms( $seasonDir.$file );
-			if( $durationMs !== null ) {
-				$episodeData['duration'] = $durationMs;
-			}
-			$qualityInfo = \Bitweaver\Liberty\mime_film_get_quality_info( $seasonDir.$file );
-			if( $qualityInfo['resolution'] !== null ) {
-				$episodeData['resolution'] = $qualityInfo['resolution'];
-			}
-			if( $qualityInfo['audio'] !== null ) {
-				$episodeData['audio'] = $qualityInfo['audio'];
-			}
-			// Named after the episode's own source file (unique within this folder), not its
-			// xorder position - same reasoning as the featurette fallback's identical fix: a
-			// position-based name mis-attaches an old thumb the moment episode numbering shifts,
-			// and forces an expensive re-grab on every reload even when nothing changed.
-			$fileName = $stem.'.jpg';
-			if( !$pRefreshThumbs && is_file( $imagesDir.$fileName ) ) {
-				$episodeData['thumb'] = $fileName;
-			} else {
-				$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_ep_thumb_' );
-				if( \Bitweaver\Liberty\mime_film_grab_video_frame( $seasonDir.$file, $tmpFile ) ) {
-					if( self::resizeImageFile( $tmpFile, $imagesDir.$fileName, 400 ) ) {
-						$episodeData['thumb'] = $fileName;
-					}
-				}
-				@unlink( $tmpFile );
-			}
-			$wantedEpisodes[] = [
-				'key'      => $relativeSeasonDir.'/'.$file,
-				'xkey_ext' => $relativeSeasonDir.'/'.$file,
-				'xorder'   => $xorder++,
-				'data'     => $episodeData,
-			];
-			$summary['items'][] = $episodeTitle;
 		}
 		$summary['matched'] = true;
 		$summary['items'][] = self::describeCounts( 'episodes', $this->reconcileXrefItem( 'episode', $wantedEpisodes, 'xkey_ext' ) );
@@ -1079,6 +1082,29 @@ class FisheyeSeason extends FisheyeMediaImage {
 				'data'     => $episodeData,
 			];
 			$summary['items'][] = "S{$row['index']}: {$row['title']}";
+		}
+
+		// Plex's list is not the whole list: a file filed since Plex last scanned (or one it does not list) would never load and its
+		// season would keep offering "Reload Episodes". Every other video in this season's own folder is registered from its file name,
+		// as for a show Plex does not know. A decade folder mixes several Plex seasons, so it is left to Plex alone.
+		if( !$decadeFolder ) {
+			$relativeSeasonDir = dirname( $plexMatch['anchor'] );
+			$seasonDir = $root.$relativeSeasonDir.'/';
+			if( is_dir( $seasonDir ) ) {
+				$have = array_column( $wantedEpisodes, 'key' );
+				$nextOrder = ( $wantedEpisodes ? max( array_column( $wantedEpisodes, 'xorder' ) ) : 0 ) + 1;
+				foreach( $this->scanEpisodeFiles( $seasonDir ) as $file ) {
+					if( in_array( $relativeSeasonDir.'/'.$file, $have, true ) ) {
+						continue;
+					}
+					$order = preg_match( '/S\d+E(\d+)/i', $file, $numMatch ) ? (int)$numMatch[1] : $nextOrder++;
+					$built = $this->diskEpisodeRow( $seasonDir, $relativeSeasonDir, $file, $order, $pDataOnly, $pRefreshThumbs, $existingEpisodes );
+					$wantedEpisodes[] = $built['row'];
+					if( $built['title'] !== null ) {
+						$summary['items'][] = "Not in Plex: {$built['title']}";
+					}
+				}
+			}
 		}
 		$summary['items'][] = self::describeCounts( 'episodes', $this->reconcileXrefItem( 'episode', $wantedEpisodes, 'xkey_ext' ) );
 		foreach( $this->deriveCreditDirectory() as $role => $roleCounts ) {
