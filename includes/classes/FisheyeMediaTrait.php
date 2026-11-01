@@ -24,15 +24,30 @@ trait FisheyeMediaTrait {
 	use \Bitweaver\Fisheye\FisheyePicturesFolderTrait;
 
 	/**
-	 * A description that is about to be replaced by one read from Plex keeps the BBC's "PLAY: <iPlayer url>" and "INFO: <programme url>" lines the old one
-	 * carried (the BBC downloads put them there; Plex's own summary has none), added at the end unless the new text already holds them.
+	 * A description about to be replaced by one read from Plex or TheTVDB (plain text) becomes HTML paragraphs, and keeps the BBC's "PLAY" and "INFO" links the old
+	 * one carried (the BBC downloads put them there; Plex's own summary has none): added at the end unless the new text already holds the address. The old ones
+	 * may be links (<a href="...">PLAY</a>) or, in a row not yet converted, "PLAY: <address>" lines.
 	 */
 	protected function keepBbcLines( string $pNewDescription ): string {
-		if( !preg_match_all( '/^(?:PLAY|INFO):[ \t]*\S+[ \t]*$/mi', (string)( $this->mInfo['data'] ?? '' ), $found ) ) {
-			return $pNewDescription;
+		$html = FisheyeDescriptions::toHtml( $pNewDescription );
+		$old = (string)( $this->mInfo['data'] ?? '' );
+		$found = [];
+		if( preg_match_all( '#<a href="(https?://[^"]+)">(PLAY|INFO)</a>#', $old, $m, PREG_SET_ORDER ) ) {
+			foreach( $m as $hit ) {
+				$found[] = [ $hit[2], html_entity_decode( $hit[1] ) ];
+			}
 		}
-		$lines = array_filter( array_map( 'trim', $found[0] ), fn( $l ) => stripos( $pNewDescription, $l ) === false );
-		return $lines ? rtrim( $pNewDescription )."\n\n".implode( "\n\n", $lines ) : $pNewDescription;
+		if( preg_match_all( '/^(PLAY|INFO):[ \t]*(\S+)[ \t]*$/mi', $old, $m, PREG_SET_ORDER ) ) {
+			foreach( $m as $hit ) {
+				$found[] = [ strtoupper( $hit[1] ), $hit[2] ];
+			}
+		}
+		foreach( $found as [ $label, $address ] ) {
+			if( stripos( $html, htmlspecialchars( $address, ENT_QUOTES ) ) === false && stripos( $html, $address ) === false ) {
+				$html .= "\n".'<p><a href="'.htmlspecialchars( $address, ENT_QUOTES ).'">'.$label.'</a></p>';
+			}
+		}
+		return $html;
 	}
 
 	/** An item's pictures folder uses the Images Grid layout, whose title links back to the item. */

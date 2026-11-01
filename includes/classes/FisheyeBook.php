@@ -1227,13 +1227,27 @@ class FisheyeBook extends FisheyeMediaImage {
 	 */
 	public function getExtrasGroups(): array {
 		$extras = parent::getExtrasGroups();
-		$rows = $this->mDb->getAll( "SELECT `xref_id`, `item`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ('ebook','audiobook','extra') AND `end_date` IS NULL ORDER BY `item`, `xorder`", [ $this->mContentId ] ) ?: [];
-		if( !$rows ) {
+		$rows = $this->mDb->getAll( "SELECT `xref_id`, `item`, `xkey`, `xkey_ext`, `xref`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ('ebook','audiobook','extra') AND `end_date` IS NULL ORDER BY `item`, `xorder`", [ $this->mContentId ] ) ?: [];
+		// An Audio folder not yet made into an album: editors get Load Audio Book on the strip.
+		$loadLinks = [];
+		if( $this->hasUpdatePermission() && array_filter( FisheyeBookFiles::audioFolders( $this ), fn( $f ) => !$f['linked'] ) ) {
+			$loadLinks[] = [ 'title' => 'Load Audio Book', 'url' => FISHEYEMEDIA_PKG_URL.'load_audio_book.php?content_id='.$this->mContentId, 'icon' => 'audio-x-generic' ];
+		}
+		if( !$rows && !$loadLinks ) {
 			return $extras;
 		}
 		$cover = (string)$this->getThumbnailUrl( 'small' );
 		$files = [];
 		foreach( $rows as $row ) {
+			if( $row['item'] === 'audiobook' && $row['xref'] ) {
+				// an audio book that is an album: one entry, the album's own page
+				$album = new FisheyeAlbum( null, (int)$row['xref'] );
+				$album->load();
+				if( $album->isValid() ) {
+					$files[] = [ 'thumb' => (string)( $album->getThumbnailUrl( 'small' ) ?: $cover ), 'url' => $album->getDisplayUrl(), 'title' => $album->getTitle(), 'label' => trim( (string)$row['xkey'] ) !== '' ? $row['xkey'] : 'Audio book' ];
+					continue;
+				}
+			}
 			$data = json_decode( (string)$row['data'], true ) ?: [];
 			$format = strtoupper( (string)( $data['format'] ?? pathinfo( (string)$row['xkey_ext'], PATHINFO_EXTENSION ) ) );
 			$label = $row['item'] === 'audiobook' ? 'Audio book '.$format.( !empty( $data['tracks'] ) && $data['tracks'] > 1 ? ' ('.(int)$data['tracks'].' parts)' : '' ) : ( $row['item'] === 'ebook' ? 'Ebook '.$format : $format );
@@ -1244,8 +1258,9 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		if( $extras['groups'] ) {
 			$extras['groups'][0]['items'] = array_merge( $files, $extras['groups'][0]['items'] );
+			$extras['groups'][0]['links'] = array_merge( $extras['groups'][0]['links'] ?? [], $loadLinks );
 		} else {
-			$extras['groups'][] = [ 'id' => 'pictures', 'kind' => 'Extras', 'items' => $files, 'links' => [] ];
+			$extras['groups'][] = [ 'id' => 'pictures', 'kind' => 'Extras', 'items' => $files, 'links' => $loadLinks ];
 		}
 		return $extras;
 	}

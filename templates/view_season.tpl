@@ -57,7 +57,7 @@
 						</p>
 					{/if}
 					{if $gContent->mInfo.data}
-						<p>{$gContent->mInfo.data|escape}</p>
+						<div class="film-summary">{$gContent->mInfo.data}</div>
 					{/if}
 				{/if}
 			</div>

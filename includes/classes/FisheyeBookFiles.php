@@ -97,30 +97,14 @@ class FisheyeBookFiles {
 				continue;
 			}
 			if( is_dir( $path ) ) {
-				if( strtolower( $name ) === 'audio' ) {
-					foreach( $natural( array_diff( scandir( $path ) ?: [], [ '.', '..' ] ) ) as $audio ) {
-						$audioPath = $path.'/'.$audio;
-						if( is_file( $audioPath ) && in_array( strtolower( pathinfo( $audio, PATHINFO_EXTENSION ) ), self::AUDIO, true ) ) {
-							$found['audiobook'][] = [ 'rel' => $name.'/'.$audio, 'name' => pathinfo( $audio, PATHINFO_FILENAME ), 'ext' => strtolower( pathinfo( $audio, PATHINFO_EXTENSION ) ), 'bytes' => (int)filesize( $audioPath ), 'tracks' => 1 ];
-						} elseif( is_dir( $audioPath ) ) {
-							$tracks = array_filter( scandir( $audioPath ) ?: [], fn( $f ) => is_file( $audioPath.'/'.$f ) && in_array( strtolower( pathinfo( $f, PATHINFO_EXTENSION ) ), self::AUDIO, true ) );
-							if( $tracks ) {
-								$bytes = 0;
-								foreach( $tracks as $t ) {
-									$bytes += (int)filesize( $audioPath.'/'.$t );
-								}
-								$found['audiobook'][] = [ 'rel' => $name.'/'.$audio.'/', 'name' => $audio, 'ext' => strtolower( pathinfo( reset( $tracks ), PATHINFO_EXTENSION ) ), 'bytes' => $bytes, 'tracks' => count( $tracks ) ];
-							}
-						}
-					}
-				}
-				continue; // Pictures/ and any other folder: the raw material, not Extras
+				continue; // Pictures/, an Audio folder (a multi-file audio book is an album - audioFolders()) and any other folder: not Extras files
 			}
 			if( in_array( $ext, self::PICTURE, true ) ) {
 				continue; // covers and second covers
 			}
-			$kind = in_array( $ext, self::EBOOK, true ) ? 'ebook' : 'extra';
-			$found[$kind][] = [ 'rel' => $name, 'name' => pathinfo( $name, PATHINFO_FILENAME ), 'ext' => $ext, 'bytes' => (int)filesize( $path ), 'tracks' => 0 ];
+			// a single audio file beside the ebook is the whole audio book
+			$kind = in_array( $ext, self::EBOOK, true ) ? 'ebook' : ( in_array( $ext, self::AUDIO, true ) ? 'audiobook' : 'extra' );
+			$found[$kind][] = [ 'rel' => $name, 'name' => pathinfo( $name, PATHINFO_FILENAME ), 'ext' => $ext, 'bytes' => (int)filesize( $path ), 'tracks' => $kind === 'audiobook' ? 1 : 0 ];
 		}
 		return $found;
 	}
@@ -145,7 +129,9 @@ class FisheyeBookFiles {
 		}
 		$summary['folder'] = $folder['rel'];
 		$files = self::scan( $folder['abs'] );
-		\Bitweaver\Liberty\LibertyContent::deleteXrefByItem( (int)$pBook->mContentId, self::ITEMS );
+		// An audio book that is an album (its row's xref is the album's content_id) is not rebuilt from the folder: it stays.
+		\Bitweaver\Liberty\LibertyContent::deleteXrefByItem( (int)$pBook->mContentId, [ 'ebook', 'extra' ] );
+		$pBook->mDb->query( "DELETE FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'audiobook' AND `xref` IS NULL", [ (int)$pBook->mContentId ] );
 		$normTitle = preg_replace( '/[^a-z0-9]/', '', strtolower( (string)$pBook->getTitle() ) );
 		foreach( $files as $kind => $list ) {
 			$order = 0;
@@ -173,6 +159,119 @@ class FisheyeBookFiles {
 			}
 		}
 		return $summary;
+	}
+
+	/**
+	 * The book's Audio folders (a folder whose name starts "Audio", with at least one audio file in it): each is one audio book, an album.
+	 * 'linked' = the album's content_id once its 'audiobook' row exists (the row's xkey_ext is the folder, the xref the album), else null.
+	 * @return list<array{rel:string,name:string,tracks:int,bytes:int,linked:?int}>  rel = under the Library root, ending '/'
+	 */
+	public static function audioFolders( FisheyeBook $pBook ): array {
+		$folder = self::folderFor( $pBook );
+		if( !$folder ) {
+			return [];
+		}
+		$linked = [];
+		foreach( $pBook->mDb->getAll( "SELECT `xkey_ext`, `xref` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'audiobook' AND `xref` IS NOT NULL AND `end_date` IS NULL", [ (int)$pBook->mContentId ] ) ?: [] as $row ) {
+			$linked[$row['xkey_ext']] = (int)$row['xref'];
+		}
+		$ret = [];
+		$names = array_filter( scandir( $folder['abs'] ) ?: [], fn( $n ) => $n[0] !== '.' && is_dir( $folder['abs'].$n ) && stripos( $n, 'audio' ) === 0 );
+		natcasesort( $names );
+		foreach( $names as $name ) {
+			$tracks = array_filter( scandir( $folder['abs'].$name ) ?: [], fn( $f ) => is_file( $folder['abs'].$name.'/'.$f ) && in_array( strtolower( pathinfo( $f, PATHINFO_EXTENSION ) ), self::AUDIO, true ) );
+			if( !$tracks ) {
+				continue;
+			}
+			$bytes = 0;
+			foreach( $tracks as $t ) {
+				$bytes += (int)filesize( $folder['abs'].$name.'/'.$t );
+			}
+			$rel = $folder['rel'].$name.'/';
+			$ret[] = [ 'rel' => $rel, 'name' => $name, 'tracks' => count( $tracks ), 'bytes' => $bytes, 'linked' => $linked[$rel] ?? null ];
+		}
+		return $ret;
+	}
+
+	/**
+	 * The gallery the audio-book albums are filed under (no folder behind it, just a tidy parent), found by the content_id kept in
+	 * the config - never by its name - and made the first time: under the top gallery above the book (the Library).
+	 */
+	public static function audioBooksGalleryId( FisheyeBook $pBook ): int {
+		global $gBitSystem, $gBitDb;
+		$id = (int)$gBitSystem->getConfig( 'fisheyemedia_audio_books_gallery', 0 );
+		if( $id && $gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ $id ] ) ) {
+			return $id;
+		}
+		$top = (int)$pBook->mContentId;
+		for( $i = 0; $i < 6; $i++ ) {
+			$parent = $gBitDb->getOne( "SELECT `gallery_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` = ?", [ $top ] );
+			if( !$parent ) {
+				break;
+			}
+			$top = (int)$parent;
+		}
+		$gallery = new FisheyeMediaGallery();
+		$storeHash = [ 'title' => 'Audio Books', 'gallery_pagination' => FISHEYE_PAGINATION_MUSIC_GRID ];   // store() takes it by reference
+		if( !$gallery->store( $storeHash ) ) {
+			return 0;
+		}
+		if( $top !== (int)$pBook->mContentId ) {
+			$parentGallery = new \Bitweaver\Fisheye\FisheyeGallery( null, $top );
+			$parentGallery->load();
+			$parentGallery->addItem( $gallery->mContentId );
+		}
+		$gBitSystem->storeConfig( 'fisheyemedia_audio_books_gallery', (int)$gallery->mContentId, FISHEYEMEDIA_PKG_NAME );
+		return (int)$gallery->mContentId;
+	}
+
+	/**
+	 * Make one Audio folder an album: the album is made with the music album code (no gallery path involved - its folder is the book's),
+	 * filed under the audio books gallery, titled 'Audio Book' (edit it afterwards), then the book's 'audiobook' row is written:
+	 * xkey_ext the folder, xref the album's content_id.
+	 * @return array{created?:int,error?:string,tracks?:int}
+	 */
+	public static function loadAudioFolder( FisheyeBook $pBook, string $pRel ): array {
+		$have = array_values( array_filter( self::audioFolders( $pBook ), fn( $f ) => $f['rel'] === $pRel ) );
+		if( !$have ) {
+			return [ 'error' => 'No audio folder '.$pRel.' in this book.' ];
+		}
+		if( $have[0]['linked'] ) {
+			return [ 'already' => $have[0]['linked'] ];
+		}
+		$root = \Bitweaver\Liberty\mime_film_get_storage_root();
+		$library = self::libraryRoot();
+		if( $root === '' || !str_starts_with( $library, $root ) ) {
+			return [ 'error' => 'The Library is not under the disk storage root.' ];
+		}
+		$title = 'Audio Book'; // the plain default, edited afterwards where it needs to say more; its short form (before ' Book') is the row's xkey
+		$result = FisheyeAlbum::registerFromDisk( substr( $library, strlen( $root ) ).$pRel, $title, self::audioBooksGalleryId( $pBook ), null, false, null, true );
+		if( empty( $result['created'] ) ) {
+			return [ 'error' => $result['error'] ?? 'The album was not made.' ];
+		}
+		$data = [ 'format' => 'mp3', 'size' => self::size( $have[0]['bytes'] ), 'narrator' => '', 'tracks' => $have[0]['tracks'] ];
+		$hash = [ 'content_id' => $pBook->mContentId, 'item' => 'audiobook', 'xkey' => preg_replace( '/\\s+Book$/i', '', $title ), 'xkey_ext' => $pRel, 'xref' => (int)$result['created'], 'edit' => json_encode( $data ), 'xorder' => 1 ];
+		if( !$pBook->storeXref( $hash ) ) {
+			return [ 'error' => 'The album was made (content_id '.$result['created'].') but the book\'s audiobook row was not: '.implode( '; ', array_map( 'strval', array_values( $pBook->mErrors ) ) ) ];
+		}
+		// The album stands alone: the book's description, and a 'book' external link back to the book (xkey = its content_id, shown on the album
+		// with the other external links). Both are HTML.
+		$album = new FisheyeAlbum( null, (int)$result['created'] );
+		$album->load();
+		$bookText = trim( (string)$pBook->getField( 'data' ) );
+		if( $bookText !== '' ) {
+			$descriptionHash = [ 'content_id' => $album->mContentId, 'title' => $album->getTitle(), 'edit' => $bookText ];
+			$album->store( $descriptionHash );
+		}
+		$bookLink = [ 'content_id' => $album->mContentId, 'item' => 'book', 'xkey' => (string)(int)$pBook->mContentId ];
+		$album->storeXref( $bookLink );
+		// the one-row-per-file rows an earlier scan made for this folder are replaced by the album
+		foreach( $pBook->mDb->getAll( "SELECT `xref_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'audiobook' AND `xref` IS NULL", [ (int)$pBook->mContentId ] ) ?: [] as $old ) {
+			if( str_starts_with( (string)$old['xkey_ext'], $pRel ) ) {
+				$pBook->mDb->query( "DELETE FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `xref_id` = ?", [ (int)$old['xref_id'] ] );
+			}
+		}
+		return [ 'created' => (int)$result['created'], 'tracks' => (int)( $result['tracks'] ?? 0 ) ];
 	}
 
 	/**

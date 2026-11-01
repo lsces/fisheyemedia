@@ -5,6 +5,8 @@
 			{* Top-level only, same gating as film_gallery_icons_inc.tpl's own "Load Collections". *}
 			<a title="{tr}Add Music Collection{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_music.php">{biticon ipackage="icons" iname="folder-new" iexplain="Add Music Collection"}</a>
 			<a title="{tr}Physical copies - records, CDs and DVDs{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_physical.php">{biticon ipackage="icons" iname="media-optical" iexplain="Physical copies"}</a>
+		{elseif $gContent->mContentId eq $gBitSystem->getConfig('fisheyemedia_audio_books_gallery', 0)}
+			{* The audio books gallery has no folder behind it: albums are made from a book's Audio folder (Load Audio Book on the book). *}
 		{else}
 			{* Any collection gallery below the top level - registers one album (a single
 			   FisheyeAlbum::registerFromDisk() folder) into this gallery, as opposed to the

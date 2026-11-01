@@ -255,6 +255,31 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		return [ 'content_id' => $gallery->mContentId ];
 	}
 
+	/** Set by registerFromDisk() for an audio book's album, before the book's 'audiobook' row can point back at it. */
+	private ?string $mAudioBookFolder = null;
+
+	/**
+	 * An audio book's album sits in no Music/ path: its folder is the book's own Audio folder, and the book's 'audiobook' row
+	 * names it (xkey_ext, under the Library root) and points at this album (xref = this content_id). Null for every other album.
+	 */
+	public function getAudioBookFolder(): ?string {
+		if( $this->mAudioBookFolder !== null ) {
+			return $this->mAudioBookFolder;
+		}
+		if( empty( $this->mContentId ) ) {
+			return null;
+		}
+		$rel = $this->mDb->getOne(
+			"SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'audiobook' AND `xref` = ? AND `end_date` IS NULL",
+			[ (int)$this->mContentId ]
+		);
+		if( !$rel ) {
+			return null;
+		}
+		$folder = FisheyeBookFiles::libraryRoot().$rel;
+		return is_dir( $folder ) ? $folder : null;
+	}
+
 	/**
 	 * The root this album's own 'track' xref rows (xkey_ext) live relative to - play_track.php
 	 * calls this generically via method_exists(), same convention FisheyeSeason's own version
@@ -281,6 +306,9 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		$root = \Bitweaver\Liberty\mime_film_get_storage_root();
 		if( empty( $root ) ) {
 			return $root;
+		}
+		if( $audioBookFolder = $this->getAudioBookFolder() ) {
+			return $audioBookFolder;
 		}
 		$pathSegments = [ $this->getTitle() ];
 		// A discography-category album (registerFromDisk()'s own $pCategory param) is linked
@@ -1830,10 +1858,13 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 *                                      FISHEYEALBUM_COMMON_TAG_ALTERNATES) since a folder
 	 *                                      category like "Tribute"/"Other" isn't a real MB concept
 	 *                                      and the two won't always agree.
+	 * @param bool $pAudioBook   an audio book's Audio folder (under the Library, not Music/): always a new album, whatever the
+	 *                           title (every one is called 'Audio Book'), and it finds its own folder through the book's
+	 *                           'audiobook' row (getAudioBookFolder()) - the caller writes that row; the folder is held here until then
 	 * @return array 'already'=>content_id, or 'created'=>content_id plus 'tracks'/'cover'/'discogs'
 	 *               summary info, or 'error'=>string on failure
 	 */
-	public static function registerFromDisk( string $pRelativeFolderPath, ?string $pTitle = null, int $pGalleryContentId = 0, ?string $pDescription = null, bool $pFetchDiscogs = false, ?string $pCategory = null ): array {
+	public static function registerFromDisk( string $pRelativeFolderPath, ?string $pTitle = null, int $pGalleryContentId = 0, ?string $pDescription = null, bool $pFetchDiscogs = false, ?string $pCategory = null, bool $pAudioBook = false ): array {
 		global $gBitDb;
 
 		$root = \Bitweaver\Liberty\mime_film_get_storage_root();
@@ -1851,7 +1882,9 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		// Only this gallery's own copy counts as already loaded - the same title under another artist
 		// is a different album (see FisheyeMediaGallery::albumIdInGallery()). With no gallery to link
 		// into, fall back to the bare title.
-		if( $pGalleryContentId ) {
+		if( $pAudioBook ) {
+			$existingContentId = null;
+		} elseif( $pGalleryContentId ) {
 			$existingContentId = FisheyeMediaGallery::albumIdInGallery( $title, $pGalleryContentId, (string)$pCategory );
 		} else {
 			$existingContentId = $gBitDb->getOne(
@@ -1867,7 +1900,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 				return [ 'already' => $existingContentId ];
 			}
 			$stubId = (int)$existingContentId;
-		} elseif( $pGalleryContentId ) {
+		} elseif( $pGalleryContentId && !$pAudioBook ) {
 			$stubId = FisheyePhysical::stubInGallery( $title, $pGalleryContentId );
 		}
 
@@ -1877,6 +1910,9 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		}
 
 		$album = $stubId ? new FisheyeAlbum( null, $stubId ) : new FisheyeAlbum();
+		if( $pAudioBook ) {
+			$album->mAudioBookFolder = $absoluteFolder;
+		}
 		[ $commonTags, $promotedTagKeys ] = self::extractCommonTags( $trackFiles );
 		$storeHash = [ 'title' => $title ];
 		if( $stubId ) {
@@ -1884,7 +1920,7 @@ class FisheyeAlbum extends FisheyeMediaImage {
 			$storeHash['content_id'] = $stubId;
 		}
 		if( $pDescription !== null && $pDescription !== '' ) {
-			$storeHash['edit'] = $pDescription;
+			$storeHash['edit'] = FisheyeDescriptions::toHtml( $pDescription );   // descriptions are HTML
 		}
 		if( !$album->store( $storeHash ) ) {
 			return [ 'error' => implode( '; ', $album->mErrors ) ];

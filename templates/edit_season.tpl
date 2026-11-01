@@ -40,7 +40,8 @@
 						<div class="form-group">
 							{formlabel label="Description" for="edit"}
 							{forminput}
-								<textarea class="form-control" name="edit" id="edit" rows="4">{$gContent->mInfo.data|default:''|escape}</textarea>
+								{* the editor every HTML description uses (the same as a book's) *}
+								{textarea rows=8 noformat=1 edit=$gContent->mInfo.data}
 								{formhelp note="Plex has no season-level description to auto-fill this - manual only."}
 							{/forminput}
 						</div>

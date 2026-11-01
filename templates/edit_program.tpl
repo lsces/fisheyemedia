@@ -72,7 +72,8 @@
 						<div class="form-group">
 							{formlabel label="Description" for="edit"}
 							{forminput}
-								<textarea class="form-control" name="edit" id="edit" rows="4">{$gContent->mInfo.data|default:''|escape}</textarea>
+								{* the editor every HTML description uses (the same as a book's) *}
+								{textarea rows=8 noformat=1 edit=$gContent->mInfo.data}
 								{formhelp note="Auto-filled from Plex's own summary on Reload Metadata, if it finds a match - edit here directly for a show Plex doesn't have (or to override it)."}
 							{/forminput}
 						</div>

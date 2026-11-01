@@ -40,7 +40,8 @@
 						<div class="form-group">
 							{formlabel label="Description" for="edit"}
 							{forminput}
-								<textarea class="form-control" name="edit" id="edit" rows="4">{$gContent->mInfo.data|default:''|escape}</textarea>
+								{* the editor every HTML description uses (the same as a book's) *}
+								{textarea rows=8 noformat=1 edit=$gContent->mInfo.data}
 							{/forminput}
 						</div>
 					{/legend}
@@ -63,7 +64,8 @@
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadImages" value="{tr}Reload Images{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadTracks" value="{tr}Reload Tracks{/tr}" />
-				<input type="submit" class="btn btn-secondary" name="fFetchDiscogs" value="{tr}Fetch Discogs Link{/tr}" />
+				{* a Discogs link comes from a MusicBrainz release: an audio book's album has neither *}
+				{if !$gContent->getAudioBookFolder()}<input type="submit" class="btn btn-secondary" name="fFetchDiscogs" value="{tr}Fetch Discogs Link{/tr}" />{/if}
 			</div>
 		{/form}
 	</div><!-- end .body -->

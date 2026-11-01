@@ -27,7 +27,7 @@
 			{/if}
 			<div class="col-md-6 film-facts">
 				{if $gContent->mInfo.data}
-					<p class="film-summary">{$gContent->mInfo.data|escape}</p>
+					<div class="film-summary">{$gContent->mInfo.data}</div>
 				{/if}
 				{if $creators}
 					<div class="film-credits"><strong>{tr}Created by{/tr}:</strong> {include file="bitpackage:fisheyemedia/credit_rollup_inc.tpl" people=$creators limit=8}</div>

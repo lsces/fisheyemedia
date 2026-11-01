@@ -15,7 +15,8 @@
 			{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
 			{if $gContent->hasUpdatePermission()}
 				<a title="{tr}Edit{/tr}" href="{$gContent->getEditUrl()|escape}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
-				<a title="{tr}Load Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php?album_id={$gContent->mContentId}">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Videos"}</a>
+				{* an audio book's album has no Videos/ folder *}
+				{if !$gContent->getAudioBookFolder()}<a title="{tr}Load Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php?album_id={$gContent->mContentId}">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Videos"}</a>{/if}
 			{/if}
 		</div>
 		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
@@ -35,7 +36,7 @@
 						{/foreach}
 					</p>
 				{/foreach}
-				{if $gContent->mInfo.data}<p>{$gContent->mInfo.data|escape}</p>{/if}
+				{if $gContent->mInfo.data}<div class="book-description">{$gContent->mInfo.data}</div>{/if}
 				{if $externalLinks|@count}
 					<p class="album-external-links"><strong>{tr}Links{/tr}:</strong>
 						{foreach from=$externalLinks item=link name=externalLinks}
