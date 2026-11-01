@@ -76,10 +76,11 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	$gContent->load();
 } elseif( !empty( $_REQUEST['fReloadMetadata'] ) ) {
 	$plexResult = $gContent->reloadPlexMetadata();
-	$plexResultLabel = KernelTools::tra( 'Metadata reloaded from Plex' );
+	$plexResultLabel = KernelTools::tra( !empty( $plexResult['tvdb']['matched'] ) ? 'No Plex match - metadata from TheTVDB' : 'Metadata reloaded from Plex' );
 } elseif( !empty( $_REQUEST['fReloadImages'] ) ) {
 	$plexResult = $gContent->reloadPlexImages();
-	$plexResultLabel = KernelTools::tra( !empty( $plexResult['matched'] ) ? 'Images reloaded from Plex' : 'No Plex match - thumbnail from the video file' );
+	$fromTvdb = !empty( $plexResult['items'] ) && str_starts_with( (string)$plexResult['items'][0], 'TheTVDB:' );
+	$plexResultLabel = KernelTools::tra( !empty( $plexResult['matched'] ) ? 'Images reloaded from Plex' : ( $fromTvdb ? 'No Plex match - poster from TheTVDB' : 'No Plex match - thumbnail from the video file' ) );
 } elseif( !empty( $_REQUEST['fReloadFeaturettes'] ) ) {
 	$relativeFilePath = $gContent->getRelativeFilePath();
 	$plexResult = $relativeFilePath !== null ? $gContent->registerFeaturettesFromDisk( $relativeFilePath ) : [ 'items' => [] ];

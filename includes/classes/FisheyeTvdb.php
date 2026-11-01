@@ -143,6 +143,30 @@ class FisheyeTvdb {
 		return null;
 	}
 
+	/**
+	 * A movie by title, for a video that Plex does not know (a concert or music video under Music/<Artist>/Videos/).
+	 * "Title (year)" or plain "Title"; the title must match exactly (case, punctuation and a trailing "(year)" ignored),
+	 * never a near match - a year that matters belongs in the title. Returns id, name, year, overview, image (poster URL) or null.
+	 */
+	public static function findMovie( string $pTitle ): ?array {
+		// "&" is "and" and "The" is ignored, so "A and B - Live in Concert" meets "A & B: The Live in Concert".
+		$norm = fn( string $t ) => trim( preg_replace( '/\s+/', ' ', preg_replace( '/\bthe\b/', ' ', preg_replace( '/[^a-z0-9]+/', ' ', str_replace( '&', ' and ', strtolower( preg_replace( '/\s*\(\s*\d{4}\s*\)\s*$/', '', $t ) ) ) ) ) ) );
+		$search = self::http( 'search?'.http_build_query( [ 'query' => $norm( $pTitle ), 'type' => 'movie' ], '', '&' ) );
+		foreach( (array)( $search['data'] ?? [] ) as $hit ) {
+			if( empty( $hit['tvdb_id'] ) || $norm( (string)( $hit['name'] ?? '' ) ) !== $norm( $pTitle ) ) {
+				continue;
+			}
+			return [
+				'id'       => (int)$hit['tvdb_id'],
+				'name'     => (string)$hit['name'],
+				'year'     => !empty( $hit['year'] ) ? (int)$hit['year'] : null,
+				'overview' => trim( (string)( $hit['overview'] ?? '' ) ),
+				'image'    => (string)( $hit['image_url'] ?? $hit['thumbnail'] ?? '' ),
+			];
+		}
+		return null;
+	}
+
 	// ---- the per-show cache file
 
 	public static function cachePath( int $pProgramId ): string {

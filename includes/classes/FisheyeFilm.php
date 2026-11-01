@@ -216,6 +216,73 @@ class FisheyeFilm extends FisheyeMediaImage {
 	}
 
 	/**
+	 * A film Plex does not know takes its description and poster from TheTVDB's movie record, found by title
+	 * (FisheyeTvdb::findMovie(): an exact title, so no match is normal - the frame-grab thumbnail stays).
+	 * The TheTVDB id is kept as a 'tvdb' xref; a description already there is left alone, and the poster
+	 * becomes the thumbnail only the first time (a later choice of thumbnail is not overridden).
+	 *
+	 * @return array|null  null when TheTVDB is not set up; else 'matched' and 'items' like the Plex reloads
+	 */
+	public function reloadTvdbMetadata(): ?array {
+		if( !FisheyeTvdb::configured() ) {
+			return null;
+		}
+		$summary = [ 'matched' => false, 'items' => [] ];
+		$movie = FisheyeTvdb::findMovie( $this->getTitle() );
+		if( !$movie ) {
+			return $summary;
+		}
+		$summary['matched'] = true;
+		$summary['items'][] = 'TheTVDB: '.$movie['name'].( $movie['year'] ? ' ('.$movie['year'].')' : '' );
+		if( !$this->upsertXref( $this->mContentId, 'tvdb', [ 'xkey' => (string)$movie['id'] ] ) ) {
+			$summary['items'][] = 'TheTVDB id NOT saved: '.implode( '; ', array_map( 'strval', (array)$this->mErrors ) );
+		}
+
+		$this->load();
+		if( $movie['overview'] !== '' && trim( (string)$this->getField( 'data' ) ) === '' ) {
+			$descriptionStoreHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $this->keepBbcLines( $movie['overview'] ) ];
+			$summary['items'][] = $this->store( $descriptionStoreHash ) ? 'description updated' : 'description NOT saved: '.implode( '; ', (array)$this->mErrors );
+		}
+
+		$this->fetchTvdbPoster( $movie, $summary );
+		// The edit page renders from this object after a reload: without this its Description box shows the old (empty) text, and a Save then blanks what was just stored.
+		$this->load();
+		return $summary;
+	}
+
+	/**
+	 * TheTVDB's poster for a movie found by FisheyeTvdb::findMovie(): stored as the film's first 'image' and, since
+	 * it is the first, its thumbnail. Does nothing when the film already has a stored image.
+	 */
+	private function fetchTvdbPoster( array $movie, array &$summary ): void {
+		$this->loadXrefInfo();
+		$hasImage = false;
+		foreach( $this->liveXrefs() as $xref ) {
+			if( $xref['item'] === 'image' ) {
+				$hasImage = true;
+				break;
+			}
+		}
+		if( $movie['image'] !== '' && !$hasImage ) {
+			$imageData = @file_get_contents( $movie['image'], false, stream_context_create( [ 'http' => [ 'timeout' => 25 ] ] ) );
+			if( $imageData !== false ) {
+				$branchPath = $this->getImageStorageBranchPath();
+				\Bitweaver\KernelTools::mkdir_p( $branchPath );
+				$fileName = 'tvdb-poster.jpg';
+				$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_tvdb_' );
+				file_put_contents( $tmpFile, $imageData );
+				$resized = self::resizeImageFile( $tmpFile, $branchPath.$fileName, 400 );
+				@unlink( $tmpFile );
+				if( $resized ) {
+					$xrefParamHash = [ 'content_id' => $this->mContentId, 'item' => 'image', 'xkey_ext' => $fileName, 'xorder' => 1 ];
+					$this->storeXref( $xrefParamHash );
+					$summary['items'][] = $this->promoteImageToThumbnail( $fileName ) ? 'poster: stored and set as the thumbnail' : 'poster: stored';
+				}
+			}
+		}
+	}
+
+	/**
 	 * Locate this film in the local Plex library, matched by its real absolute file path
 	 * (Plex's own media_parts.file, not fisheye's root-relative convention — realpath() bridges
 	 * the fisheye_disk_storage_root symlink back to whatever real path Plex actually stored,
@@ -287,7 +354,9 @@ class FisheyeFilm extends FisheyeMediaImage {
 		$featurettes = $film->registerFeaturettesFromDisk( $pRelativePath );
 
 		$ret = [ 'created' => $film->mContentId, 'linked' => $linked, 'plex' => $plexMeta, 'featurettes' => $featurettes ];
-		if( $pFetchImages ) {
+		// Nothing in Plex (a music video or concert under Music/<Artist>/Videos/): reloadPlexMetadata() fell back to TheTVDB.
+		$tvdb = $plexMeta['tvdb'] ?? null;
+		if( $pFetchImages && !( $tvdb['matched'] ?? false ) ) {
 			$ret['images'] = $film->reloadPlexImages();
 		}
 		return $ret;
@@ -827,6 +896,9 @@ class FisheyeFilm extends FisheyeMediaImage {
 
 		$plexMatch = $this->matchPlexMetadataItem();
 		if( !$plexMatch ) {
+			// Not in Plex (a music video or concert): TheTVDB's movie record instead.
+			$summary['tvdb'] = $this->reloadTvdbMetadata();
+			$summary['items'] = array_merge( $summary['items'], $summary['tvdb']['items'] ?? [] );
 			return $summary;
 		}
 		$plexDb = $plexMatch['db'];
@@ -988,7 +1060,16 @@ class FisheyeFilm extends FisheyeMediaImage {
 
 		$plexMatch = $this->matchPlexMetadataItem();
 		if( !$plexMatch ) {
-			// No Plex entry to take artwork from: rebuild the thumbnail from the video file itself.
+			// No Plex entry to take artwork from: TheTVDB's poster if it knows the film, else a frame from the video file itself.
+			$movie = FisheyeTvdb::configured() ? FisheyeTvdb::findMovie( $this->getTitle() ) : null;
+			if( $movie ) {
+				$summary['items'][] = 'TheTVDB: '.$movie['name'].( $movie['year'] ? ' ('.$movie['year'].')' : '' );
+				$before = count( $summary['items'] );
+				$this->fetchTvdbPoster( $movie, $summary );
+				if( count( $summary['items'] ) > $before ) {
+					return $summary;
+				}
+			}
 			$this->regrabFrameThumbnail( $summary );
 			return $summary;
 		}
