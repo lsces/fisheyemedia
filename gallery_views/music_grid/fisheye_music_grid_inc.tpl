@@ -91,7 +91,12 @@
 
 			{foreach from=$gContent->getCategorizedItems() item=stripItems key=stripKey}
 				{* '' = the artist folder's own albums (unlabelled); otherwise the group folder's name as written *}
-				{if $stripKey neq ''}<h3 class="music-strip-title">{$stripKey|escape}</h3>{/if}
+				{if $stripKey neq ''}
+					{* The Videos strip links to the nested Videos gallery (its Load Videos icon, its folder) *}
+					{assign var=stripUrl value=null}
+					{if $stripKey eq $smarty.const.FISHEYEMEDIA_VIDEOS_GALLERY_TITLE}{assign var=stripUrl value=$gContent->getVideosGalleryUrl()}{/if}
+					<h3 class="music-strip-title">{if $stripUrl}<a href="{$stripUrl|escape}">{$stripKey|escape}</a>{else}{$stripKey|escape}{/if}</h3>
+				{/if}
 				<div class="music-strip">
 				{foreach from=$stripItems item=galItem key=itemContentId}
 					<div class="music-grid-item">

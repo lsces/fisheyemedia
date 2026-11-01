@@ -373,7 +373,17 @@ heading when present.
 A concert or music video in an artist's `Videos/` folder (`load_video.php`) registers as a
 `FisheyeFilm` linked into a nested `Videos` gallery (`FISHEYEMEDIA_VIDEOS_GALLERY_TITLE`) inside the
 artist's gallery, film-grid layout. Plex metadata is fetched when Plex knows the file, but isn't
-required. The videos themselves appear as the last strip of the artist page.
+required. The videos themselves appear as the last strip of the artist page. A video's own folder with a
+`Featurettes/` subfolder is scanned one level down (only the video itself is a candidate); its featurettes
+attach through `registerFeaturettesFromDisk()` as for any film.
+
+No Plex match: `reloadPlexMetadata()` falls back to `reloadTvdbMetadata()`, and `reloadPlexImages()` to
+`fetchTvdbPoster()` before its frame grab. `FisheyeTvdb::findMovie()` searches TheTVDB's movies by title and
+accepts only an exact match after normalising (`&` = `and`, `The` dropped, trailing `(year)` ignored; the year is
+never compared). A match fills an empty description (`liberty_content.data`, never over an existing one) and,
+when the film has no stored image, stores the poster as an `image` row and the thumbnail. No `tvdb` xref is
+written: that item is defined for programs, not films. `reloadTvdbMetadata()` ends with `load()`: the edit
+page renders from the object after a reload, and a stale Description box blanks the new text on Save.
 
 ## Fisheye menu
 

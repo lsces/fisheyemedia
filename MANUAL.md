@@ -122,6 +122,16 @@ to load.
 A concert or music video in the artist's `Videos/` folder is loaded with **Load Videos** and plays
 like a film. The videos appear as the last strip of the artist page.
 
+A video with bonus material goes in a folder of its own, the extras in a `Featurettes/` folder beside it
+(`Videos/<Title>/<Title>.mp4`, `Videos/<Title>/Featurettes/Extra 1.mp4`); the extras attach to the video as
+Featurettes and are not offered as videos of their own.
+
+Plex rarely knows these files, so when it has no match the description and poster come from TheTVDB's movie
+record, found by the exact title (a trailing `(year)` is ignored, so put a year in the title only if it matters).
+**Reload Metadata** and **Reload Images** use TheTVDB the same way, and Reload Images falls back to a frame from
+the video only when TheTVDB has nothing. An existing description is never replaced, and the poster becomes the
+thumbnail only the first time. This needs the TheTVDB key in Media Library Settings.
+
 ## Books
 
 Books are catalogued one **edition** at a time (the ISBN is the key), with their credits, publisher, series,

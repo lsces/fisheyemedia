@@ -424,6 +424,36 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * For a nested "Videos" gallery: the gallery_id of the artist gallery above it, but only while that artist's
+	 * Videos/ folder still has videos to load (hasUnloadedVideoCandidates()) - the Load Videos icon on the Videos
+	 * gallery page uses it, so it hides itself the way the artist page's own icon does. Null otherwise.
+	 */
+	public function getUnloadedVideosOwnerId(): ?int {
+		if( $this->getTitle() !== FISHEYEMEDIA_VIDEOS_GALLERY_TITLE ) {
+			return null;
+		}
+		foreach( (array)$this->getParentGalleries() as $galleryId => $row ) {
+			$owner = FisheyeGallery::lookup( [ 'gallery_id' => (int)$galleryId ] );
+			return ( $owner instanceof self && $owner->isValid() && $owner->hasUnloadedVideoCandidates() ) ? (int)$galleryId : null;
+		}
+		return null;
+	}
+
+	/**
+	 * The page of this artist's nested "Videos" gallery (load_video.php's), for the heading of the Videos strip -
+	 * the strip shows its videos directly, this is the way into the gallery and its Load Videos icon. Null when
+	 * the artist has none.
+	 */
+	public function getVideosGalleryUrl(): ?string {
+		foreach( (array)$this->mItems as $item ) {
+			if( $item instanceof FisheyeGallery && $item->getTitle() === FISHEYEMEDIA_VIDEOS_GALLERY_TITLE ) {
+				return $item->getDisplayUrl();
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Groups this gallery's own items into the artist page's strips (fisheye_music_grid_inc.tpl),
 	 * mirroring the artist folder on disk: everything sitting directly in it first, as an unlabelled
 	 * strip (key ''); then one strip per group folder (FisheyeAlbum::isGroupFolder()), titled with

@@ -19,6 +19,7 @@
 namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\KernelTools;
+use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\Fisheye\FisheyeImage;
 use Bitweaver\HttpStatusCodes;
 
@@ -106,8 +107,15 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 		);
 	} else {
 		$userId = $gContent->getField( 'user_id' );
+		// The gallery the film is shown in (Films, a collection, an artist's Videos), read before expunge() removes the membership - the same return as edit_program.php.
+		$parentGalleries = $gContent->getParentGalleries();
+		$redirectUrl = FISHEYE_PKG_URL.'?user_id='.$userId;
+		if( !empty( $parentGalleries ) ) {
+			$urlParamHash = [ 'gallery_id' => key( $parentGalleries ) ];
+			$redirectUrl = FisheyeGallery::getDisplayUrlFromHash( $urlParamHash );
+		}
 		if( $gContent->expunge() ) {
-			KernelTools::bit_redirect( FISHEYE_PKG_URL.'?user_id='.$userId );
+			KernelTools::bit_redirect( $redirectUrl );
 		}
 	}
 }
