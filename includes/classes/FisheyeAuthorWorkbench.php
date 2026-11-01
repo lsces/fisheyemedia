@@ -189,6 +189,10 @@ class FisheyeAuthorWorkbench {
 				$row['needs'][] = $st['files']['todo'].' book'.( $st['files']['todo'] === 1 ? '' : 's' ).' with files to load';
 				$row['next'] = $row['next'] === 'done' ? 'files' : $row['next'];
 			}
+			if( $st['files']['albumTodo'] ) {
+				$row['needs'][] = $st['files']['albumTodo'].' book'.( $st['files']['albumTodo'] === 1 ? '' : 's' ).' with an Audio folder to load as an album';
+				$row['next'] = $row['next'] === 'done' ? 'files' : $row['next'];
+			}
 			if( $st['catalogue']['changes'] || $st['catalogue']['conflicts'] ) {
 				$row['needs'][] = 'catalogue file behind the database'.( $st['catalogue']['conflicts'] ? ' ('.count( $st['catalogue']['conflicts'] ).' disagreements)' : '' );
 				$row['next'] = $row['next'] === 'done' ? 'catalogue' : $row['next'];
@@ -232,7 +236,7 @@ class FisheyeAuthorWorkbench {
 		$st = [ 'contentId' => $pContentId, 'name' => $name, 'folder' => $folder, 'abs' => $abs, 'error' => null, 'hasCatalogue' => $csv !== '' && is_file( $csv ),
 			'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'noIsbn' => 0, 'aliases' => [], 'galleryId' => 0, 'galleryUrl' => '', 'qid' => '', 'hasContact' => false,
 			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'direct' => [], 'children' => [], 'proposal' => [ 'series' => [], 'unmatched' => [], 'empty' => [] ], 'singleFolders' => 0, 'moves' => [], 'seriesPending' => false,
-			'files' => [ 'blocked' => true, 'todo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
+			'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
 		if( $name === '' ) {
 			$st['error'] = 'That is not an author gallery.';
 			return $st;

@@ -50,7 +50,7 @@ class FisheyeSeriesWorkbench {
 		global $gBitDb;
 		$plan = FisheyeVariousAuthors::plan( $pName, $pFile );
 		$st = [ 'name' => $pName, 'error' => $plan['error'], 'plan' => $plan, 'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'differs' => [],
-			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'seriesUrl' => '', 'filing' => [ 'pending' => false, 'notes' => [] ], 'files' => [ 'blocked' => true, 'todo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
+			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'seriesUrl' => '', 'filing' => [ 'pending' => false, 'notes' => [] ], 'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
 		if( $plan['error'] ) {
 			return $st;
 		}
@@ -131,7 +131,7 @@ class FisheyeSeriesWorkbench {
 	 */
 	public static function filesStatus( array $pRows, string $pBaseRel ): array {
 		global $gBitDb;
-		$files = [ 'blocked' => false, 'todo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ];
+		$files = [ 'blocked' => false, 'todo' => 0, 'albumTodo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ];
 		$matched = [];
 		foreach( $pRows as $row ) {
 			if( !$row['book'] ) {
@@ -151,8 +151,9 @@ class FisheyeSeriesWorkbench {
 			$found = $preview['ebook'] + $preview['audiobook'] + $preview['extra'];
 			$todo = $found > 0 && $found !== $have;
 			$files['todo'] += $todo ? 1 : 0;
+			$files['albumTodo'] += $preview['albums'] > 0 ? 1 : 0;
 			$files['books'][] = [ 'id' => (int)$row['book'], 'title' => $row['title'], 'folder' => $preview['folder'], 'ebook' => $preview['ebook'], 'audiobook' => $preview['audiobook'],
-				'extra' => $preview['extra'], 'have' => $have, 'todo' => $todo ];
+				'extra' => $preview['extra'], 'albums' => $preview['albums'], 'have' => $have, 'todo' => $todo ];
 		}
 		$files['unmatched'] = self::unmatchedFolders( $pBaseRel, $matched );
 		return $files;
@@ -160,7 +161,7 @@ class FisheyeSeriesWorkbench {
 
 	/**
 	 * Folders under a Library folder that no loaded book resolved to - the books still to catalogue. A folder that holds folders of its own is a
-	 * series folder and its folders are the books; one that does not is a book. Pictures/, Audio/ and Optional/ (the spare formats of a book,
+	 * series folder and its folders are the books; one that does not is a book. Pictures/, Audio/ (and Audio2/ ...) and Optional/ (the spare formats of a book,
 	 * see the library-tree README) inside a book are not books.
 	 *
 	 * @param array<string,bool> $pMatched  the book folders found, without closing slash, relative to the Library root
@@ -172,7 +173,7 @@ class FisheyeSeriesWorkbench {
 		if( !is_dir( $base ) ) {
 			return $out;
 		}
-		$skip = fn( string $pDir ): bool => $pDir === '' || $pDir[0] === '.' || in_array( strtolower( $pDir ), [ 'pictures', 'audio', 'optional' ], true );
+		$skip = fn( string $pDir ): bool => $pDir === '' || $pDir[0] === '.' || in_array( strtolower( $pDir ), [ 'pictures', 'optional' ], true ) || stripos( $pDir, 'audio' ) === 0;
 		foreach( array_diff( scandir( $base ) ?: [], [ '.', '..' ] ) as $dir ) {
 			if( $skip( $dir ) || !is_dir( $base.$dir ) ) {
 				continue;

@@ -41,6 +41,22 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	} else {
 		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Open Library has this edition, but nothing it holds is missing here.' ) : KernelTools::tra( 'Open Library has no edition with this ISBN.' );
 	}
+} elseif( !empty( $_REQUEST['fCheckIsbn'] ) ) {
+	// The ISBN was changed to another edition: what Open Library holds for it beside what is stored (nothing is written).
+	$isbnCheck = $gContent->checkOpenLibraryIsbn();
+	if( $isbnCheck['error'] !== '' ) {
+		$gContent->mErrors['open_library'] = $isbnCheck['error'];
+	} elseif( !$isbnCheck['found'] ) {
+		$olMessage = KernelTools::tra( 'Open Library has no edition with this ISBN.' );
+	}
+} elseif( !empty( $_REQUEST['fReplaceIsbn'] ) ) {
+	$olResult = $gContent->replaceFromOpenLibrary( !empty( $_REQUEST['replace_description'] ) );
+	if( !empty( $olResult['error'] ) ) {
+		$gContent->mErrors['open_library'] = $olResult['error'];
+	} else {
+		$olMessage = KernelTools::tra( 'Replaced from Open Library' );
+	}
+	$gContent->load();
 } elseif( !empty( $_REQUEST['fReloadWikidata'] ) ) {
 	$olResult = $gContent->reloadFromWikidata();
 	if( !empty( $olResult['error'] ) ) {
@@ -75,6 +91,8 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 $gContent->loadXrefInfo();
 $gBitSmarty->assign( 'errors', $gContent->mErrors );
 $gBitSmarty->assign( 'olResult', $olResult ?? null );
+$gBitSmarty->assign( 'isbnCheck', $isbnCheck ?? null );
+$gBitSmarty->assign( 'isbnHint', $gContent->isbnChangedHint() );
 $gBitSmarty->assign( 'olMessage', $olMessage ?? '' );
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gBitSmarty->assign( 'gContent', $gContent );

@@ -109,13 +109,18 @@ class FisheyeBookFiles {
 		return $found;
 	}
 
-	/** What would be written for this book, without writing it: [ 'folder' => rel|null, 'ebook' => n, 'audiobook' => n, 'extra' => n ]. */
+	/** What would be written for this book, without writing it: [ 'folder' => rel|null, 'ebook' => n, 'audiobook' => n, 'extra' => n, 'albums' => Audio folders still to load as albums ]. */
 	public static function preview( FisheyeBook $pBook ): array {
 		$folder = self::folderFor( $pBook );
-		$counts = [ 'folder' => $folder['rel'] ?? null, 'ebook' => 0, 'audiobook' => 0, 'extra' => 0 ];
+		$counts = [ 'folder' => $folder['rel'] ?? null, 'ebook' => 0, 'audiobook' => 0, 'extra' => 0, 'albums' => 0 ];
 		if( $folder ) {
 			foreach( self::scan( $folder['abs'] ) as $kind => $files ) {
 				$counts[$kind] = count( $files );
+			}
+			// An Audio folder already made into an album has its 'audiobook' row (kept, not rebuilt): it counts as that audio book. One not
+			// yet loaded is 'albums' - for Load Audio Book, not a file to scan.
+			foreach( self::audioFolders( $pBook ) as $audio ) {
+				$audio['linked'] ? $counts['audiobook']++ : $counts['albums']++;
 			}
 		}
 		return $counts;

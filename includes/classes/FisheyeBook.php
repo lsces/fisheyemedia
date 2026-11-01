@@ -754,6 +754,172 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $summary;
 	}
 
+	/** The book's ISBNs (13 then 10) and Open Library's edition for the first that has one. @return array{isbns:list<string>,edition:?array,error:string} */
+	private function openLibraryEditionForIsbns(): array {
+		$ret = [ 'isbns' => [], 'edition' => null, 'error' => '' ];
+		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
+		if( !class_exists( $wiki ) ) {
+			$ret['error'] = \Bitweaver\KernelTools::tra( 'The contactwiki package is needed to ask Open Library.' );
+			return $ret;
+		}
+		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$ret['isbns'] = array_values( array_filter( [ trim( (string)( $isbnRow['xkey'] ?? '' ) ), trim( (string)( $isbnRow['xkey_ext'] ?? '' ) ) ] ) );
+		if( !$ret['isbns'] ) {
+			$ret['error'] = \Bitweaver\KernelTools::tra( 'This book has no ISBN to look up.' );
+			return $ret;
+		}
+		foreach( $ret['isbns'] as $isbn ) {
+			usleep( 300000 );
+			$found = $wiki::fetchOpenLibraryJson( '/isbn/'.rawurlencode( $isbn ).'.json' );
+			if( str_starts_with( (string)( $found['key'] ?? '' ), '/books/' ) ) {
+				$ret['edition'] = $found;
+				return $ret;
+			}
+		}
+		if( ( $fetchError = $wiki::getLastFetchError() ) && !str_contains( $fetchError, 'HTTP 404' ) ) {
+			$ret['error'] = \Bitweaver\KernelTools::tra( 'Open Library did not answer, so nothing was changed' ).': '.$fetchError;
+		}
+		return $ret;
+	}
+
+	/** The ISBN the stored cover was fetched for ('openlibrary:<isbn>' / 'googlebooks:<isbn>' in its row), or '' when it did not come from a lookup. */
+	private function coverSourceIsbn(): string {
+		foreach( $this->mDb->getAll( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [] as $row ) {
+			if( preg_match( '/(?:openlibrary|googlebooks):([0-9Xx]{10,13})/', (string)$row['data'], $m ) ) {
+				return $m[1];
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Without asking anyone: whether the book's details look to have been loaded for a different ISBN than it has now (the cover was
+	 * fetched for another one). A hint only - checkOpenLibraryIsbn() is the real comparison.
+	 */
+	public function isbnChangedHint(): ?string {
+		$source = $this->coverSourceIsbn();
+		if( $source === '' ) {
+			return null;
+		}
+		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$current = array_filter( [ (string)( $isbnRow['xkey'] ?? '' ), (string)( $isbnRow['xkey_ext'] ?? '' ) ] );
+		return $current && !in_array( $source, $current, true )
+			? sprintf( \Bitweaver\KernelTools::tra( 'The cover was fetched for ISBN %s, but this book\'s ISBN is now %s.' ), $source, reset( $current ) )
+			: null;
+	}
+
+	/**
+	 * Asks Open Library about the book's current ISBN and sets what it holds beside what is stored, writing nothing: the edition (id,
+	 * language, publisher, year, pages, format), the cover's ISBN and the start of the description.
+	 *
+	 * @return array{error:string,found:bool,rows:list<array{label:string,stored:string,found:string,differs:bool}>,cover:string}
+	 */
+	public function checkOpenLibraryIsbn(): array {
+		$look = $this->openLibraryEditionForIsbns();
+		$ret = [ 'error' => $look['error'], 'found' => (bool)$look['edition'], 'rows' => [], 'cover' => '' ];
+		if( !$look['edition'] ) {
+			return $ret;
+		}
+		$fields = FisheyeBookCatalogue::fromOpenLibraryEdition( $look['edition'] );
+		$stored = fn( string $pItem ) => trim( (string)$this->mDb->getOne( "SELECT COALESCE( `xkey`, `xkey_ext` ) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId, $pItem ] ) );
+		foreach( [ 'ol_edition' => 'Edition', 'language' => 'Language', 'publisher' => 'Publisher', 'published' => 'Published', 'pages' => 'Pages', 'format' => 'Format' ] as $item => $label ) {
+			$value = $fields[$item] ?? null;
+			$found = $value === null ? '' : trim( (string)( $value['name'] ?? $value['xkey'] ?? $value['xkey_ext'] ?? '' ) );
+			$was = $stored( $item );
+			$ret['rows'][] = [ 'label' => $label, 'stored' => $was, 'found' => $found, 'differs' => mb_strtolower( $was ) !== mb_strtolower( $found ) ];
+		}
+		$coverId = (int)( $look['edition']['covers'][0] ?? 0 );
+		$ret['cover'] = $coverId > 0 ? 'https://covers.openlibrary.org/b/id/'.$coverId.'-M.jpg?default=false' : '';
+		$ret['rows'][] = [ 'label' => 'Cover fetched for ISBN', 'stored' => $this->coverSourceIsbn(), 'found' => (string)$look['isbns'][0], 'differs' => !in_array( $this->coverSourceIsbn(), $look['isbns'], true ) ];
+		return $ret;
+	}
+
+	/**
+	 * The book's ISBN was changed to another edition: the details that belong to an edition (its id, language, publisher, year, pages, format,
+	 * edition name and the ids on other services, and the cover) are replaced by those of the edition the ISBN now names. What an editor owns
+	 * is left alone - the title, series, authors, genres and anything else - and the description only when $pDescription is true. The old
+	 * rows are archived (the History tab keeps them), not deleted, and nothing is touched unless Open Library has the edition.
+	 *
+	 * @return array{matched:bool,items:list<string>,error?:string}
+	 */
+	public function replaceFromOpenLibrary( bool $pDescription = false ): array {
+		$summary = [ 'matched' => false, 'items' => [] ];
+		$look = $this->openLibraryEditionForIsbns();
+		if( $look['error'] !== '' ) {
+			$summary['error'] = $look['error'];
+			return $summary;
+		}
+		if( !$look['edition'] ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'Open Library has no edition with this ISBN, so nothing was changed.' );
+			return $summary;
+		}
+		$summary['matched'] = true;
+
+		// 1. The old edition rows out (archived). A publisher only where it came from Open Library; a hand-entered one stays.
+		$archived = [];
+		foreach( $this->mDb->getAll(
+			"SELECT `xref_id`, `item`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `end_date` IS NULL AND `item` IN ('ol_edition','pages','format','published','language','publisher','edition','google_books','goodreads','librarything','oclc','internet_archive')",
+			[ $this->mContentId ] ) ?: [] as $row ) {
+			if( $row['item'] === 'publisher' && !str_contains( (string)$row['data'], 'openlibrary' ) ) {
+				continue;
+			}
+			$stepHash = [ 'xref_id' => (int)$row['xref_id'], 'expunge' => 3 ];
+			if( $this->stepXref( $stepHash ) ) {
+				$archived[$row['item']] = true;
+			}
+		}
+		if( $archived ) {
+			$summary['items'][] = 'replaced: '.implode( ', ', array_keys( $archived ) );
+		}
+
+		// 2. The description, if asked: emptied so the fill below writes the new edition's, and put back if there is none.
+		$oldDescription = trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) );
+		if( $pDescription && $oldDescription !== '' ) {
+			$emptyHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => '' ];
+			$this->store( $emptyHash );
+		}
+
+		// 3. The fill: edition rows and ids (their rows are gone, so they are added), then the work's description when empty.
+		foreach( $this->reloadFromOpenLibrary( false )['items'] as $line ) {
+			$summary['items'][] = $line;
+		}
+		if( $pDescription && $oldDescription !== '' && trim( (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) === '' ) {
+			$backHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => $oldDescription ];
+			$this->store( $backHash );
+			$summary['items'][] = 'description: Open Library has none for this edition - the old one kept';
+		}
+
+		// 4. The cover: the edition's own cover id, then by ISBN, then Google Books; the old cover is archived only once a new one is stored.
+		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
+		$candidates = [];
+		if( (int)( $look['edition']['covers'][0] ?? 0 ) > 0 ) {
+			$candidates[] = [ 'url' => 'https://covers.openlibrary.org/b/id/'.(int)$look['edition']['covers'][0].'-L.jpg?default=false', 'source' => 'openlibrary:'.$look['isbns'][0] ];
+		}
+		foreach( $look['isbns'] as $isbn ) {
+			$candidates[] = [ 'url' => 'https://covers.openlibrary.org/b/isbn/'.$isbn.'-L.jpg?default=false', 'source' => 'openlibrary:'.$isbn ];
+		}
+		foreach( $look['isbns'] as $isbn ) {
+			$candidates[] = [ 'url' => '', 'isbn' => $isbn, 'source' => 'googlebooks:'.$isbn ];
+		}
+		foreach( $candidates as $candidate ) {
+			usleep( 300000 );
+			$bytes = $candidate['url'] !== '' ? $wiki::fetchOpenLibraryImage( $candidate['url'] ) : self::fetchGoogleCover( $wiki, $candidate['isbn'] );
+			if( $bytes === null ) {
+				continue;
+			}
+			$tmp = tempnam( sys_get_temp_dir(), 'olcover_' );
+			file_put_contents( $tmp, $bytes );
+			$stored = $this->replaceCover( $tmp, $candidate['source'] );
+			@unlink( $tmp );
+			if( $stored !== null ) {
+				$summary['items'][] = 'cover: '.$candidate['source'];
+				break;
+			}
+		}
+		$this->load();
+		return $summary;
+	}
+
 	/**
 	 * @param bool $pCover  false to leave covers alone - the bulk Local Imports fill asks for the text and ids only
 	 */

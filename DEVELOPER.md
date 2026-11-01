@@ -704,7 +704,13 @@ The page drops byte-identical duplicates and `FisheyeBook::isBlankCover()` stand
 `fetchGuarded()` (http/https only, each redirect re-checked against private/reserved ranges, so it cannot reach the local network);
 `picturesAt()` returns the picture itself or, for a web page, its `og:image` and the `.jpg`/`.png` addresses in it with the size marker
 (`._SL300_`) dropped, skipping logos/icons and anything under 120 px, at most 8. The Add ISBN box saves through
-`FisheyeBook::storeXref()` (check digit, ISBN-13 + ISBN-10), Reload from Open Library is `reloadFromOpenLibrary()`. The Amazon and
+`FisheyeBook::storeXref()` (check digit, ISBN-13 + ISBN-10), Reload from Open Library is `reloadFromOpenLibrary()` (blanks only). A changed ISBN has its own pair:
+`checkOpenLibraryIsbn()` (read-only comparison for the edit page) and `replaceFromOpenLibrary( $pDescription )`, which archives the edition rows (`ol_edition`,
+`pages`, `format`, `published`, `language`, `edition`, a publisher that came from Open Library, and the edition-level service ids) with `stepXref()`, empties
+the description when asked (putting the old one back if Open Library has none), runs `reloadFromOpenLibrary( false )` to refill, then `replaceCover()` - which
+archives the old cover only once a new one is stored. `isbnChangedHint()` compares the cover row's `openlibrary:<isbn>` / `googlebooks:<isbn>` source with
+the current ISBN. The workbench files status counts an Audio folder already made into an album (`FisheyeBookFiles::audioFolders()`, `linked`) as the audio book
+its `audiobook` row is, and an unloaded one apart (`albums`, `albumTodo`) with a link to Load Audio Book; `Audio2`-style folders are never "folders with no book". The Amazon and
 AbeBooks links on the book page are built in `view_book.php` from the ISBN, not stored.
 
 **Make a cover** (same page) is for a book with no picture to be found. `FisheyeBookCovers::shelf()` lists the pictures in the gallery titled
@@ -810,11 +816,29 @@ setting, else the disk storage root plus `Library/`. `candidateFolders( FisheyeB
 galleries the book is in (a series gallery's parent is the author; a series under Various Authors gives `Various Authors/<series>/<book>`);
 `folderFor()` returns the first that exists on disk. `safe()` replaces only `/` in a title, so colons and apostrophes stay.
 
-`scan()` sorts the top level of a book's folder into **ebook** files, **audiobook** (an `Audio/` folder: single files, or wrapper folders with a
-track count) and **extra**, ignoring pictures, covers and `Pictures/`. `register()` rebuilds just the `ebook`, `audiobook` and `extra` rows (items in
+`scan()` sorts the top-level *files* of a book's folder into **ebook**, **audiobook** (a single audio file beside the ebook, `tracks` 1) and
+**extra**; every folder is ignored (pictures, covers, `Pictures/`, and the `Audio*` folders, which are albums - below). `register()` rebuilds just the `ebook`, `audiobook` and `extra` rows (items in
 the `images` group of the `fisheyebook` scheme: `xkey_ext` is the path under the root, `data` a small JSON blob) with `storeXref()`, `'edit'` carrying
 the JSON. `pathFor( xkey_ext, track )` resolves a row to a file and refuses anything whose `realpath()` is outside the root.
 `view_book_file.php` serves a file by `xref_id` only (`verifyViewPermission()`, `liberty_serve_range_file()`).
+
+**Audio books in many files are albums.** One `Audio*` folder with audio files in it is one `fisheyealbum`, made by
+`FisheyeBookFiles::loadAudioFolder()` (page `load_audio_book.php?content_id=<book>`, link on the book's Extras panel while `audioFolders()` finds an
+unlinked folder) through `FisheyeAlbum::registerFromDisk( ..., $pAudioBook = true )`: no same-title check (every one is called "Audio Book") and no
+stub take-over. The book's `audiobook` row carries the link: `xkey_ext` the folder under the Library root (ending `/`), `xref` the album's
+content_id (a number, always), `xkey` the album's short title (the title without a trailing " Book"; written at load, not kept in step with a later
+title edit). The album finds its files from that row (`FisheyeAlbum::getAudioBookFolder()`, a reverse lookup on `item = 'audiobook' AND xref =
+this content_id`, consulted first by `getImageStorageRoot()`), so its title and gallery do not matter and no Music/ path is involved. It is filed in
+an "Audio Books" gallery, found by the content_id in config `fisheyemedia_audio_books_gallery` (made on first use under the top gallery above the
+book) - never by title. Its description is the book's (HTML), it gets a `book` external-link xref (`xkey` = the book's content_id, relative href in the
+`fisheyealbum` scheme), and the Load Videos / Fetch Discogs / Load Album icons are hidden for it. `register()` keeps `audiobook` rows that have an `xref`;
+`getExtrasGroups()` shows such a row as one entry linking to the album.
+
+**Descriptions are HTML.** The film, programme, season and album descriptions (`liberty_content.data`, format `bithtml`) are HTML like a book's or a
+contact's; the view pages output them as stored and the edit forms use the shared `{textarea}` editor. `FisheyeDescriptions::toHtml()` turns plain
+text into paragraphs and "PLAY: / INFO: <address>" lines (the BBC downloads) into links; every writer of a description uses it
+(`keepBbcLines()` for the Plex and TheTVDB reloads, an album's disc-tag description). The one-off page that converted rows stored as plain text (through each item's own `store()`, retrying a Firebird -913 deadlock) has been
+removed now the conversion is done on every site that holds media; a row still plain text shows as plain text in the editor.
 
 `load_book_files.php` is the page: `LOAD_BOOK_FILES_BATCH` (20) books per press, `LOAD_BOOK_FILES_LIST` (60) listed. A search matches the title, an
 author credit, or a series filed under a gallery of that name; the folders-with-no-record report compares with every book the search matches, not

@@ -179,8 +179,8 @@ the screen), and a row whose book is not loaded yet is left exactly as it is. Th
 
 A book's ebooks, audio books and other files are its **Extras**, listed on the book's page beside its pictures. They live in the
 Library folder (the **Book Library Storage Path** in Media Library Settings; otherwise `Library/` inside the disk root) as
-`Library/<author>/<series>/<book>/`, with the ebook files at the top of the book's folder, an `Audio/` folder (a single `.m4b`, or one
-folder per recording for many files) and anything else beside them. A book with no series is `Library/<author>/<book>/`. Folder names are
+`Library/<author>/<series>/<book>/`, with the ebook files at the top of the book's folder, a single audio file (one `.mp3` or `.m4b`) beside them,
+an `Audio` folder for a recording in many files (a second recording is `Audio2`) and anything else beside them. A book with no series is `Library/<author>/<book>/`. Folder names are
 the gallery and book titles exactly.
 
 **Book Files from the Library** (the folder icon on an author's gallery, or the Media menu) finds each book's folder from the
@@ -188,6 +188,12 @@ galleries the book is filed in, shows what is in it, and ticks the books whose f
 ebook, audio book and other-file rows (twenty books a press). A scan rebuilds only those three kinds; a book whose folder is not found
 keeps what it has. Pictures and cover files are left to the pictures folder. With a search, the folders under the matching authors that no
 listed book found are listed too: those are the books still to catalogue. Files are served through the site, to anyone who may view the book.
+
+**Audio books in many files.** A recording in an `Audio` folder is loaded as an album with **Load Audio Book**, the icon on the book's Extras
+panel (shown only while such a folder has not been loaded). The tracks, cover and tags are read from the files as for any album; the album is
+called "Audio Book" (edit the title if it needs to say more, for example who reads it), is filed under an **Audio Books** gallery that is only
+a tidy parent, takes the book's description, and links back to the book. The book's Extras then shows it as one entry. Descriptions of books,
+films, programmes, seasons and albums are all HTML and are edited in the same editor.
 
 ### A series by several authors
 
@@ -213,6 +219,12 @@ labelled "<Author>'s <series>". Running it again changes nothing that is already
 - **Cover:** the book's front cover is its tile. It is found automatically (Open Library, then Google Books)
   or added by hand; the first image added to a book with no tile becomes the tile. Covers are kept at no more
   than 400 pixels on the longest side, the size the Library shows.
+- **A different edition (the ISBN was changed):** **Reload from Open Library** only fills what is blank, so a book whose ISBN was changed
+  to another edition (an English one for a translation, say) keeps the old edition's details. A warning on the edit page says when the cover
+  was fetched for a different ISBN. **Check ISBN** asks Open Library about the ISBN the book has now and sets what it holds beside what is
+  stored (edition, language, publisher, year, pages, format, cover), writing nothing. **Replace details from this ISBN** then replaces those
+  edition details and the cover; the title, series, authors and genres are kept, the old values stay in the History tab, and the description
+  is replaced only if **Also replace the description** is ticked. Nothing changes if Open Library has no edition for the ISBN.
 - **Find a Cover:** the **Find a Cover** button on a book's edit page opens a picker for that book. It lists the covers
   found for the book's ISBN - Open Library, Google Books, AbeBooks and Amazon - each with its size in pixels, and
   **Use as cover** makes the chosen one the front cover and the tile (the book's other pictures are not touched; a

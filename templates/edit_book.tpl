@@ -22,6 +22,26 @@
 			</div>
 		{/if}
 
+		{if $isbnHint && !$isbnCheck}
+			<div class="alert alert-warning">{$isbnHint|escape} {tr}Use Check ISBN to compare the details with the edition it names.{/tr}</div>
+		{/if}
+
+		{if $isbnCheck && $isbnCheck.found}
+			<div class="alert alert-info">
+				<p>{tr}Open Library has an edition for this ISBN. Stored here, and what it holds:{/tr}</p>
+				<table class="table data">
+					<tr><th></th><th>{tr}Stored{/tr}</th><th>{tr}Open Library{/tr}</th></tr>
+					{foreach from=$isbnCheck.rows item=row}
+						<tr{if $row.differs} class="warning"{/if}><td>{$row.label|escape}</td><td>{$row.stored|escape}</td><td>{$row.found|escape}</td></tr>
+					{/foreach}
+				</table>
+				{if $isbnCheck.cover}<p><img src="{$isbnCheck.cover|escape}" alt="" style="max-height:160px" /></p>{/if}
+				<p>{tr}Replace changes the edition details and the cover; the title, series, authors and genres are kept, and the old values stay in the History tab.{/tr}</p>
+				<label><input type="checkbox" name="replace_description" value="1" form="editBookForm" /> {tr}Also replace the description{/tr}</label>
+				<div><input type="submit" class="btn btn-warning" name="fReplaceIsbn" value="{tr}Replace details from this ISBN{/tr}" form="editBookForm" /></div>
+			</div>
+		{/if}
+
 		{form id="editBookForm"}
 			<input type="hidden" name="content_id" value="{$gContent->mContentId}" />
 
@@ -55,6 +75,7 @@
 				<input type="submit" class="btn btn-default" name="fCancel" value="{tr}Cancel{/tr}" />
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadOpenLibrary" value="{tr}Reload from Open Library{/tr}" />
+				<input type="submit" class="btn btn-secondary" name="fCheckIsbn" value="{tr}Check ISBN{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadWikidata" value="{tr}Reload from Wikidata{/tr}" />
 				<a class="btn btn-secondary" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}pick_cover.php?content_id={$gContent->mContentId}">{tr}Find a Cover{/tr}</a>
 			</div>
