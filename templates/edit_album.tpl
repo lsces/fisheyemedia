@@ -41,7 +41,7 @@
 							{formlabel label="Description" for="edit"}
 							{forminput}
 								{* the editor every HTML description uses (the same as a book's) *}
-								{textarea rows=8 noformat=1 edit=$gContent->mInfo.data}
+								{textarea rows=8 edit=$gContent->mInfo.data formatguid=$gContent->mInfo.format_guid}
 							{/forminput}
 						</div>
 					{/legend}

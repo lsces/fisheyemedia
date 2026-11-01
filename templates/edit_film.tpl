@@ -49,7 +49,7 @@
 							{formlabel label="Description" for="edit"}
 							{forminput}
 								{* the editor every HTML description uses (the same as a book's) *}
-								{textarea rows=8 noformat=1 edit=$gContent->mInfo.data}
+								{textarea rows=8 edit=$gContent->mInfo.data formatguid=$gContent->mInfo.format_guid}
 								{formhelp note="Auto-filled from Plex's own summary on Reload Metadata, if it finds a match - edit here directly for a film Plex doesn't have (or to override it)."}
 							{/forminput}
 						</div>

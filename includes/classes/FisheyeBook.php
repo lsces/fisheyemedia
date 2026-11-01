@@ -812,11 +812,11 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * Asks Open Library about the book's current ISBN and sets what it holds beside what is stored, writing nothing: the edition (id,
 	 * language, publisher, year, pages, format), the cover's ISBN and the start of the description.
 	 *
-	 * @return array{error:string,found:bool,rows:list<array{label:string,stored:string,found:string,differs:bool}>,cover:string}
+	 * @return array{error:string,found:bool,rows:list<array{label:string,stored:string,found:string,differs:bool}>,cover:string,description:string}
 	 */
 	public function checkOpenLibraryIsbn(): array {
 		$look = $this->openLibraryEditionForIsbns();
-		$ret = [ 'error' => $look['error'], 'found' => (bool)$look['edition'], 'rows' => [], 'cover' => '' ];
+		$ret = [ 'error' => $look['error'], 'found' => (bool)$look['edition'], 'rows' => [], 'cover' => '', 'description' => '' ];
 		if( !$look['edition'] ) {
 			return $ret;
 		}
@@ -830,6 +830,19 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		$coverId = (int)( $look['edition']['covers'][0] ?? 0 );
 		$ret['cover'] = $coverId > 0 ? 'https://covers.openlibrary.org/b/id/'.$coverId.'-M.jpg?default=false' : '';
+		// The description Open Library would give (the edition's, else the work's - as the fill does); the stored one is on the edit page already.
+		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
+		$text = fn( $pValue ): string => is_array( $pValue ) ? (string)( $pValue['value'] ?? '' ) : (string)$pValue;
+		$foundText = self::cleanOpenLibraryText( $text( $look['edition']['description'] ?? '' ) );
+		if( $foundText === '' && ( $workKey = (string)( $look['edition']['works'][0]['key'] ?? '' ) ) !== '' ) {
+			usleep( 300000 );
+			$work = $wiki::fetchOpenLibraryJson( $workKey.'.json' );
+			$foundText = is_array( $work ) ? self::cleanOpenLibraryText( $text( $work['description'] ?? '' ) ) : '';
+		}
+		if( mb_strlen( $foundText ) < 30 || preg_match( '/^\W*(duplicate|dupe|see )/i', $foundText ) ) {
+			$foundText = '';
+		}
+		$ret['description'] = $foundText;
 		$ret['rows'][] = [ 'label' => 'Cover fetched for ISBN', 'stored' => $this->coverSourceIsbn(), 'found' => (string)$look['isbns'][0], 'differs' => !in_array( $this->coverSourceIsbn(), $look['isbns'], true ) ];
 		return $ret;
 	}

@@ -35,6 +35,8 @@
 						<tr{if $row.differs} class="warning"{/if}><td>{$row.label|escape}</td><td>{$row.stored|escape}</td><td>{$row.found|escape}</td></tr>
 					{/foreach}
 				</table>
+				<p><strong>{tr}The description Open Library would give{/tr}:</strong></p>
+				{if $isbnCheck.description}<blockquote>{$isbnCheck.description|escape|nl2br}</blockquote>{else}<p><em>{tr}Open Library holds none for this edition.{/tr}</em></p>{/if}
 				{if $isbnCheck.cover}<p><img src="{$isbnCheck.cover|escape}" alt="" style="max-height:160px" /></p>{/if}
 				<p>{tr}Replace changes the edition details and the cover; the title, series, authors and genres are kept, and the old values stay in the History tab.{/tr}</p>
 				<label><input type="checkbox" name="replace_description" value="1" form="editBookForm" /> {tr}Also replace the description{/tr}</label>
@@ -55,7 +57,7 @@
 							{/forminput}
 						</div>
 						{* The same editor a contact's description uses; the text is HTML (paragraphs), a description still plain is shown converted. *}
-						{textarea rows=12 noformat=1 edit=$descriptionHtml}
+						{textarea rows=12 edit=$descriptionHtml formatguid=$gContent->mInfo.format_guid}
 					{/legend}
 
 					{if $gXrefInfo->mGroups}
