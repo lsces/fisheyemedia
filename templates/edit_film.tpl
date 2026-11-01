@@ -105,6 +105,7 @@
 				<input type="submit" class="btn btn-primary" name="fSave" value="{tr}Save{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadMetadata" value="{tr}Reload Metadata{/tr}" />
 				<input type="submit" class="btn btn-secondary" name="fReloadImages" value="{tr}Reload Images{/tr}" />
+				<input type="submit" class="btn btn-secondary" name="fReloadFeaturettes" value="{tr}Reload Featurettes{/tr}" />
 			</div>
 		{/form}
 	</div><!-- end .body -->
