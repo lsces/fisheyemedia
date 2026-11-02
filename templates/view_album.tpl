@@ -16,7 +16,7 @@
 			{if $gContent->hasUpdatePermission()}
 				<a title="{tr}Edit{/tr}" href="{$gContent->getEditUrl()|escape}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
 				{* an audio book's album has no Videos/ folder *}
-				{if !$gContent->getAudioBookFolder()}<a title="{tr}Load Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php?album_id={$gContent->mContentId}">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Videos"}</a>{/if}
+				{if !$gContent->getAudioBookFolder()}<a title="{tr}Load Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php?album_id={$gContent->mContentId}">{biticon ipackage="icons" iname="bwfm-film-load" iexplain="Load Videos"}</a>{/if}
 			{/if}
 		</div>
 		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>

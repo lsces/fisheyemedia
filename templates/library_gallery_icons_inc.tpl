@@ -8,16 +8,21 @@
 	{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
 	{if $gContent->hasUpdatePermission()}
 		{if $gContent->getTitle() eq 'Library'}
-			<a title="{tr}Add Books from ISBNs{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{biticon ipackage="icons" iname="list-add" iexplain="Add Books from ISBNs"}</a>
+			<a title="{tr}Add Books from ISBNs{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{biticon ipackage="icons" iname="bwfm-book-add" iexplain="Add Books from ISBNs"}</a>
 		{else}
-			{* The author's contact: the contact page itself once one is linked, else the page that creates it. *}
-			{assign var=authorContactUrl value=$libraryGallery->getAuthorContactUrl()}
-			{if $authorContactUrl}
-				<a title="{tr}Author's contact page{/tr}" href="{$authorContactUrl|escape}">{biticon ipackage="icons" iname="system-users" iexplain="Author's contact page"}</a>
+			{assign var=seriesWorkbenchUrl value=$libraryGallery->getSeriesWorkbenchUrl()}
+			{if $seriesWorkbenchUrl}
+				<a title="{tr}Series workbench: load books, file the series, load files{/tr}" href="{$seriesWorkbenchUrl|escape}">{biticon ipackage="icons" iname="bwfm-series" iexplain="Series workbench"}</a>
 			{else}
-				<a title="{tr}Author's contact from Open Library{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_authors.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="system-users" iexplain="Author's contact from Open Library"}</a>
+				{* The author's contact: the contact page itself once one is linked, else the page that creates it. *}
+				{assign var=authorContactUrl value=$libraryGallery->getAuthorContactUrl()}
+				{if $authorContactUrl}
+					<a title="{tr}Author's contact page{/tr}" href="{$authorContactUrl|escape}">{biticon ipackage="icons" iname="system-users" iexplain="Author's contact page"}</a>
+				{else}
+					<a title="{tr}Author's contact from Open Library{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_authors.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="system-users" iexplain="Author's contact from Open Library"}</a>
+				{/if}
+				<a title="{tr}Author workbench: load books, sort series, load files{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="bwfm-author" iexplain="Author workbench"}</a>
 			{/if}
-			<a title="{tr}Author workbench: load books, sort series, load files{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="folder-new" iexplain="Author workbench"}</a>
 		{/if}
 		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}edit.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
 		<a title="{tr}Image Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Image Order"}</a>

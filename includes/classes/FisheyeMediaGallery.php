@@ -351,6 +351,14 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	}
 
 	/**
+	 * Where the series workbench takes this gallery, or null: the Various Authors gallery itself and a series filed in it have no
+	 * author, so the author workbench does not apply (FisheyeSeriesWorkbench::redirectFor() is the same test the author workbench uses).
+	 */
+	public function getSeriesWorkbenchUrl(): ?string {
+		return $this->isValid() ? FisheyeSeriesWorkbench::redirectFor( (int)$this->mContentId ) : null;
+	}
+
+	/**
 	 * The item a pictures folder belongs to - the content a '<type>_content_id' preference on the folder points at (see
 	 * FisheyePicturesFolderTrait). Static because a folder is a plain FisheyeGallery. Null when there is no such item or the
 	 * visitor may not view it, so the folder's title then stays plain.

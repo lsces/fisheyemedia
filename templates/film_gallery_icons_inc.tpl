@@ -4,11 +4,11 @@
 		{if $gContent->getTitle() eq 'Films'}
 			{* Collections aren't nested (a collection is just another gallery under this one) -
 			   only offered here on the top "Films" gallery itself, not on a collection gallery. *}
-			<a title="{tr}Load Collections{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_collection.php">{biticon ipackage="icons" iname="folder-new" iexplain="Load Collections"}</a>
+			<a title="{tr}Load Collections{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_collection.php">{biticon ipackage="icons" iname="bwfm-film-load" iexplain="Load Collections"}</a>
 		{/if}
 		{if $gContent->getTitle() eq 'Local Videos'}
-			<a title="{tr}Load Local Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_local.php">{biticon ipackage="icons" iname="folder-new" iexplain="Load Local Videos"}</a>
-			<a title="{tr}Load Local Shows{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?local=1">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Local Shows"}</a>
+			<a title="{tr}Load Local Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_local.php">{biticon ipackage="icons" iname="bwfm-film-load" iexplain="Load Local Videos"}</a>
+			<a title="{tr}Load Local Shows{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?local=1">{biticon ipackage="icons" iname="bwfm-tv-load" iexplain="Load Local Shows"}</a>
 		{/if}
 		{* An artist's nested "Videos" gallery holds music videos: they are loaded from the artist's Videos/ folder
 		   (load_video.php, given the artist's gallery), not from the film library. An album's "<album> - Videos"
@@ -19,11 +19,11 @@
 			{if is_a( $gContent, '\Bitweaver\Fisheyemedia\FisheyeMediaGallery' )}
 				{assign var=videosOwnerId value=$gContent->getUnloadedVideosOwnerId()}
 				{if $videosOwnerId}
-					<a title="{tr}Load Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php?gallery_id={$videosOwnerId}">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Videos"}</a>
+					<a title="{tr}Load Videos{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_video.php?gallery_id={$videosOwnerId}">{biticon ipackage="icons" iname="bwfm-film-load" iexplain="Load Videos"}</a>
 				{/if}
 			{/if}
 		{elseif $gContent->getTitle() ne 'Local Videos' and $gContent->getTitle()|substr:-9 ne ' - Videos'}
-		<a title="{tr}Load Films{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_film.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="folder-open" iexplain="Load Films"}</a>
+		<a title="{tr}Load Films{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_film.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="bwfm-film-load" iexplain="Load Films"}</a>
 		{/if}
 		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}edit.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit"  iexplain="Edit"}</a>
 		<a title="{tr}Image Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Image Order"}</a>
