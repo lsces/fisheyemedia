@@ -91,6 +91,65 @@ class FisheyeCatalogueMerge {
 	}
 
 	/**
+	 * Fill the empty Wikidata cells of a catalogue file from a title => Q-id map (FisheyeBookClassics::findWikidataIds()): a row is matched by its title as the
+	 * merge compares titles, a cell that already holds something is never changed, and the column is added when the file lacks it. The old file is kept as for any
+	 * other rewrite.
+	 *
+	 * @param array<string,string> $pByTitle  title => Wikidata Q-id
+	 * @return array{filled:list<string>,error:?string}  the titles whose cell was filled
+	 */
+	public static function fillWikidataCells( string $pPath, array $pByTitle ): array {
+		$read = self::read( $pPath );
+		if( !$read ) {
+			return [ 'filled' => [], 'error' => \Bitweaver\KernelTools::tra( 'The file could not be read as a catalogue (it needs the usual columns).' ) ];
+		}
+		[ $head, $body ] = $read;
+		$byKey = [];
+		foreach( $pByTitle as $title => $qid ) {
+			$byKey[self::titleKey( (string)$title )] = $qid;
+		}
+		if( !in_array( 'Wikidata', $head, true ) ) {
+			$head[] = 'Wikidata';
+		}
+		$filled = [];
+		foreach( $body as &$row ) {
+			$row['Wikidata'] ??= '';
+			if( trim( $row['Wikidata'] ) === '' && isset( $byKey[self::titleKey( $row['Title'] )] ) ) {
+				$row['Wikidata'] = $byKey[self::titleKey( $row['Title'] )];
+				$filled[] = $row['Title'];
+			}
+		}
+		unset( $row );
+		if( !$filled ) {
+			return [ 'filled' => [], 'error' => null ];
+		}
+		$error = self::write( [ 'error' => null, 'exists' => true, 'path' => $pPath, 'head' => $head, 'body' => $body, 'changes' => count( $filled ) ] );
+		return [ 'filled' => $error ? [] : $filled, 'error' => $error ];
+	}
+
+	/**
+	 * Attach the work identifiers a catalogue file holds (Wikidata, Gutenberg, OL work cells) to the books it names that have none: a classic
+	 * loaded before its Wikidata id was in the sheet. Only a missing item is stored; an id already on the book (entered, or found from an ISBN)
+	 * is never replaced. Recomputed from the file now.
+	 *
+	 * @return int  identifiers stored
+	 */
+	public static function attachWorkIds( array $pFile ): int {
+		$byBook = [];
+		foreach( self::plan( $pFile )['attach'] as [ , $item, $value, $id ] ) {
+			$byBook[(int)$id][$item] = $value;
+		}
+		$done = 0;
+		foreach( $byBook as $id => $ids ) {
+			$book = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => $id ] );
+			if( $book instanceof FisheyeBook ) {
+				$done += count( $book->setWorkIds( $ids ) );
+			}
+		}
+		return $done;
+	}
+
+	/**
 	 * Add catalogue rows for folders in the Library tree that have no book - the books still to catalogue. A folder directly under the author is a book of that
 	 * name; one inside a series folder is a book of that series, numbered after the series' last. The ISBN, publisher and year are left blank for the
 	 * workbench to find; the title is the folder's name so the book finds its folder. A folder whose title is already in the file is not added twice.
@@ -214,10 +273,10 @@ class FisheyeCatalogueMerge {
 		}
 		$in = implode( ',', array_map( 'intval', $pIds ) );
 		foreach( $gBitDb->getAll( "SELECT `content_id`, `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` IN ( $in )" ) as $r ) {
-			$books[(int)$r['content_id']] = [ 'title' => trim( (string)$r['title'] ), 'isbn13' => '', 'isbn10' => '', 'authors' => [], 'publisher' => '', 'year' => '', 'series' => '', 'pos' => '' ];
+			$books[(int)$r['content_id']] = [ 'title' => trim( (string)$r['title'] ), 'isbn13' => '', 'isbn10' => '', 'authors' => [], 'publisher' => '', 'year' => '', 'series' => '', 'pos' => '', 'wikidata_work' => '', 'gutenberg' => '', 'ol_work' => '' ];
 		}
 		foreach( $gBitDb->getAll( "SELECT `content_id`, `item`, `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref`
-			WHERE `end_date` IS NULL AND `item` IN ( 'isbn', 'author', 'publisher', 'published' ) AND `content_id` IN ( $in ) ORDER BY `xorder`" ) as $r ) {
+			WHERE `end_date` IS NULL AND `item` IN ( 'isbn', 'author', 'publisher', 'published', 'wikidata_work', 'gutenberg', 'ol_work' ) AND `content_id` IN ( $in ) ORDER BY `xorder`" ) as $r ) {
 			$b =& $books[(int)$r['content_id']];
 			$ext = trim( (string)$r['xkey_ext'] );
 			switch( $r['item'] ) {
@@ -237,6 +296,11 @@ class FisheyeCatalogueMerge {
 					if( !$b['year'] && preg_match( '/\d{4}/', $ext, $m ) ) {
 						$b['year'] = $m[0];
 					}
+					break;
+				case 'wikidata_work':
+				case 'gutenberg':
+				case 'ol_work':
+					$b[$r['item']] = $b[$r['item']] ?: trim( (string)$r['xkey'] );
 					break;
 			}
 			unset( $b );
@@ -283,7 +347,7 @@ class FisheyeCatalogueMerge {
 	 * @return array{kind:string,name:string,path:string,exists:bool,error:?string,head:array,body:array,filled:array,added:array,loose:array,conflicts:array,changes:int}
 	 */
 	public static function plan( array $pFile ): array {
-		$plan = $pFile + [ 'error' => null, 'head' => self::HEADER, 'body' => [], 'filled' => [], 'added' => [], 'loose' => [], 'conflicts' => [], 'changes' => 0 ];
+		$plan = $pFile + [ 'error' => null, 'head' => self::HEADER, 'body' => [], 'filled' => [], 'added' => [], 'loose' => [], 'conflicts' => [], 'attach' => [], 'changes' => 0 ];
 		$books = self::details( self::bookIds( $pFile['kind'], $pFile['name'] ) );
 		if( $pFile['exists'] ) {
 			if( !( $read = self::read( $pFile['path'] ) ) ) {
@@ -322,6 +386,20 @@ class FisheyeCatalogueMerge {
 				} elseif( trim( $row[$col] ) !== $val && in_array( $col, [ 'ISBN-13', 'Year' ], true ) ) {
 					// [ title, column, the file's value, the database's value, book id, the row of the file, the other cells that go with this one ]
 					$plan['conflicts'][] = [ $row['Title'], $col, trim( $row[$col] ), $val, $id, $ri, $col === 'ISBN-13' && $b['isbn10'] !== '' ? [ 'ISBN-10' => $b['isbn10'] ] : [] ];
+				}
+			}
+			// The work identifiers (columns a classic's catalogue adds): a cell the file has and the book lacks is attached to the book (the user
+			// presses for it, attachWorkIds()); a cell the file leaves empty is filled from the book. A cell and a book that differ are left as they are.
+			$fileIds = FisheyeBookCatalogue::workIds( (string)( $row['Wikidata'] ?? '' ), (string)( $row['Gutenberg'] ?? '' ), (string)( $row['OL work'] ?? '' ) );
+			foreach( [ 'Wikidata' => 'wikidata_work', 'Gutenberg' => 'gutenberg', 'OL work' => 'ol_work' ] as $col => $item ) {
+				if( !in_array( $col, $plan['head'], true ) ) {
+					continue;
+				}
+				if( isset( $fileIds[$item] ) && $b[$item] === '' ) {
+					$plan['attach'][] = [ $row['Title'], $item, $fileIds[$item], $id ];
+				} elseif( trim( $row[$col] ) === '' && $b[$item] !== '' ) {
+					$row[$col] = $b[$item];
+					$plan['filled'][] = [ $row['Title'], $col, $b[$item] ];
 				}
 			}
 		}

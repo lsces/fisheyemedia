@@ -25,10 +25,33 @@
 			})
 			.catch(function () { box.textContent = 'Open Library did not answer.'; });
 	}
+	/* A classic's Suggest: Wikidata, Gutenberg and Google Books together (suggest_work.php). Picking one puts its identifier in the row's box. */
+	function suggestWork(link) {
+		var box = link.parentNode.querySelector('.isbn-options');
+		box.textContent = 'Asking Wikidata, Gutenberg and Google Books...';
+		fetch('{/literal}{$smarty.const.FISHEYEMEDIA_PKG_URL}{literal}suggest_work.php?title=' + link.dataset.title + '&author=' + link.dataset.author, { credentials: 'same-origin' })
+			.then(function (r) { return r.json(); })
+			.then(function (data) {
+				box.textContent = '';
+				(data.matches || []).forEach(function (m) {
+					var a = document.createElement('a');
+					a.href = '#'; a.className = 'isbn-pick'; a.dataset.isbn = m.id;
+					a.textContent = m.source + ': ' + m.title + (m.authors ? ' - ' + m.authors : '') + (m.year ? ' (' + m.year + ')' : '') + '  ' + m.id + (m.note ? '  [' + m.note + ']' : '');
+					var d = document.createElement('div'); d.appendChild(a); box.appendChild(d);
+				});
+				(data.notes || []).forEach(function (n) { var d = document.createElement('div'); d.className = 'text-muted'; d.textContent = n; box.appendChild(d); });
+				if (!box.firstChild) { box.textContent = 'No matches found.'; }
+			})
+			.catch(function () { box.textContent = 'The search did not answer.'; });
+	}
 	document.addEventListener('click', function (e) {
 		var link = e.target.closest('.isbn-suggest');
+		var workLink = e.target.closest('.work-suggest');
 		var pick = e.target.closest('.isbn-pick');
-		if (link) {
+		if (workLink) {
+			e.preventDefault();
+			suggestWork(workLink);
+		} else if (link) {
 			e.preventDefault();
 			suggest(link);
 		} else if (pick) {

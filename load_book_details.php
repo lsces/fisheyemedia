@@ -47,11 +47,13 @@ const LOAD_BOOK_DETAILS_NOCOVER_SHOWN = 100;
 const LOAD_BOOK_DETAILS_BATCH = 10;
 
 /** Content preference that marks a book already asked about, per job. */
-const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked', 'shops' => 'shop_covers_checked' ];
+const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked', 'shops' => 'shop_covers_checked', 'classics' => 'wikidata_details_checked' ];
 
 /**
  * The books worth asking Open Library about, in content id order after $pAfter, leaving out those already asked about for this job
  * (unless $pAgain).
+ *  'classics': a Wikidata work id (the catalogue's Wikidata column), with or without an ISBN, and something still missing that Wikidata or its
+ *             Open Library work can give - the original date, the Gutenberg id, the Open Library work, a description or a genre.
  *  'details': an ISBN, with or without a cover, and something Open Library might hold still missing - its edition id, a description, a
  *             genre, or (for a book with a cover) the thumbnail attachment that shows it. Covers are not looked for here: that is the
  *             'covers' job.
@@ -63,16 +65,22 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 	global $gBitDb;
 	$live = "x.`end_date` IS NULL";
 	$has = fn( string $pItem ) => "EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = '$pItem' AND $live )";
-	$job = $pJob === 'google'
+	$who = $has( 'isbn' );
+	if( $pJob === 'classics' ) {
+		$who = $has( 'wikidata_work' );
+	}
+	$job = $pJob === 'classics'
+		? "( NOT ".$has( 'gutenberg' )." OR NOT ".$has( 'ol_work' )." OR NOT ".$has( 'published' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
+		: ( $pJob === 'google'
 		? "( NOT ".$has( 'genre' )." OR NOT ".$has( 'pages' )." OR NOT ".$has( 'language' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
 		: ( in_array( $pJob, [ 'covers', 'shops' ], true )
 		? "NOT ".$has( 'image' )
 		: "( NOT ".$has( 'ol_edition' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0
-		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" );
-	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google', 'shops' ], true ) ? $pJob : 'details']."' )";
+		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" ) );
+	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google', 'shops', 'classics' ], true ) ? $pJob : 'details']."' )";
 	$rows = $gBitDb->getCol(
 		"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."liberty_content` lc
-		 WHERE lc.`content_type_guid` = 'fisheyebook' AND lc.`content_id` > ? AND ".$has( 'isbn' )." AND $job$mark
+		 WHERE lc.`content_type_guid` = 'fisheyebook' AND lc.`content_id` > ? AND $who AND $job$mark
 		 ORDER BY lc.`content_id`", [ $pAfter ]
 	) ?: [];
 	return array_map( 'intval', $rows );
@@ -120,11 +128,13 @@ function load_book_details_shop_cover( FisheyeBook $pBook, bool $pLook ): array 
 $after = max( 0, (int)( $_REQUEST['after'] ?? 0 ) );
 $googleKey = trim( (string)$gBitSystem->getConfig( 'fisheyemedia_google_books_api_key' ) ) !== '';
 $look = !empty( $_REQUEST['look'] );
-$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google', 'shops' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
+$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google', 'shops', 'classics' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
 $again = !empty( $_REQUEST['again'] );
+// The classics job: Wikidata's original date replaces a stored one (otherwise it only fills a blank).
+$replaceDate = !empty( $_REQUEST['replace_date'] );
 $pending = load_book_details_pending( $after, $job, $again );
 $counts = [];
-foreach( array_filter( [ 'details', 'covers', 'shops', $googleKey ? 'google' : '' ] ) as $name ) {
+foreach( array_filter( [ 'details', 'classics', 'covers', 'shops', $googleKey ? 'google' : '' ] ) as $name ) {
 	$counts[$name] = $name === $job ? count( $pending ) : count( load_book_details_pending( 0, $name, $again ) );
 }
 $doneBefore = (int)( $_REQUEST['done'] ?? 0 );
@@ -165,6 +175,8 @@ if( !empty( $_REQUEST['fetch'] ) ) {
 				}
 			} elseif( $job === 'shops' ) {
 				$found = load_book_details_shop_cover( $book, $look );
+			} elseif( $job === 'classics' ) {
+				$found = $book->fillFromWikidata( $look, $replaceDate );
 			} else {
 				// The details job leaves covers alone (a book with a cover repairs its thumbnail, with no request); the covers job looks for them.
 				$found = $book->reloadFromOpenLibrary( $job === 'covers' || (bool)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $contentId ] ) );
@@ -242,6 +254,7 @@ $gBitSmarty->assign( 'after', $after );
 $gBitSmarty->assign( 'job', $job );
 $gBitSmarty->assign( 'again', $again );
 $gBitSmarty->assign( 'look', $look );
+$gBitSmarty->assign( 'replaceDate', $replaceDate );
 $gBitSmarty->assign( 'doneCount', $doneBefore );
 $gBitSmarty->assign( 'changedCount', $changedBefore );
 $gBitSmarty->assign( 'more', $more );

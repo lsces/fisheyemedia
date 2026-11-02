@@ -31,6 +31,15 @@
 			{if !$st.hasCatalogue}
 				<p class="text-muted">{tr}There is no AuthorCatalogue.csv in the author's folder, so the books are the ones already loaded.{/tr}</p>
 			{elseif $st.missing}
+				{if $st.noWikidata}
+					{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`author_workbench.php"}
+						<input type="hidden" name="gallery_id" value="{$st.galleryId}" />
+						<div class="form-group submit">
+							<input type="submit" class="btn btn-default" name="find_wikidata_ids" value="{tr}Find Wikidata ids for the catalogue{/tr}" />
+							<span class="help-block">{$st.noWikidata} {tr}rows have no Wikidata id. This matches their titles against the author's works on Wikidata and writes the ids it finds into the catalogue file's Wikidata column (empty cells only; the old file is kept). A book with an id loads from Wikidata, not an ISBN.{/tr}</span>
+						</div>
+					{/form}
+				{/if}
 				<p class="help-block">{tr}These books are in the catalogue but not in the database. A book is filed in its first author's Library gallery (and beside any other author that has one), under the ISBN the catalogue gives; a row with no ISBN starts unticked: look its ISBN up here (Suggest fills the box and ticks the row), or tick it to load from its title and author alone. The catalogue's own ISBN always wins over one typed. At most{/tr} {$batch} {tr}are loaded per press. A book already there under the same title and first author counts as loaded; one that looks like a book the author already has under a fuller title is flagged and left unticked.{/tr}</p>
 				{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`author_workbench.php"}
 					<input type="hidden" name="gallery_id" value="{$st.galleryId}" />
@@ -39,9 +48,21 @@
 						<tbody>
 							{foreach from=$st.missing item=index}
 								<tr>
-									<td><input type="checkbox" name="book[]" value="{$index}"{if !$st.rows[$index].maybe && $st.rows[$index].isbn} checked="checked"{/if} /></td>
+									<td><input type="checkbox" name="book[]" value="{$index}"{if !$st.rows[$index].maybe && ( $st.rows[$index].isbn || $st.rows[$index].wikidata )} checked="checked"{/if} /></td>
 									<td>{$st.rows[$index].title|escape}{if $st.rows[$index].maybe} <strong>{tr}Possible duplicate of{/tr}</strong> <a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$st.rows[$index].maybe.id}">{$st.rows[$index].maybe.title|escape}</a>{/if}</td>
 									<td>{$st.rows[$index].authors|escape}{if $st.rows[$index].filedUnder} <span class="help-block">({tr}filed under{/tr} {$st.rows[$index].filedUnder|escape})</span>{/if}</td>
+									{if $st.rows[$index].wikidata}
+										<td colspan="2"><a href="https://www.wikidata.org/wiki/{$st.rows[$index].wikidata|escape}" target="_blank" rel="noopener">{$st.rows[$index].wikidata|escape}</a> - {tr}loaded from Wikidata, no ISBN needed{/tr}</td>
+									{elseif $st.rows[$index].classic}
+										<td>
+											<a href="https://www.wikidata.org/w/index.php?search={$st.rows[$index].terms}" target="_blank" rel="noopener">Wikidata</a> |
+											<a href="https://www.gutenberg.org/ebooks/search/?query={$st.rows[$index].terms}" target="_blank" rel="noopener">Gutenberg</a> |
+											<a href="https://www.google.com/search?tbm=bks&amp;q={$st.rows[$index].terms}" target="_blank" rel="noopener">Google Books</a> |
+											<a href="#" class="work-suggest" data-title="{$st.rows[$index].titleTerm}" data-author="{$st.rows[$index].authorTerm}">{tr}Suggest{/tr}</a>
+											<div class="isbn-options"></div>
+										</td>
+										<td><input type="text" class="form-control" name="isbn[{$index}]" value="" placeholder="{tr}Wikidata Q-id, Gutenberg or Google Books id{/tr}" size="22" /></td>
+									{else}
 									<td>
 										<a href="https://www.abebooks.co.uk/servlet/SearchResults?tn={$st.rows[$index].titleTerm}{if $st.rows[$index].authorTerm}&amp;an={$st.rows[$index].authorTerm}{/if}" target="_blank" rel="noopener">AbeBooks</a> |
 										<a href="https://openlibrary.org/search?q={$st.rows[$index].terms}" target="_blank" rel="noopener">Open Library</a> |
@@ -50,6 +71,7 @@
 										<div class="isbn-options"></div>
 									</td>
 									<td><input type="text" class="form-control" name="isbn[{$index}]" value="{$st.rows[$index].isbn|escape}" data-sheet="{$st.rows[$index].isbn|escape}" placeholder="{tr}ISBN-10 or ISBN-13{/tr}" size="16" /></td>
+									{/if}
 								</tr>
 							{/foreach}
 						</tbody>
@@ -206,6 +228,7 @@
 			{else}
 				{if $st.files.books}
 					<p class="help-block">{tr}Files load by themselves: a book whose folder holds files that are not all loaded yet is loaded when this page opens, all of them at once (rebuilding its ebook, audio book and extra rows).{/tr}</p>
+					{if $st.files.albumFolders}<p><strong>{$st.files.albumFolders}</strong> {if $st.files.albumFolders eq 1}{tr}Audio folder to load as an album{/tr}{else}{tr}Audio folders to load as albums{/tr}{/if}, {tr}in{/tr} {$st.files.albumTodo} {if $st.files.albumTodo eq 1}{tr}book{/tr}{else}{tr}books{/tr}{/if}. {tr}A book's link below opens its folders, which are ticked and loaded together.{/tr}</p>{/if}
 					<table class="table table-condensed">
 						<thead><tr><th>{tr}Book{/tr}</th><th>{tr}Folder{/tr}</th><th>{tr}In the folder{/tr}</th><th>{tr}Loaded{/tr}</th></tr></thead>
 						<tbody>
@@ -213,7 +236,7 @@
 								<tr>
 									<td><a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$b.id}">{$b.title|escape}</a></td>
 									<td>{$b.folder|escape}</td>
-									<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}{if $b.albums} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_audio_book.php?content_id={$b.id}">{tr}Audio folder to load as an album{/tr}</a>{/if}</td>
+									<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}{if $b.albums} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_audio_book.php?content_id={$b.id}">{$b.albums} {if $b.albums eq 1}{tr}Audio folder to load as an album{/tr}{else}{tr}Audio folders to load as albums{/tr}{/if}</a>{/if}</td>
 									<td>{$b.have}{if $b.todo} <span class="label label-warning">{tr}to load{/tr}</span>{/if}</td>
 								</tr>
 							{/foreach}

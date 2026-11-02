@@ -242,6 +242,18 @@ class FisheyeBook extends FisheyeMediaImage {
 		if( $title === '' ) {
 			return null;
 		}
+		// A row that names its Wikidata work finds the book that holds it, whatever the title or author is spelt.
+		if( ( $qid = (string)( $pRow['external']['wikidata_work'] ?? '' ) ) !== '' ) {
+			$id = $gBitDb->getOne(
+				"SELECT lx.`content_id` FROM `".BIT_DB_PREFIX."liberty_xref` lx
+				 INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = lx.`content_id`
+				 WHERE lc.`content_type_guid` = ? AND lx.`item` = 'wikidata_work' AND lx.`xkey` = ? AND lx.`end_date` IS NULL",
+				[ FISHEYEBOOK_CONTENT_TYPE_GUID, $qid ]
+			);
+			if( $id ) {
+				return (int)$id;
+			}
+		}
 		$sql = "SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."liberty_content` lc
 				WHERE lc.`content_type_guid` = ? AND lc.`title` = ?";
 		$bind = [ FISHEYEBOOK_CONTENT_TYPE_GUID, $title ];
@@ -1165,7 +1177,9 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
 		$isbns = array_values( array_filter( [ trim( (string)( $isbnRow['xkey'] ?? '' ) ), trim( (string)( $isbnRow['xkey_ext'] ?? '' ) ) ] ) );
-		if( !$isbns ) {
+		// A book with no ISBN may hold a Google Books volume id instead (a classic found by title): that volume is read as it is.
+		$volumeId = trim( (string)$this->mDb->getOne( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'google_books' AND `end_date` IS NULL", [ $this->mContentId ] ) );
+		if( !$isbns && $volumeId === '' ) {
 			$ret['error'] = \Bitweaver\KernelTools::tra( 'This book has no ISBN to look up.' );
 			return $ret;
 		}
@@ -1199,6 +1213,14 @@ class FisheyeBook extends FisheyeMediaImage {
 			return false;
 		};
 		$ownIsbn = fn( array $pVolume ): bool => (bool)array_intersect( $isbns, array_column( (array)( $pVolume['volumeInfo']['industryIdentifiers'] ?? [] ), 'identifier' ) );
+		if( !$isbns ) {
+			[ $status, $body ] = $get( 'https://www.googleapis.com/books/v1/volumes/'.rawurlencode( $volumeId ).'?'.http_build_query( [ 'key' => $key ] ) );
+			if( $refusal( $status, $body ) ) {
+				return $ret;
+			}
+			$candidate = $status === 200 ? json_decode( $body, true ) : null;
+			$volume = is_array( $candidate ) && !empty( $candidate['volumeInfo'] ) ? $candidate : null;
+		}
 		foreach( $isbns as $isbn ) {
 			// The ISBN's volume id from Google's older view-API lookup (it has no quota, and its search sibling has had long spells of 503),
 			// then the one volume by id with the key. Only the book itself is taken: its own ISBN among the identifiers Google lists.
@@ -1260,6 +1282,155 @@ class FisheyeBook extends FisheyeMediaImage {
 			$ret['items'][] = 'publisher: '.$parsed['publisher'];
 		}
 		return $ret;
+	}
+
+	/** Whether the book names its Wikidata work - a classic, loaded and filled from Wikidata, not from an ISBN. */
+	public function isClassic(): bool {
+		return (bool)(int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'wikidata_work' AND `end_date` IS NULL", [ $this->mContentId ] );
+	}
+
+	/**
+	 * Fill a newly loaded book from where its identifiers point: Wikidata for a classic (its work id, no ISBN involved), Open Library by ISBN for the rest.
+	 *
+	 * @return array{matched:bool,items:list<string>,error?:string}
+	 */
+	public function fillDetails(): array {
+		if( $this->isClassic() ) {
+			return $this->fillFromWikidata();
+		}
+		$stored = fn( string $pItem ): string => trim( (string)$this->mDb->getOne( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] ) );
+		if( !(int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] ) ) {
+			// No ISBN: a Gutenberg ebook may be a Wikidata work's (then the book is a classic after all); a Google Books volume is read as it is.
+			if( ( $ebook = $stored( 'gutenberg' ) ) !== '' && ( $qid = FisheyeBookClassics::wikidataForGutenberg( $ebook ) ) !== '' ) {
+				$this->setWorkIds( [ 'wikidata_work' => $qid ] );
+				return $this->fillFromWikidata();
+			}
+			if( $stored( 'google_books' ) !== '' ) {
+				return $this->fillFromGoogleBooks();
+			}
+		}
+		return $this->reloadFromOpenLibrary();
+	}
+
+	/**
+	 * Give the book the work identifiers it has none of (the catalogue's Wikidata / Gutenberg / OL work cells, for a book loaded before the cell was
+	 * filled): a value already stored, entered by hand or found by an earlier lookup, is never replaced.
+	 *
+	 * @param array<string,string> $pIds  item (wikidata_work, gutenberg, ol_work) => value
+	 * @return list<string>  the items stored
+	 */
+	public function setWorkIds( array $pIds ): array {
+		$set = [];
+		foreach( array_intersect_key( $pIds, array_flip( [ 'wikidata_work', 'gutenberg', 'ol_work' ] ) ) as $item => $value ) {
+			if( $value !== '' && !(int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $item ] ) ) {
+				$this->reconcileXrefItem( $item, [ [ 'key' => '', 'xorder' => 0, 'xkey' => $value ] ], null );
+				$set[] = $item;
+			}
+		}
+		return $set;
+	}
+
+	/**
+	 * What a Wikidata work item says that a book keeps: the original publication date (the earliest P577 that is not deprecated, as a year, month
+	 * or day according to its precision - the first printing of a serial is the date Wikidata gives for a Dickens novel, the book may be later),
+	 * the Project Gutenberg ebook id (P2034) and the Open Library work id (P648). Blank for whatever the item does not hold. Reads nothing but $pEntity.
+	 *
+	 * @param array $pEntity  a Wikidata entity (ContactWikiIndividual::fetchWikidataEntity())
+	 * @return array{published:string,gutenberg:string,ol_work:string}
+	 */
+	public static function wikidataWorkFacts( array $pEntity ): array {
+		$values = function( string $pProperty ) use ( $pEntity ): array {
+			$out = [];
+			foreach( (array)( $pEntity['claims'][$pProperty] ?? [] ) as $statement ) {
+				if( ( $statement['rank'] ?? '' ) !== 'deprecated' && isset( $statement['mainsnak']['datavalue']['value'] ) ) {
+					$out[] = $statement['mainsnak']['datavalue']['value'];
+				}
+			}
+			return $out;
+		};
+		$published = '';
+		$earliest = '';
+		foreach( $values( 'P577' ) as $time ) {
+			if( is_array( $time ) && preg_match( '/^\+(\d{4})-(\d\d)-(\d\d)/', (string)( $time['time'] ?? '' ), $m ) && ( $earliest === '' || $m[1].$m[2].$m[3] < $earliest ) ) {
+				$earliest = $m[1].$m[2].$m[3];
+				$precision = (int)( $time['precision'] ?? 9 );
+				$published = $precision >= 11 && $m[3] !== '00' ? $m[1].'-'.$m[2].'-'.$m[3] : ( $precision >= 10 && $m[2] !== '00' ? $m[1].'-'.$m[2] : $m[1] );
+			}
+		}
+		$gutenberg = (string)( $values( 'P2034' )[0] ?? '' );
+		$workId = (string)( $values( 'P648' )[0] ?? '' );
+		return [ 'published' => $published, 'gutenberg' => preg_match( '/^\d+$/', $gutenberg ) ? $gutenberg : '', 'ol_work' => preg_match( '/^OL\d+W$/', $workId ) ? $workId : '' ];
+	}
+
+	/**
+	 * Wikidata first, for a book that names its Wikidata work (a classic, older than its ISBNs - the catalogue's Wikidata column, or the book's
+	 * own `wikidata_work` id). The item is read once and gives the work's original publication date, its Project Gutenberg id and its Open
+	 * Library work id. Each fills only a blank, so an id given in the catalogue or entered by hand is kept (a wrong Open Library work is
+	 * overridden by naming the right one); the date replaces a stored one only when $pReplaceDate says the original date wins. With a work id
+	 * in hand the Open Library work record then adds the description, genres and links (fillFromOpenLibraryWork()). $pLook reports all of this
+	 * and stores nothing.
+	 *
+	 * @return array{matched:bool,items:list<string>,error:string}
+	 */
+	public function fillFromWikidata( bool $pLook = false, bool $pReplaceDate = false ): array {
+		$summary = [ 'matched' => false, 'items' => [], 'error' => '' ];
+		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
+		if( !class_exists( $wiki ) ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'The contactwiki package is needed to ask Wikidata.' );
+			return $summary;
+		}
+		$stored = fn( string $pItem ): string => trim( (string)$this->mDb->getOne(
+			"SELECT COALESCE( `xkey`, `xkey_ext` ) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId, $pItem ] ) );
+		$qid = strtoupper( $stored( 'wikidata_work' ) );
+		if( !preg_match( '/^Q\d+$/', $qid ) ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'This book has no Wikidata work id.' );
+			return $summary;
+		}
+		usleep( 300000 );
+		$entity = $wiki::fetchWikidataEntity( $qid );
+		if( !is_array( $entity ) ) {
+			$summary['error'] = \Bitweaver\KernelTools::tra( 'Wikidata did not answer, so nothing was changed' ).( ( $e = $wiki::getLastFetchError() ) ? ': '.$e : '' );
+			return $summary;
+		}
+		$summary['matched'] = true;
+		$facts = self::wikidataWorkFacts( $entity );
+		$setId = function( string $pItem, string $pValue ) use ( $stored, $pLook, &$summary ) {
+			if( $pValue !== '' && $stored( $pItem ) === '' ) {
+				$summary['items'][] = $pItem.': '.$pValue;
+				if( !$pLook ) {
+					$this->reconcileXrefItem( $pItem, [ [ 'key' => '', 'xorder' => 0, 'xkey' => $pValue ] ], null );
+				}
+			}
+		};
+
+		$original = $facts['published'];
+		$was = $stored( 'published' );
+		if( $original !== '' ) {
+			if( $was === '' || ( $pReplaceDate && $was !== $original ) ) {
+				$summary['items'][] = 'published: '.$original.( $was !== '' ? ' (was '.$was.')' : '' );
+				if( !$pLook ) {
+					$this->setPublished( $original );
+				}
+			} elseif( substr( $was, 0, 4 ) !== substr( $original, 0, 4 ) ) {
+				$summary['items'][] = 'published: Wikidata gives '.$original.', the book has '.$was.' (kept)';
+			}
+		}
+		$setId( 'gutenberg', $facts['gutenberg'] );
+		$workId = $facts['ol_work'];
+		$setId( 'ol_work', $workId );
+
+		// The descriptive text is Open Library's, from the work.
+		if( !$pLook ) {
+			array_push( $summary['items'], ...$this->fillFromOpenLibraryWork() );
+		} elseif( ( $workId = $stored( 'ol_work' ) ?: $workId ) !== '' ) {
+			usleep( 300000 );
+			$work = $wiki::fetchOpenLibraryJson( '/works/'.$workId.'.json' );
+			$text = fn( $pValue ): string => is_array( $pValue ) ? (string)( $pValue['value'] ?? '' ) : (string)$pValue;
+			$description = is_array( $work ) ? self::cleanOpenLibraryText( $text( $work['description'] ?? '' ) ) : '';
+			$summary['items'][] = !is_array( $work ) ? 'Open Library did not give work '.$workId
+				: ( mb_strlen( $description ) < 30 ? 'Open Library work '.$workId.' has no description' : 'description from Open Library work '.$workId.' ('.mb_strlen( $description ).' characters, '.count( (array)( $work['subjects'] ?? [] ) ).' subjects)' );
+		}
+		return $summary;
 	}
 
 	/** Words in an Open Library subject that name a genre (lower case) => the genre it is filed as. Used when the work has no genre tags. */

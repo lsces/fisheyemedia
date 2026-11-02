@@ -33,7 +33,7 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 	}
 	$gContent->load();
 } elseif( !empty( $_REQUEST['fReloadOpenLibrary'] ) ) {
-	$olResult = $gContent->reloadFromOpenLibrary();
+	$olResult = $gContent->fillDetails();
 	if( !empty( $olResult['error'] ) ) {
 		$gContent->mErrors['open_library'] = $olResult['error'];
 	} elseif( $olResult['items'] ) {

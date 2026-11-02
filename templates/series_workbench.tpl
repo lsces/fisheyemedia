@@ -112,6 +112,7 @@
 				{else}
 					{if $st.files.books}
 					<p class="help-block">{tr}Files load by themselves: a book whose folder holds files that are not all loaded yet is loaded when this page opens, all of them at once (rebuilding its ebook, audio book and extra rows).{/tr}</p>
+					{if $st.files.albumFolders}<p><strong>{$st.files.albumFolders}</strong> {if $st.files.albumFolders eq 1}{tr}Audio folder to load as an album{/tr}{else}{tr}Audio folders to load as albums{/tr}{/if}, {tr}in{/tr} {$st.files.albumTodo} {if $st.files.albumTodo eq 1}{tr}book{/tr}{else}{tr}books{/tr}{/if}. {tr}A book's link below opens its folders, which are ticked and loaded together.{/tr}</p>{/if}
 					<table class="table table-condensed">
 						<thead><tr><th>{tr}Book{/tr}</th><th>{tr}Folder{/tr}</th><th>{tr}In the folder{/tr}</th><th>{tr}Loaded{/tr}</th></tr></thead>
 						<tbody>
@@ -119,7 +120,7 @@
 								<tr>
 									<td><a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$b.id}">{$b.title|escape}</a></td>
 									<td>{$b.folder|escape}</td>
-									<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}{if $b.albums} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_audio_book.php?content_id={$b.id}">{tr}Audio folder to load as an album{/tr}</a>{/if}</td>
+									<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}{if $b.albums} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_audio_book.php?content_id={$b.id}">{$b.albums} {if $b.albums eq 1}{tr}Audio folder to load as an album{/tr}{else}{tr}Audio folders to load as albums{/tr}{/if}</a>{/if}</td>
 									<td>{$b.have}{if $b.todo} <span class="label label-warning">{tr}to load{/tr}</span>{/if}</td>
 								</tr>
 							{/foreach}

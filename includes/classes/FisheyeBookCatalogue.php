@@ -31,6 +31,9 @@ class FisheyeBookCatalogue {
 		'Author role' => 'author_role', 'Publisher' => 'publisher', 'Title' => 'title', 'Year' => 'year', 'Published' => 'published_iso',
 		'Date precision' => 'precision', 'Copies' => 'copies', 'Paid GBP' => 'paid',
 		'Source URL' => 'source_url', 'Notes' => 'notes', 'Flags' => 'flags',
+		// For a book older than its ISBNs (a classic): the identifiers of the work itself. The Wikidata item is the master key - the Book Details
+		// 'classics' job reads the original date, the Gutenberg id and the Open Library work from it - but any of the three given here is kept as it is.
+		'Wikidata' => 'wikidata', 'Gutenberg' => 'gutenberg', 'OL work' => 'ol_work',
 	];
 
 	/**
@@ -276,6 +279,8 @@ class FisheyeBookCatalogue {
 			}
 		}
 
+		$external += self::workIds( (string)( $pRaw['wikidata'] ?? '' ), (string)( $pRaw['gutenberg'] ?? '' ), (string)( $pRaw['ol_work'] ?? '' ) );
+
 		$copies = (int)( $pRaw['copies'] ?? 1 );
 
 		return [
@@ -293,6 +298,26 @@ class FisheyeBookCatalogue {
 			'note'         => $notes,
 			'external'     => $external,
 		];
+	}
+
+	/**
+	 * The work's own identifiers as a catalogue cell holds them - a Q-id, a Gutenberg number (or its ebook address) and an Open Library work id - each
+	 * kept only if it looks like one.
+	 *
+	 * @return array<string,string>  book external item (wikidata_work, gutenberg, ol_work) => value
+	 */
+	public static function workIds( string $pWikidata, string $pGutenberg, string $pOlWork ): array {
+		$ids = [];
+		if( preg_match( '/^Q\d+$/i', trim( $pWikidata ) ) ) {
+			$ids['wikidata_work'] = strtoupper( trim( $pWikidata ) );
+		}
+		if( preg_match( '/(\d+)\s*$/', trim( $pGutenberg ), $m ) ) {
+			$ids['gutenberg'] = $m[1];
+		}
+		if( preg_match( '/^OL\d+W$/i', trim( $pOlWork ) ) ) {
+			$ids['ol_work'] = strtoupper( trim( $pOlWork ) );
+		}
+		return $ids;
 	}
 
 	/**

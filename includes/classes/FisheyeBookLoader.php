@@ -142,8 +142,8 @@ class FisheyeBookLoader {
 				continue;
 			}
 			$book = FisheyeImage::lookup( [ 'content_id' => $bookContentId ] );
-			if( $book && $book->isValid() && method_exists( $book, 'reloadFromOpenLibrary' ) ) {
-				$found = $book->reloadFromOpenLibrary();
+			if( $book && $book->isValid() && method_exists( $book, 'fillDetails' ) ) {
+				$found = $book->fillDetails();
 				$result['details'][] = [ 'content_id' => $bookContentId, 'url' => $book->getDisplayUrl(), 'title' => $book->getTitle(), 'matched' => !empty( $found['matched'] ), 'items' => $found['items'] ?? [], 'error' => $found['error'] ?? '' ];
 			}
 		}

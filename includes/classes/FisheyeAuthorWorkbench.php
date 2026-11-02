@@ -190,11 +190,11 @@ class FisheyeAuthorWorkbench {
 				$row['next'] = $row['next'] === 'done' ? 'files' : $row['next'];
 			}
 			if( $st['files']['albumTodo'] ) {
-				$row['needs'][] = $st['files']['albumTodo'].' book'.( $st['files']['albumTodo'] === 1 ? '' : 's' ).' with an Audio folder to load as an album';
+				$row['needs'][] = $st['files']['albumFolders'].' Audio folder'.( $st['files']['albumFolders'] === 1 ? '' : 's' ).' to load as '.( $st['files']['albumFolders'] === 1 ? 'an album' : 'albums' ).' ('.$st['files']['albumTodo'].' book'.( $st['files']['albumTodo'] === 1 ? '' : 's' ).')';
 				$row['next'] = $row['next'] === 'done' ? 'files' : $row['next'];
 			}
-			if( $st['catalogue']['changes'] || $st['catalogue']['conflicts'] ) {
-				$row['needs'][] = 'catalogue file behind the database'.( $st['catalogue']['conflicts'] ? ' ('.count( $st['catalogue']['conflicts'] ).' disagreements)' : '' );
+			if( $st['catalogue']['changes'] || $st['catalogue']['conflicts'] || $st['catalogue']['attach'] ) {
+				$row['needs'][] = 'catalogue file behind the database'.( $st['catalogue']['conflicts'] ? ' ('.count( $st['catalogue']['conflicts'] ).' disagreements)' : '' ).( $st['catalogue']['attach'] ? ' ('.count( $st['catalogue']['attach'] ).' work ids to attach)' : '' );
 				$row['next'] = $row['next'] === 'done' ? 'catalogue' : $row['next'];
 			}
 			$row['done'] = !$row['needs'];
@@ -237,9 +237,9 @@ class FisheyeAuthorWorkbench {
 		$abs = $folder !== null ? FisheyeBookFiles::libraryRoot().$folder.'/' : '';
 		$csv = $abs !== '' ? $abs.self::CATALOGUE : '';
 		$st = [ 'contentId' => $pContentId, 'name' => $name, 'folder' => $folder, 'abs' => $abs, 'error' => null, 'hasCatalogue' => $csv !== '' && is_file( $csv ),
-			'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'noIsbn' => 0, 'aliases' => [], 'galleryId' => 0, 'galleryUrl' => '', 'qid' => '', 'hasContact' => false,
+			'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'noIsbn' => 0, 'noWikidata' => 0, 'aliases' => [], 'galleryId' => 0, 'galleryUrl' => '', 'qid' => '', 'hasContact' => false,
 			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'direct' => [], 'children' => [], 'proposal' => [ 'series' => [], 'unmatched' => [], 'empty' => [] ], 'singleFolders' => 0, 'moves' => [], 'seriesPending' => false,
-			'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
+			'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'albumFolders' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
 		if( $name === '' ) {
 			$st['error'] = 'That is not an author gallery.';
 			return $st;
@@ -261,12 +261,14 @@ class FisheyeAuthorWorkbench {
 			foreach( $parsed['rows'] as $i => $row ) {
 				$id = FisheyeBook::findContentId( $row ) ?? ( $row['isbn13'] !== '' ? FisheyeBook::findContentId( [ 'isbn13' => '' ] + $row ) : null );
 				$primary = FisheyeBookCredits::canonicalName( FisheyeBookCatalogue::primaryAuthor( $row ) );
-				$st['rows'][$i] = [ 'title' => $row['title'], 'authors' => implode( ', ', $row['authors'] ), 'isbn' => $row['isbn13'], 'book' => $id,
+				$st['rows'][$i] = [ 'title' => $row['title'], 'authors' => implode( ', ', $row['authors'] ), 'isbn' => $row['isbn13'], 'wikidata' => (string)( $row['external']['wikidata_work'] ?? '' ), 'classic' => !empty( $row['external']['wikidata_work'] ) || ( preg_match( '/^\d{4}/', (string)$row['published'], $py ) && (int)$py[0] < FisheyeBookClassics::BEFORE && $row['isbn13'] === '' ), 'book' => $id,
 					'filedUnder' => $primary !== '' && mb_strtolower( $primary ) !== mb_strtolower( $name ) ? $primary : '',
 					'titleTerm' => rawurlencode( $row['title'] ), 'authorTerm' => rawurlencode( (string)( $row['authors'][0] ?? '' ) ),
 					'terms' => rawurlencode( trim( $row['title'].' '.( $row['authors'][0] ?? '' ) ) ) ];
 				$st['total']++;
-				$st['noIsbn'] += $row['isbn13'] === '' ? 1 : 0;
+				$st['noWikidata'] += empty( $row['external']['wikidata_work'] ) ? 1 : 0;
+				// A row with a Wikidata id is loaded from that, not an ISBN - it is not one that is waiting for an ISBN.
+				$st['noIsbn'] += $row['isbn13'] === '' && empty( $row['external']['wikidata_work'] ) ? 1 : 0;
 				if( $id ) {
 					$st['loaded']++;
 				} else {
@@ -340,12 +342,12 @@ class FisheyeAuthorWorkbench {
 	 * it would add, and values the file and the database disagree on (reported, never changed).
 	 */
 	public static function catalogueDrift( ?string $pFolder, string $pPath, bool $pExists ): array {
-		$none = [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ];
+		$none = [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'attach' => [], 'changes' => 0, 'error' => null ];
 		if( $pFolder === null || !$pExists ) {
 			return $none;
 		}
 		$plan = FisheyeCatalogueMerge::plan( [ 'kind' => 'author', 'name' => $pFolder, 'path' => $pPath, 'exists' => true ] );
-		return [ 'filled' => count( $plan['filled'] ), 'added' => $plan['added'], 'conflicts' => $plan['conflicts'], 'changes' => $plan['changes'], 'error' => $plan['error'] ];
+		return [ 'filled' => count( $plan['filled'] ), 'added' => $plan['added'], 'conflicts' => $plan['conflicts'], 'attach' => $plan['attach'], 'changes' => $plan['changes'], 'error' => $plan['error'] ];
 	}
 
 	/**
@@ -383,7 +385,10 @@ class FisheyeAuthorWorkbench {
 	 * @return array{0:list<array>,1:int}  the ones offered, and how many single-book folders were left out
 	 */
 	public static function offered( array $pSeries ): array {
-		$kept = array_values( array_filter( $pSeries, fn( $e ) => count( $e['books'] ) >= 2 || $e['target'] ) );
+		// A one-book folder is a series only when it belongs to one that exists - and not when it is simply that book's own folder (a folder named for the book
+		// it holds, as every book's is), which a similar series name must not claim: "Christmas Stories" starts with what is left of "Christmas Books".
+		$own = fn( array $e ): bool => count( $e['books'] ) === 1 && FisheyeSeries::titleKey( $e['folder'] ) === FisheyeSeries::titleKey( (string)$e['books'][0]['title'] );
+		$kept = array_values( array_filter( $pSeries, fn( $e ) => count( $e['books'] ) >= 2 || ( $e['target'] && !$own( $e ) ) ) );
 		return [ $kept, count( $pSeries ) - count( $kept ) ];
 	}
 
@@ -501,8 +506,8 @@ class FisheyeAuthorWorkbench {
 				continue;
 			}
 			$item = FisheyeImage::lookup( [ 'content_id' => $book['content_id'] ] );
-			if( $item && $item->isValid() && method_exists( $item, 'reloadFromOpenLibrary' ) ) {
-				$found = $item->reloadFromOpenLibrary();
+			if( $item && $item->isValid() && method_exists( $item, 'fillDetails' ) ) {
+				$found = $item->fillDetails();
 				$lookup['done']++;
 				if( !empty( $found['error'] ) ) {
 					$lookup['errors'][] = $book['title'].' - '.$found['error'];

@@ -1,6 +1,6 @@
 {* The catalogue file against the database - needs $catalogue (status.catalogue), $actionUrl, $hidden (name => value). Shown only when there is something to say. *}
 {strip}
-{if $catalogue.changes || $catalogue.conflicts}
+{if $catalogue.changes || $catalogue.conflicts || $catalogue.attach}
 	<div class="alert alert-info">
 		{if $catalogue.changes}
 			<p>{tr}The catalogue file is behind the database{/tr}: {$catalogue.filled} {tr}empty cells can be filled (ISBN, publisher, year) from books already loaded{/tr}{if $catalogue.added}, {tr}and these books are in the database but not in the file{/tr}: {foreach from=$catalogue.added item=title name=add}{$title|escape}{if !$smarty.foreach.add.last}, {/if}{/foreach}{/if}. {tr}A cell that already has a value is never changed.{/tr}</p>
@@ -8,6 +8,15 @@
 				{foreach from=$hidden key=hname item=hvalue}<input type="hidden" name="{$hname|escape}" value="{$hvalue|escape}" />{/foreach}
 				<div class="form-group submit">
 					<input type="submit" class="btn btn-default" name="update_catalogue" value="{tr}Update the catalogue file from the database{/tr}" />
+				</div>
+			{/form}
+		{/if}
+		{if $catalogue.attach}
+			<p>{tr}The file gives these books work identifiers (Wikidata, Gutenberg, Open Library work) that the books do not have yet{/tr}: {foreach from=$catalogue.attach item=a name=att}{$a.0|escape} ({$a.1|escape} {$a.2|escape}){if !$smarty.foreach.att.last}, {/if}{/foreach}. {tr}An identifier a book already has is never replaced.{/tr}</p>
+			{form legend="" action=$actionUrl}
+				{foreach from=$hidden key=hname item=hvalue}<input type="hidden" name="{$hname|escape}" value="{$hvalue|escape}" />{/foreach}
+				<div class="form-group submit">
+					<input type="submit" class="btn btn-default" name="attach_work_ids" value="{tr}Attach the file's work identifiers to the books{/tr}" />
 				</div>
 			{/form}
 		{/if}

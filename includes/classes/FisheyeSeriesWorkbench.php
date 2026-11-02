@@ -50,14 +50,14 @@ class FisheyeSeriesWorkbench {
 		global $gBitDb;
 		$plan = FisheyeVariousAuthors::plan( $pName, $pFile );
 		$st = [ 'name' => $pName, 'error' => $plan['error'], 'plan' => $plan, 'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'differs' => [],
-			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'seriesUrl' => '', 'filing' => [ 'pending' => false, 'notes' => [] ], 'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
+			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'seriesUrl' => '', 'filing' => [ 'pending' => false, 'notes' => [] ], 'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'albumFolders' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
 		if( $plan['error'] ) {
 			return $st;
 		}
 		$parsed = FisheyeBookCatalogue::readBooks( $pFile );
 		$st['parsed'] = $parsed['rows'] ?? [];
 		$merge = FisheyeCatalogueMerge::plan( [ 'kind' => 'series', 'name' => $pName, 'path' => $pFile, 'exists' => true ] );
-		$st['catalogue'] = [ 'filled' => count( $merge['filled'] ), 'added' => $merge['added'], 'conflicts' => $merge['conflicts'], 'changes' => $merge['changes'], 'error' => $merge['error'] ];
+		$st['catalogue'] = [ 'filled' => count( $merge['filled'] ), 'added' => $merge['added'], 'conflicts' => $merge['conflicts'], 'attach' => $merge['attach'], 'changes' => $merge['changes'], 'error' => $merge['error'] ];
 		// The series' own gallery under Various Authors, once it exists.
 		$st['seriesUrl'] = '';
 		if( $plan['seriesId'] && ( $seriesGallery = \Bitweaver\Liberty\LibertyContent::getLibertyObject( (int)$plan['seriesId'] ) ) && $seriesGallery->isValid() ) {
@@ -131,7 +131,7 @@ class FisheyeSeriesWorkbench {
 	 */
 	public static function filesStatus( array $pRows, string $pBaseRel ): array {
 		global $gBitDb;
-		$files = [ 'blocked' => false, 'todo' => 0, 'albumTodo' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ];
+		$files = [ 'blocked' => false, 'todo' => 0, 'albumTodo' => 0, 'albumFolders' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ];
 		$matched = [];
 		foreach( $pRows as $row ) {
 			if( !$row['book'] ) {
@@ -152,6 +152,7 @@ class FisheyeSeriesWorkbench {
 			$todo = $found > 0 && $found !== $have;
 			$files['todo'] += $todo ? 1 : 0;
 			$files['albumTodo'] += $preview['albums'] > 0 ? 1 : 0;
+			$files['albumFolders'] += $preview['albums'];
 			$files['books'][] = [ 'id' => (int)$row['book'], 'title' => $row['title'], 'folder' => $preview['folder'], 'ebook' => $preview['ebook'], 'audiobook' => $preview['audiobook'],
 				'extra' => $preview['extra'], 'albums' => $preview['albums'], 'have' => $have, 'todo' => $todo ];
 		}
@@ -207,7 +208,17 @@ class FisheyeSeriesWorkbench {
 			// An ISBN typed or picked for a row. The catalogue's own ISBN is the master: a row that has one is never loaded under another, and a number
 			// that fails its check digit is reported, not loaded. A row with none takes the typed one.
 			$typed = htmlspecialchars_decode( trim( (string)( $pIsbns[$i] ?? '' ) ), ENT_NOQUOTES );
-			if( $typed !== '' ) {
+			// What was typed or picked may be a classic's identifier (a Wikidata work, a Gutenberg ebook, a Google Books volume) instead of an ISBN: it goes on
+			// the book as its own, unless the catalogue already names one of that kind.
+			$ident = $typed !== '' ? FisheyeBookClassics::classify( $typed ) : [ 'kind' => 'isbn', 'value' => '' ];
+			if( $ident['kind'] === '' ) {
+				$typedErrors[] = $row['title'].': not an ISBN, Wikidata, Gutenberg or Google Books identifier ('.$typed.')';
+				continue;
+			}
+			if( $ident['kind'] !== 'isbn' ) {
+				$row['external'][$ident['kind']] ??= $ident['value'];
+			}
+			if( $typed !== '' && $ident['kind'] === 'isbn' ) {
 				$normalised = FisheyeBook::normaliseIsbn( $typed );
 				if( $normalised['isbn13'] === '' ) {
 					$typedErrors[] = $row['title'].': not a valid ISBN ('.$typed.')';

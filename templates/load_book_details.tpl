@@ -69,12 +69,15 @@
 			<input type="hidden" name="fetch" value="1" />
 			{if $more && $again}<input type="hidden" name="again" value="1" />{/if}
 				{if $more && $look}<input type="hidden" name="look" value="1" />{/if}
+				{if $more && $replaceDate}<input type="hidden" name="replace_date" value="1" />{/if}
 			{if $more}
 				<input type="hidden" name="job" value="{$job|escape}" />
 			{else}
 				<div class="form-group">
 					<label><input type="radio" name="job" value="details"{if $job eq 'details'} checked="checked"{/if} /> {tr}Load Missing Details{/tr} - {$counts.details} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}Every book with an ISBN, with a cover or without: whatever Open Library holds that is still blank - its edition id, a description, genres, links to Wikipedia, Goodreads and the like. Only the blanks are filled in; nothing entered is replaced. Covers are not looked for here - that is the next job.{/tr}</span>
+					<label><input type="radio" name="job" value="classics"{if $job eq 'classics'} checked="checked"{/if} /> {tr}Classics from Wikidata{/tr} - {$counts.classics} {tr}to do{/tr}</label>
+					<span class="help-block">{tr}For books older than their ISBNs: every book with a Wikidata work id (the catalogue's Wikidata column), with or without an ISBN. Wikidata gives the original publication date, the Gutenberg id and the Open Library work; the work then gives the description, genres and links. Blanks only - an id from the catalogue or entered by hand is kept. Tick Only look first.{/tr}</span>
 					<label><input type="radio" name="job" value="covers"{if $job eq 'covers'} checked="checked"{/if} /> {tr}Find Missing Covers{/tr} - {$counts.covers} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}The books with no image: Open Library is asked for a cover (then Google Books), and the rest of what it holds is filled in too. A book no source has a cover for is passed over, ready for your own scan.{/tr}</span>
 					<label><input type="radio" name="job" value="shops"{if $job eq 'shops'} checked="checked"{/if} /> {tr}Find Covers at Amazon and AbeBooks{/tr} - {$counts.shops} {tr}to do{/tr}</label>
@@ -88,7 +91,11 @@
 			{if !$more}
 				<div class="form-group">
 					<label><input type="checkbox" name="look" value="1"{if $look} checked="checked"{/if} /> {tr}Only look - store nothing{/tr}</label>
-					<span class="help-block">{tr}For the Amazon and AbeBooks job: lists what each book would get and changes nothing, and the books are not marked as checked.{/tr}</span>
+					<span class="help-block">{tr}For the Classics and the Amazon and AbeBooks jobs: lists what each book would get and changes nothing, and the books are not marked as checked.{/tr}</span>
+				</div>
+				<div class="form-group">
+					<label><input type="checkbox" name="replace_date" value="1"{if $replaceDate} checked="checked"{/if} /> {tr}Classics: Wikidata's original date replaces the stored one{/tr}</label>
+					<span class="help-block">{tr}Otherwise the date is only filled in where the book has none, and a different one from Wikidata is listed and left alone. Wikidata's date for a serialised novel is the first instalment, which may be earlier than the book.{/tr}</span>
 				</div>
 				<div class="form-group">
 					<label><input type="checkbox" name="again" value="1"{if $again} checked="checked"{/if} /> {tr}Ask again about books already checked{/tr}</label>
@@ -102,7 +109,7 @@
 					{if $more}<a class="btn btn-default" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php">{tr}Stop{/tr}</a>{/if}
 				</div>
 			{else}
-				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{elseif $job eq 'shops'}{tr}Finished - every book without a cover has been looked for at Amazon and AbeBooks.{/tr}{elseif $job eq 'google'}{tr}Finished - every book with a gap has been looked up on Google Books.{/tr}{else}{tr}Finished - every book with an ISBN has been looked at.{/tr}{/if}</p></div>
+				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{elseif $job eq 'shops'}{tr}Finished - every book without a cover has been looked for at Amazon and AbeBooks.{/tr}{elseif $job eq 'google'}{tr}Finished - every book with a gap has been looked up on Google Books.{/tr}{elseif $job eq 'classics'}{tr}Finished - every book with a Wikidata work id has been looked at.{/tr}{else}{tr}Finished - every book with an ISBN has been looked at.{/tr}{/if}</p></div>
 			{/if}
 		{/form}
 		<script>/* <![CDATA[ */

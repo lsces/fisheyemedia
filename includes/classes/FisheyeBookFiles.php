@@ -231,12 +231,46 @@ class FisheyeBookFiles {
 	}
 
 	/**
+	 * Who reads this recording, from its first track's album tag ("Oliver Twist (read by John Lee)"; also "narrated by" / "performed by"), or ''.
+	 */
+	private static function narratorFor( string $pAbsFolder ): string {
+		$tracks = glob( rtrim( $pAbsFolder, '/' ).'/*.mp3' ) ?: [];
+		natcasesort( $tracks );
+		if( !$tracks ) {
+			return '';
+		}
+		require_once UTIL_PKG_INCLUDE_PATH.'getid3/getid3/getid3.php';
+		$info = ( new \getID3() )->analyze( reset( $tracks ) );
+		$album = (string)( $info['tags']['id3v2']['album'][0] ?? $info['tags']['id3v1']['album'][0] ?? '' );
+		return preg_match( '/\(\s*(?:read|narrated|performed)\s+by\s+(.+?)\s*\)\s*$/i', $album, $m ) ? trim( $m[1] ) : '';
+	}
+
+	/**
+	 * A narrator credit on the book (several recordings, several narrators): added once per name, marked as from the audio so a reload of the catalogue's credits
+	 * leaves it, and linked to the person's contact when there is one.
+	 */
+	private static function addNarratorCredit( FisheyeBook $pBook, string $pName ): void {
+		$have = $pBook->mDb->getAll( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'narrator' AND `end_date` IS NULL", [ (int)$pBook->mContentId ] ) ?: [];
+		foreach( $have as $row ) {
+			if( mb_strtolower( trim( (string)$row['xkey_ext'] ) ) === mb_strtolower( $pName ) ) {
+				return;
+			}
+		}
+		$hash = [ 'content_id' => $pBook->mContentId, 'item' => 'narrator', 'xkey_ext' => $pName, 'edit' => json_encode( [ 'source' => 'audio' ] ), 'xorder' => count( $have ) + 1 ];
+		$pBook->storeXref( $hash );
+		FisheyeBookCredits::linkBookCredits( (int)$pBook->mContentId );
+	}
+
+	/**
 	 * Make one Audio folder an album: the album is made with the music album code (no gallery path involved - its folder is the book's),
 	 * filed under the audio books gallery, titled 'Audio Book' (edit it afterwards), then the book's 'audiobook' row is written:
 	 * xkey_ext the folder, xref the album's content_id.
 	 * @return array{created?:int,error?:string,tracks?:int}
 	 */
 	public static function loadAudioFolder( FisheyeBook $pBook, string $pRel ): array {
+		// One loading press at a time (FisheyeBookLoader::lockPress()): loading a book's folders is slow, a press that is pressed again runs alongside the first, and
+		// both would find the folder not yet an album and make one each. Taken before the folder is looked at, so a later press finds what the first made.
+		FisheyeBookLoader::lockPress();
 		$have = array_values( array_filter( self::audioFolders( $pBook ), fn( $f ) => $f['rel'] === $pRel ) );
 		if( !$have ) {
 			return [ 'error' => 'No audio folder '.$pRel.' in this book.' ];
@@ -249,15 +283,23 @@ class FisheyeBookFiles {
 		if( $root === '' || !str_starts_with( $library, $root ) ) {
 			return [ 'error' => 'The Library is not under the disk storage root.' ];
 		}
-		$title = 'Audio Book'; // the plain default, edited afterwards where it needs to say more; its short form (before ' Book') is the row's xkey
+		// Who reads it: the recording's own album tag says "<title> (read by <name>)". Several recordings of one book are then told apart by their titles,
+		// and the narrator is on the audio book row and a credit of the book. Without the tag it is the plain default, edited afterwards.
+		$narrator = self::narratorFor( $library.$pRel );
+		$title = $narrator !== '' ? $pBook->getTitle().' (read by '.$narrator.')' : 'Audio Book'; // the short form (before ' Book') is the row's xkey
 		$result = FisheyeAlbum::registerFromDisk( substr( $library, strlen( $root ) ).$pRel, $title, self::audioBooksGalleryId( $pBook ), null, false, null, true );
 		if( empty( $result['created'] ) ) {
 			return [ 'error' => $result['error'] ?? 'The album was not made.' ];
 		}
-		$data = [ 'format' => 'mp3', 'size' => self::size( $have[0]['bytes'] ), 'narrator' => '', 'tracks' => $have[0]['tracks'] ];
-		$hash = [ 'content_id' => $pBook->mContentId, 'item' => 'audiobook', 'xkey' => preg_replace( '/\\s+Book$/i', '', $title ), 'xkey_ext' => $pRel, 'xref' => (int)$result['created'], 'edit' => json_encode( $data ), 'xorder' => 1 ];
+		$data = [ 'format' => 'mp3', 'size' => self::size( $have[0]['bytes'] ), 'narrator' => $narrator, 'tracks' => $have[0]['tracks'] ];
+		$hash = [ 'content_id' => $pBook->mContentId, 'item' => 'audiobook', 'xkey' => $narrator !== '' ? 'Read by '.$narrator : preg_replace( '/\\s+Book$/i', '', $title ), 'xkey_ext' => $pRel, 'xref' => (int)$result['created'], 'edit' => json_encode( $data ), 'xorder' => 1 ];
 		if( !$pBook->storeXref( $hash ) ) {
 			return [ 'error' => 'The album was made (content_id '.$result['created'].') but the book\'s audiobook row was not: '.implode( '; ', array_map( 'strval', array_values( $pBook->mErrors ) ) ) ];
+		}
+		// Two readers ("Sean Barrett and Teresa Gallagher") are two credits.
+		$narrators = array_values( array_filter( array_map( 'trim', preg_split( '/\s*(?:,|&|\band\b)\s*/iu', $narrator ) ?: [] ) ) );
+		foreach( $narrators as $name ) {
+			self::addNarratorCredit( $pBook, $name );
 		}
 		// The album stands alone: the book's description, and a 'book' external link back to the book (xkey = its content_id, shown on the album
 		// with the other external links). Both are HTML.
@@ -270,6 +312,14 @@ class FisheyeBookFiles {
 		}
 		$bookLink = [ 'content_id' => $album->mContentId, 'item' => 'book', 'xkey' => (string)(int)$pBook->mContentId ];
 		$album->storeXref( $bookLink );
+		// And the reader(s) as the album's own narrator rows (a name now, a contact link when it is made) - where the scheme has the item (it is applied from
+		// the Local Scheme page; without it the album simply has no narrator row yet).
+		if( !empty( $narrators ) && (int)$album->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref_item` WHERE `content_type_guid` = 'fisheyealbum' AND `item` = 'narrator'" ) ) {
+			foreach( $narrators as $i => $name ) {
+				$narratorHash = [ 'content_id' => $album->mContentId, 'item' => 'narrator', 'xkey_ext' => $name, 'edit' => json_encode( [ 'source' => 'audio' ] ), 'xorder' => $i + 1 ];
+				$album->storeXref( $narratorHash );
+			}
+		}
 		// the one-row-per-file rows an earlier scan made for this folder are replaced by the album
 		foreach( $pBook->mDb->getAll( "SELECT `xref_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'audiobook' AND `xref` IS NULL", [ (int)$pBook->mContentId ] ) ?: [] as $old ) {
 			if( str_starts_with( (string)$old['xkey_ext'], $pRel ) ) {

@@ -489,6 +489,8 @@ class FisheyeBookCredits {
 			if( !self::isInSeriesOf( (int)$bookId, $pGalleryContentId ) && $gallery->addItem( $bookId ) ) {
 				$added++;
 			}
+			// A one-book author's book sits in its category gallery (Fiction ...) until the author has a gallery; now it has one, the book leaves.
+			self::leaveCategoryGalleries( (int)$bookId );
 		}
 		return $added;
 	}
@@ -647,7 +649,7 @@ class FisheyeBookCredits {
 		foreach( $gBitDb->getAll(
 			"SELECT lx.`content_id`, lx.`xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` lx
 			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = lx.`content_id`
-			 WHERE lc.`content_type_guid` = ? AND lx.`item` = 'author' AND lx.`end_date` IS NULL", [ FISHEYEBOOK_CONTENT_TYPE_GUID ] ) ?: [] as $row ) {
+			 WHERE lc.`content_type_guid` = 'fisheyebook' AND lx.`item` = 'author' AND lx.`end_date` IS NULL" ) ?: [] as $row ) {
 			$name = (string)$row['xkey_ext'];
 			$canon[$name] ??= mb_strtolower( self::canonicalName( $name ) );
 			if( $canon[$name] === $key ) {

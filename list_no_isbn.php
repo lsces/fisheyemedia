@@ -26,11 +26,13 @@ $errors = [];
 
 if( !empty( $_REQUEST['add_isbn'] ) ) {
 	$book = FisheyeImage::lookup( [ 'content_id' => (int)( $_REQUEST['content_id'] ?? 0 ) ] );
+	// storeXref() takes its hash by reference, so it is built in a variable first.
+	$isbnHash = [ 'content_id' => (int)( $_REQUEST['content_id'] ?? 0 ), 'item' => 'isbn', 'isbn' => $decode( $_REQUEST['isbn'] ?? '' ) ];
 	if( !$book || !$book->isValid() || !method_exists( $book, 'storeXref' ) ) {
 		$errors[] = KernelTools::tra( 'That book could not be found.' );
 	} elseif( $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $book->mContentId ] ) ) {
 		$errors[] = $book->getTitle().' - '.KernelTools::tra( 'already has an ISBN.' );
-	} elseif( $book->storeXref( [ 'content_id' => $book->mContentId, 'item' => 'isbn', 'isbn' => $decode( $_REQUEST['isbn'] ?? '' ) ] ) ) {
+	} elseif( $book->storeXref( $isbnHash ) ) {
 		$message = $book->getTitle().' - '.KernelTools::tra( 'the ISBN is added.' );
 	} else {
 		$errors[] = $book->getTitle().' - '.implode( '; ', array_map( 'strval', array_values( $book->mErrors ) ) );

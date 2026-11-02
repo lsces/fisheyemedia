@@ -95,6 +95,28 @@ if( !$st['error'] ) {
 		} else {
 			$messages[] = $put['changed'].' '.KernelTools::tra( 'catalogue cells now have the database\'s value.' );
 		}
+	} elseif( !empty( $_REQUEST['find_wikidata_ids'] ) && $st['folder'] !== null ) {
+		$authorQid = FisheyeBookCredits::authorQid( $st['name'] );
+		$found = $authorQid !== '' ? FisheyeBookClassics::findWikidataIds( $st['parsed'], $authorQid ) : null;
+		if( $authorQid === '' ) {
+			$errors[] = KernelTools::tra( 'This author has no Wikidata item on their contact, so there are no works to match against.' );
+		} elseif( $found === null ) {
+			$errors[] = KernelTools::tra( 'Wikidata did not answer.' );
+		} else {
+			$byTitle = [];
+			foreach( $found as $i => $work ) {
+				$byTitle[$st['parsed'][$i]['title']] = $work['q'];
+			}
+			$put = FisheyeCatalogueMerge::fillWikidataCells( $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, $byTitle );
+			if( $put['error'] ) {
+				$errors[] = $put['error'];
+			} else {
+				$messages[] = count( $put['filled'] ).' '.KernelTools::tra( 'Wikidata ids written to the catalogue file' ).( $put['filled'] ? ': '.implode( ', ', array_map( fn( $t ) => $t.' '.$byTitle[$t], $put['filled'] ) ) : '' ).'.';
+			}
+		}
+	} elseif( !empty( $_REQUEST['attach_work_ids'] ) && $st['folder'] !== null ) {
+		$n = FisheyeCatalogueMerge::attachWorkIds( [ 'kind' => 'author', 'name' => $st['folder'], 'path' => $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, 'exists' => true ] );
+		$messages[] = $n.' '.KernelTools::tra( 'work identifiers from the catalogue file were attached to their books.' );
 	} elseif( !empty( $_REQUEST['use_file_years'] ) && $st['folder'] !== null ) {
 		$n = FisheyeCatalogueMerge::useFileYears( [ 'kind' => 'author', 'name' => $st['folder'], 'path' => $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, 'exists' => true ], array_map( 'intval', array_keys( (array)( $_REQUEST['year_book'] ?? [] ) ) ) );
 		$messages[] = $n.' '.KernelTools::tra( 'books now have the catalogue file\'s year.' );

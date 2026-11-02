@@ -76,8 +76,8 @@ if( !empty( $_REQUEST['lookup_series'] ) ) {
 			continue;
 		}
 		$item = FisheyeImage::lookup( [ 'content_id' => $book['content_id'] ] );
-		if( $item && $item->isValid() && method_exists( $item, 'reloadFromOpenLibrary' ) ) {
-			$found = $item->reloadFromOpenLibrary();
+		if( $item && $item->isValid() && method_exists( $item, 'fillDetails' ) ) {
+			$found = $item->fillDetails();
 			$lookup['done']++;
 			if( !empty( $found['error'] ) ) {
 				$lookup['errors'][] = $book['title'].' - '.$found['error'];
