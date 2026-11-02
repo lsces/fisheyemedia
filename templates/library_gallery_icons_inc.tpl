@@ -25,7 +25,4 @@
 	{if $gContent->getPreference('is_public')}
 		{biticon ipackage="icons" iname="emblem-important" iexplain="Public"}
 	{/if}
-	{if $gContent->hasAdminPermission()}
-		<a title="{tr}User Permissions{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}edit.php?gallery_id={$gContent->mGalleryId}&amp;delete=1">{biticon ipackage="icons" iname="user-trash" iexplain="Delete Gallery"}</a>
-	{/if}
 </div>
