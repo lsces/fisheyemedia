@@ -205,7 +205,8 @@ class FisheyeAuthorWorkbench {
 
 	/**
 	 * Make an author's Library gallery from the front page - for an author with a folder (and usually a catalogue) but nothing loaded yet, so no gallery
-	 * for the books step to load into. Linked to the author's contact when there is one, as the loaders do.
+	 * for the books step to load into. Linked to the author's contact when there is one, as the loaders do, and the author's books already loaded are
+	 * filed in it and taken out of the category galleries they were in.
 	 *
 	 * @return array{galleryId:int,error:?string}
 	 */
@@ -218,6 +219,8 @@ class FisheyeAuthorWorkbench {
 		if( $contactId = FisheyeBookCredits::authorContactFor( $pName ) ) {
 			FisheyeBookCredits::linkGalleryToContact( (int)$made['content_id'], $contactId );
 		}
+		// Books already loaded under this author (a one-book author's book sits in its category gallery, Fiction ...) move into the new gallery.
+		FisheyeBookCredits::fileBooksOfAuthor( (int)$made['content_id'], $pName );
 		return [ 'galleryId' => (int)$gBitDb->getOne( "SELECT `gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ (int)$made['content_id'] ] ), 'error' => null ];
 	}
 
