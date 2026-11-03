@@ -46,6 +46,9 @@ if( !empty( $_REQUEST['fImport'] ) ) {
 }
 
 $folders = FisheyeBookFiles::audioFolders( $book );
+// Where the author workbench sent us from (its author gallery), so the page can lead back to it; absent when the page is opened from elsewhere.
+$workbenchGalleryId = \Bitweaver\BitBase::verifyId( $_REQUEST['gallery_id'] ?? 0 ) ? (int)$_REQUEST['gallery_id'] : 0;
+$gBitSmarty->assign( 'workbenchGalleryId', $workbenchGalleryId );
 $gBitSmarty->assign( 'book', $book );
 $gBitSmarty->assign( 'folders', $folders );
 $gBitSmarty->assign( 'result', $result );

@@ -236,7 +236,7 @@
 								<tr>
 									<td><a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$b.id}">{$b.title|escape}</a></td>
 									<td>{$b.folder|escape}</td>
-									<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}{if $b.albums} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_audio_book.php?content_id={$b.id}">{$b.albums} {if $b.albums eq 1}{tr}Audio folder to load as an album{/tr}{else}{tr}Audio folders to load as albums{/tr}{/if}</a>{/if}</td>
+									<td>{$b.ebook} {tr}ebook{/tr}, {$b.audiobook} {tr}audio{/tr}, {$b.extra} {tr}extra{/tr}{if $b.albums} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_audio_book.php?content_id={$b.id}&amp;gallery_id={$st.galleryId}">{$b.albums} {if $b.albums eq 1}{tr}Audio folder to load as an album{/tr}{else}{tr}Audio folders to load as albums{/tr}{/if}</a>{/if}</td>
 									<td>{$b.have}{if $b.todo} <span class="label label-warning">{tr}to load{/tr}</span>{/if}</td>
 								</tr>
 							{/foreach}

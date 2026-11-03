@@ -31,9 +31,13 @@
 
 		{if !$folders}
 			<p>{tr}This book has no Audio folder with audio files in it.{/tr}</p>
+			{if $workbenchGalleryId}<p><a class="btn btn-default" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php?gallery_id={$workbenchGalleryId}">{tr}Back to the author workbench{/tr}</a></p>{/if}
 		{else}
+			{assign var=toLoad value=0}
+			{foreach from=$folders item=folder}{if !$folder.linked}{assign var=toLoad value=1}{/if}{/foreach}
 			{form legend="" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_audio_book.php"}
 				<input type="hidden" name="content_id" value="{$book->mContentId}" />
+				{if $workbenchGalleryId}<input type="hidden" name="gallery_id" value="{$workbenchGalleryId}" />{/if}
 				<table class="table data">
 					<tr><th></th><th>{tr}Folder{/tr}</th><th>{tr}Tracks{/tr}</th><th>{tr}Album{/tr}</th></tr>
 					{foreach from=$folders item=folder}
@@ -46,7 +50,9 @@
 					{/foreach}
 				</table>
 				<div class="form-group submit">
-					<input type="submit" class="btn btn-primary" name="fImport" value="{tr}Load as albums{/tr}" />
+					{* Nothing left to load (all done, or already albums): no Load button, the way back takes its place. *}
+					{if $toLoad}<input type="submit" class="btn btn-primary" name="fImport" value="{tr}Load as albums{/tr}" />{/if}
+					{if $workbenchGalleryId}<a class="btn {if $toLoad}btn-default{else}btn-primary{/if}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php?gallery_id={$workbenchGalleryId}">{tr}Back to the author workbench{/tr}</a>{/if}
 				</div>
 			{/form}
 		{/if}
