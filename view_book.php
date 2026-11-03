@@ -75,7 +75,7 @@ unset( $list );
 
 // What is shown as label/value lines, in this order. The price paid is private - only an editor sees them.
 $detailLabels = [
-	'published' => 'Published', 'edition' => 'Edition', 'format' => 'Format', 'imprint' => 'Imprint',
+	'published' => 'Published', 'edition_date' => 'Edition published', 'edition' => 'Edition', 'format' => 'Format', 'imprint' => 'Imprint',
 	'pages' => 'Pages', 'language' => 'Language', 'copies' => 'Copies',
 ];
 if( $gContent->hasUpdatePermission() ) {

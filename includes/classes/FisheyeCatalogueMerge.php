@@ -71,7 +71,8 @@ class FisheyeCatalogueMerge {
 
 	/**
 	 * Put the file's year into the database for the books given (a catalogue and the database disagreeing on a year, the file being right): each book's
-	 * published row and event_time are set together. Recomputed from the file now; only a Year conflict of a listed book is touched.
+	 * published row and event_time are set together. Recomputed from the file now; only a Year conflict of a listed book is touched. The date being replaced is
+	 * kept as the book's edition date (when there is none yet): a catalogue's year is the work's first publication, the database held a later edition's.
 	 *
 	 * @param list<int> $pBookIds
 	 * @return int  books changed
@@ -83,7 +84,7 @@ class FisheyeCatalogueMerge {
 				continue;
 			}
 			$book = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => (int)$conflict[4] ] );
-			if( $book instanceof FisheyeBook && $book->setPublished( $conflict[2] ) ) {
+			if( $book instanceof FisheyeBook && $book->setPublished( $conflict[2], true ) ) {
 				$done++;
 			}
 		}

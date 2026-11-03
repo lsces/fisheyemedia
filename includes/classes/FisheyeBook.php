@@ -34,7 +34,9 @@ define( 'FISHEYEBOOK_CONTENT_TYPE_GUID', 'fisheyebook' );
 // Longest side kept for a cover brought in from elsewhere: the 400px 'medium' size the Library shows; a higher-resolution original is archived separately.
 const FISHEYEBOOK_COVER_MAX = 400;
 
-const FISHEYEBOOK_TEXT_ITEMS = [ 'format', 'edition', 'published', 'pages', 'language', 'copies', 'paid', 'imprint' ];
+// 'published' is the date the WORK was first published (it also sets event_time, which orders the books); 'edition_date' is when this edition - the copy
+// on the shelf, the ISBN - was published, which for a classic is decades later. Both are right.
+const FISHEYEBOOK_TEXT_ITEMS = [ 'format', 'edition', 'published', 'edition_date', 'pages', 'language', 'copies', 'paid', 'imprint' ];
 // Repeatable plain-text items - one row per value.
 const FISHEYEBOOK_LIST_ITEMS = [ 'category', 'subject', 'note' ];
 // People - one credit row per person, name in xkey_ext, contact in xref/xkey once one exists.
@@ -387,6 +389,10 @@ class FisheyeBook extends FisheyeMediaImage {
 		$tally( $this->reconcileXrefItem( 'isbn', $wantedIsbn, null ) );
 
 		foreach( FISHEYEBOOK_TEXT_ITEMS as $item ) {
+			// A row that says nothing about the edition date leaves one already kept (the old year moved there when a work date was set) alone.
+			if( $item === 'edition_date' && !isset( $pRow[$item] ) ) {
+				continue;
+			}
 			$value = trim( (string)( $pRow[$item] ?? '' ) );
 			$tally( $this->reconcileXrefItem( $item, $value === '' ? [] : [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => $value ] ], null ) );
 		}
@@ -439,18 +445,61 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * Set the published date of an existing book from a text such as '2017': the 'published' row and event_time (which dates it in a series and the
 	 * calendar) together, so the two cannot disagree. A text that is not a date is refused.
 	 */
-	public function setPublished( string $pPublished ): bool {
+	public function setPublished( string $pPublished, bool $pKeepOldAsEdition = false ): bool {
 		$pPublished = trim( $pPublished );
 		$timestamp = self::publishedToTimestamp( $pPublished );
 		if( $pPublished === '' || $timestamp === null || !$this->isValid() ) {
 			return false;
 		}
+		$old = $this->getItemText( 'published' );
 		$storeHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => (string)$this->getField( 'data' ), 'event_time' => $timestamp ];
 		if( !$this->store( $storeHash ) ) {
 			return false;
 		}
 		$this->reconcileXrefItem( 'published', [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => $pPublished ] ], null );
+		// The date being replaced was a later edition's (a classic's first publication is the work's date): keep it as the edition date, unless one is already there.
+		if( $pKeepOldAsEdition && $old !== '' && $old !== $pPublished && $this->getItemText( 'edition_date' ) === '' ) {
+			$this->setEditionDate( $old );
+		}
 		return true;
+	}
+
+	/**
+	 * Set the date this edition was published, as known: '1951', '1951-03' or '1951-03-02' (see parseLooseDate() for text such as 'March 3, 1951'). It does
+	 * not touch 'published' or event_time, which stay the work's first publication. A text that is not a date is refused.
+	 */
+	public function setEditionDate( string $pDate ): bool {
+		$pDate = self::parseLooseDate( $pDate );
+		if( $pDate === '' || !$this->isValid() ) {
+			return false;
+		}
+		$this->reconcileXrefItem( 'edition_date', [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => $pDate ] ], null );
+		return true;
+	}
+
+	/** The text of a single-valued plain-text item (its xkey_ext), '' when the book has none. */
+	public function getItemText( string $pItem ): string {
+		return $this->isValid() ? trim( (string)$this->mDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] ) ) : '';
+	}
+
+	/**
+	 * A date as catalogues write it, in the form the 'published' texts use: '1995', '1995-03' or '1995-03-02', as much as the text gives. The forms
+	 * publishedToTimestamp() reads are taken as they are; other text ('March 3, 1995', '3 Mar 1995', 'March 1995') goes through PHP's date_parse(). A range,
+	 * 'n.d.' or anything it reports an error on is '' - never guessed. date_parse() gives day 1 for 'March 1995', so a month-only text is told by having no
+	 * day number in it.
+	 */
+	public static function parseLooseDate( string $pText ): string {
+		$text = trim( preg_replace( '/^(c\.?|ca\.?|~)\s*/i', '', trim( $pText ) ), " ()\t." );
+		if( preg_match( '/^\d{3,4}(-\d{1,2}(-\d{1,2})?)?$/', $text ) ) {
+			return self::publishedToTimestamp( $text ) !== null ? $text : '';
+		}
+		$parsed = date_parse( $text );
+		if( $parsed['error_count'] || !$parsed['year'] || !$parsed['month'] ) {
+			return '';
+		}
+		$hasDay = $parsed['day'] && preg_match( '/(?<!\d)\d{1,2}(?!\d)/', $text );
+		$ret = sprintf( '%04d-%02d', $parsed['year'], $parsed['month'] ).( $hasDay ? sprintf( '-%02d', $parsed['day'] ) : '' );
+		return self::publishedToTimestamp( $ret ) !== null ? $ret : '';
 	}
 
 	// ---- Images -------------------------------------------------------------------------------

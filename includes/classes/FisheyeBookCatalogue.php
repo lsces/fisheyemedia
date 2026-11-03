@@ -446,6 +446,11 @@ class FisheyeBookCatalogue {
 			'category' => $pCategory !== '' ? [ $pCategory ] : [], 'copies' => '', 'paid' => '', 'note' => [], 'external' => [],
 			'author_ids' => $authorIds,
 		];
+		// The edition's own date as far as Open Library gives it (free text: 'March 3, 1995', 'Mar 1995', '1995'), kept apart from the year above.
+		$editionDate = FisheyeBook::parseLooseDate( (string)( $edition['publish_date'] ?? '' ) );
+		if( $editionDate !== '' ) {
+			$ret['row']['edition_date'] = $editionDate;
+		}
 		return $ret;
 	}
 

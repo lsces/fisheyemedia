@@ -33,7 +33,7 @@
 						</li>
 					{/foreach}
 				</ul>
-				<p class="help-block">{tr}Tick where the database is right to put its value into the catalogue file (an ISBN-13 brings its ISBN-10 with it), or, for a year, where the file is right to put it in the database (the published row and the date that orders the book in its series).{/tr}</p>
+				<p class="help-block">{tr}Tick where the database is right to put its value into the catalogue file (an ISBN-13 brings its ISBN-10 with it), or, for a year, where the file is right to put it in the database (the published row and the date that orders the book in its series; the year it replaces is kept as the book's edition date).{/tr}</p>
 				<div class="form-group submit">
 					<input type="submit" class="btn btn-default" name="use_database_values" value="{tr}Put the database's value in the file{/tr}" />
 					<input type="submit" class="btn btn-default" name="use_file_years" value="{tr}Use the file's year in the database{/tr}" />
