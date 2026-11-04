@@ -246,6 +246,83 @@ class FisheyeBookFiles {
 	}
 
 	/**
+	 * What a new audio-book album is called: "<book> (read by <name>)" when the album tag names the reader, else "<book> (audio book)" - the book's own title either
+	 * way, so the Audio Books gallery's tiles can be told apart. The bare "Audio Book" an album was given before this is what refreshAudioAlbum() replaces.
+	 */
+	private static function albumTitleFor( FisheyeBook $pBook, string $pNarrator ): string {
+		return $pBook->getTitle().( $pNarrator !== '' ? ' (read by '.$pNarrator.')' : ' (audio book)' );
+	}
+
+	/**
+	 * The reader(s) as the album's own narrator rows (a name now, a contact link when it is made) - where the scheme has the item (it is applied from the Local
+	 * Scheme page; without it the album simply has no narrator row yet). A name the album already has is left alone.
+	 * @param list<string> $pNarrators
+	 */
+	private static function addAlbumNarrators( FisheyeAlbum $pAlbum, array $pNarrators ): void {
+		if( empty( $pNarrators ) || !(int)$pAlbum->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref_item` WHERE `content_type_guid` = 'fisheyealbum' AND `item` = 'narrator'" ) ) {
+			return;
+		}
+		$have = array_map( fn( $r ) => mb_strtolower( trim( (string)$r['xkey_ext'] ) ),
+			$pAlbum->mDb->getAll( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'narrator' AND `end_date` IS NULL", [ (int)$pAlbum->mContentId ] ) ?: [] );
+		foreach( $pNarrators as $i => $name ) {
+			if( in_array( mb_strtolower( $name ), $have, true ) ) {
+				continue;
+			}
+			$narratorHash = [ 'content_id' => $pAlbum->mContentId, 'item' => 'narrator', 'xkey_ext' => $name, 'edit' => json_encode( [ 'source' => 'audio' ] ), 'xorder' => $i + 1 ];
+			$pAlbum->storeXref( $narratorHash );
+		}
+	}
+
+	/**
+	 * Bring an audio-book album loaded earlier up to what loadAudioFolder() makes now, from its own files: an album still called "Audio Book" is renamed
+	 * (a title anyone has edited is never touched), and where the album tag names the reader the audio book row's "Read by" label and narrator, the book's
+	 * narrator credit and the album's narrator rows are added. Called after Reload Tracks, which refreshes the tracks and tags but not these.
+	 * @return array{notes?:list<string>,errors?:list<string>}  empty when the album is not an audio book's
+	 */
+	public static function refreshAudioAlbum( FisheyeAlbum $pAlbum ): array {
+		$row = $pAlbum->mDb->getRow( "SELECT `xref_id`, `content_id`, `xkey`, `xkey_ext`, `xorder`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'audiobook' AND `xref` = ? AND `end_date` IS NULL", [ (int)$pAlbum->mContentId ] );
+		if( !$row ) {
+			return [];
+		}
+		$book = new FisheyeBook( null, (int)$row['content_id'] );
+		$book->load();
+		if( !$book->isValid() ) {
+			return [ 'errors' => [ 'The audio book row points at a book that is not there.' ] ];
+		}
+		$ret = [ 'notes' => [], 'errors' => [] ];
+		$narrator = self::narratorFor( self::libraryRoot().$row['xkey_ext'] );
+		if( $pAlbum->getTitle() === 'Audio Book' ) {
+			$title = self::albumTitleFor( $book, $narrator );
+			$titleHash = [ 'content_id' => $pAlbum->mContentId, 'title' => $title, 'edit' => (string)$pAlbum->getField( 'data' ) ];
+			if( $pAlbum->store( $titleHash ) ) {
+				$ret['notes'][] = 'Album titled "'.$title.'"';
+			} else {
+				$ret['errors'][] = 'The album title was not changed: '.implode( '; ', array_map( 'strval', array_values( $pAlbum->mErrors ) ) );
+			}
+		}
+		if( $narrator !== '' ) {
+			$data = json_decode( (string)$row['data'], true ) ?: [];
+			if( ( $data['narrator'] ?? '' ) !== $narrator ) {
+				$data['narrator'] = $narrator;
+				$rowHash = [ 'xref_id' => (int)$row['xref_id'], 'content_id' => (int)$row['content_id'], 'item' => 'audiobook', 'xkey' => 'Read by '.$narrator, 'xkey_ext' => $row['xkey_ext'],
+					'xref' => (int)$pAlbum->mContentId, 'edit' => json_encode( $data ), 'xorder' => (int)$row['xorder'] ];
+				if( $book->storeXref( $rowHash ) ) {
+					$ret['notes'][] = 'Audio book row reads "Read by '.$narrator.'"';
+				} else {
+					$ret['errors'][] = 'The audio book row was not updated: '.implode( '; ', array_map( 'strval', array_values( $book->mErrors ) ) );
+				}
+			}
+			$narrators = array_values( array_filter( array_map( 'trim', preg_split( '/\s*(?:,|&|\band\b)\s*/iu', $narrator ) ?: [] ) ) );
+			foreach( $narrators as $name ) {
+				self::addNarratorCredit( $book, $name );
+			}
+			self::addAlbumNarrators( $pAlbum, $narrators );
+			$ret['notes'][] = 'Narrator credit(s): '.implode( ', ', $narrators );
+		}
+		return $ret;
+	}
+
+	/**
 	 * A narrator credit on the book (several recordings, several narrators): added once per name, marked as from the audio so a reload of the catalogue's credits
 	 * leaves it, and linked to the person's contact when there is one.
 	 */
@@ -286,13 +363,13 @@ class FisheyeBookFiles {
 		// Who reads it: the recording's own album tag says "<title> (read by <name>)". Several recordings of one book are then told apart by their titles,
 		// and the narrator is on the audio book row and a credit of the book. Without the tag it is the plain default, edited afterwards.
 		$narrator = self::narratorFor( $library.$pRel );
-		$title = $narrator !== '' ? $pBook->getTitle().' (read by '.$narrator.')' : 'Audio Book'; // the short form (before ' Book') is the row's xkey
+		$title = self::albumTitleFor( $pBook, $narrator );
 		$result = FisheyeAlbum::registerFromDisk( substr( $library, strlen( $root ) ).$pRel, $title, self::audioBooksGalleryId( $pBook ), null, false, null, true );
 		if( empty( $result['created'] ) ) {
 			return [ 'error' => $result['error'] ?? 'The album was not made.' ];
 		}
 		$data = [ 'format' => 'mp3', 'size' => self::size( $have[0]['bytes'] ), 'narrator' => $narrator, 'tracks' => $have[0]['tracks'] ];
-		$hash = [ 'content_id' => $pBook->mContentId, 'item' => 'audiobook', 'xkey' => $narrator !== '' ? 'Read by '.$narrator : preg_replace( '/\\s+Book$/i', '', $title ), 'xkey_ext' => $pRel, 'xref' => (int)$result['created'], 'edit' => json_encode( $data ), 'xorder' => 1 ];
+		$hash = [ 'content_id' => $pBook->mContentId, 'item' => 'audiobook', 'xkey' => $narrator !== '' ? 'Read by '.$narrator : 'Audio', 'xkey_ext' => $pRel, 'xref' => (int)$result['created'], 'edit' => json_encode( $data ), 'xorder' => 1 ];
 		if( !$pBook->storeXref( $hash ) ) {
 			return [ 'error' => 'The album was made (content_id '.$result['created'].') but the book\'s audiobook row was not: '.implode( '; ', array_map( 'strval', array_values( $pBook->mErrors ) ) ) ];
 		}
@@ -314,12 +391,7 @@ class FisheyeBookFiles {
 		$album->storeXref( $bookLink );
 		// And the reader(s) as the album's own narrator rows (a name now, a contact link when it is made) - where the scheme has the item (it is applied from
 		// the Local Scheme page; without it the album simply has no narrator row yet).
-		if( !empty( $narrators ) && (int)$album->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref_item` WHERE `content_type_guid` = 'fisheyealbum' AND `item` = 'narrator'" ) ) {
-			foreach( $narrators as $i => $name ) {
-				$narratorHash = [ 'content_id' => $album->mContentId, 'item' => 'narrator', 'xkey_ext' => $name, 'edit' => json_encode( [ 'source' => 'audio' ] ), 'xorder' => $i + 1 ];
-				$album->storeXref( $narratorHash );
-			}
-		}
+		self::addAlbumNarrators( $album, $narrators );
 		// the one-row-per-file rows an earlier scan made for this folder are replaced by the album
 		foreach( $pBook->mDb->getAll( "SELECT `xref_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'audiobook' AND `xref` IS NULL", [ (int)$pBook->mContentId ] ) ?: [] as $old ) {
 			if( str_starts_with( (string)$old['xkey_ext'], $pRel ) ) {
