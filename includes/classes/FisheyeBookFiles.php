@@ -274,6 +274,18 @@ class FisheyeBookFiles {
 	}
 
 	/**
+	 * An audio-book folder carries no cover of its own, so the album takes the book's: its largest stored thumbnail, as the album's thumbnail. Only when the
+	 * album has none yet (a cover chosen for the album is never replaced) and the book has one.
+	 */
+	private static function giveBookCover( FisheyeAlbum $pAlbum, FisheyeBook $pBook ): bool {
+		if( $pAlbum->hasThumbnail() ) {
+			return false;
+		}
+		$cover = $pBook->getCoverFile();
+		return $cover !== null && $pAlbum->attachCoverFile( $cover );
+	}
+
+	/**
 	 * Bring an audio-book album loaded earlier up to what loadAudioFolder() makes now, from its own files: an album still called "Audio Book" is renamed
 	 * (a title anyone has edited is never touched), and where the album tag names the reader the audio book row's "Read by" label and narrator, the book's
 	 * narrator credit and the album's narrator rows are added. Called after Reload Tracks, which refreshes the tracks and tags but not these.
@@ -290,6 +302,9 @@ class FisheyeBookFiles {
 			return [ 'errors' => [ 'The audio book row points at a book that is not there.' ] ];
 		}
 		$ret = [ 'notes' => [], 'errors' => [] ];
+		if( self::giveBookCover( $pAlbum, $book ) ) {
+			$ret['notes'][] = 'Album cover taken from the book';
+		}
 		$narrator = self::narratorFor( self::libraryRoot().$row['xkey_ext'] );
 		if( $pAlbum->getTitle() === 'Audio Book' ) {
 			$title = self::albumTitleFor( $book, $narrator );
@@ -387,6 +402,7 @@ class FisheyeBookFiles {
 			$descriptionHash = [ 'content_id' => $album->mContentId, 'title' => $album->getTitle(), 'edit' => $bookText ];
 			$album->store( $descriptionHash );
 		}
+		self::giveBookCover( $album, $pBook );
 		$bookLink = [ 'content_id' => $album->mContentId, 'item' => 'book', 'xkey' => (string)(int)$pBook->mContentId ];
 		$album->storeXref( $bookLink );
 		// And the reader(s) as the album's own narrator rows (a name now, a contact link when it is made) - where the scheme has the item (it is applied from

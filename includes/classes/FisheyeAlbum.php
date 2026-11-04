@@ -537,6 +537,16 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		return [ 'db' => $plexDb, 'id' => (int)$albumMetadataItemId, 'root' => $root ];
 	}
 
+	public function hasThumbnail(): bool {
+		return (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] )
+			&& !empty( glob( $this->getImageStorageBranchPath().'thumbs/*' ) );
+	}
+
+	/** Make a picture file (not kept; a copy is read) this album's thumbnail. */
+	public function attachCoverFile( string $pFile ): bool {
+		return $this->attachThumbnail( $pFile );
+	}
+
 	/**
 	 * Attach a cover from this album's own folder - a real cover.jpg/folder.jpg/front.jpg
 	 * (FISHEYEALBUM_COVER_NAMES) first, falling back to whatever cover art is embedded directly in

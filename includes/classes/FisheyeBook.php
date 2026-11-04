@@ -552,6 +552,17 @@ class FisheyeBook extends FisheyeMediaImage {
 			&& !empty( glob( $this->getImageStorageBranchPath().'thumbs/*' ) );
 	}
 
+	/** The largest thumbnail file the book has, or null: what another item (an audio-book album) borrows as its own cover. */
+	public function getCoverFile(): ?string {
+		foreach( [ 'extra-large', 'large', 'medium', 'small' ] as $size ) {
+			$file = $this->getImageStorageBranchPath().'thumbs/'.$size.'.jpg';
+			if( is_file( $file ) ) {
+				return $file;
+			}
+		}
+		return null;
+	}
+
 	/**
 	 * Make one of the book's stored images its thumbnail (the Images tab's Set as Thumbnail) -
 	 * regenerates thumbs/ from the chosen file, as FisheyeAlbum::promoteImageToThumbnail() does.
