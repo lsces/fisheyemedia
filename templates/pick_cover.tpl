@@ -83,13 +83,13 @@
 		{/legend}
 
 		{legend legend="A scan or photograph from this computer"}
-			<form method="post" enctype="multipart/form-data" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}pick_cover.php">
+			{form enctype="multipart/form-data" action="{$smarty.const.FISHEYEMEDIA_PKG_URL}pick_cover.php"}
 				<input type="hidden" name="content_id" value="{$gContent->mContentId}" />
 				<div class="input-group">
 					<input type="file" class="form-control" name="scan" accept="image/*" />
 					<span class="input-group-btn"><input type="submit" class="btn btn-primary" name="use_scan" value="{tr}Use as cover{/tr}" /></span>
 				</div>
-			</form>
+			{/form}
 		{/legend}
 
 		{legend legend="Make a cover"}
