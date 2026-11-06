@@ -78,6 +78,10 @@ $formFisheyeMediaFlags = [
 		'label' => 'Enable local download',
 		'note' => 'Show a "Download original file" button beside Play Episode on episode and featurette pages. Off by default: the player\'s full screen icon gives a clean full screen. Switch it on to save a file locally, which is still the way to get 5.1 audio out of an episode, as the in-page player can downmix it or go silent.',
 	],
+	"fisheyemedia_play_fullscreen" => [
+		'label' => 'Play episodes full screen',
+		'note' => 'Play Episode (and a featurette\'s Play) goes straight to full screen instead of playing in the page. Leaving full screen with Back or Escape (the remote\'s Back key on a TV) then also stops the episode and returns to the poster and episode list. Off by default; tick it for a TV.',
+	],
 ];
 $gBitSmarty->assign( 'formFisheyeMediaFlags', $formFisheyeMediaFlags );
 

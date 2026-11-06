@@ -121,6 +121,10 @@
 		if( window.fisheyePlaceFullscreen ) {
 			fisheyePlaceFullscreen( btn );
 		}
+		// only defined when "Play episodes full screen" is on (video_fullscreen_inc.tpl)
+		if( window.fisheyePlayFullscreen ) {
+			fisheyePlayFullscreen();
+		}
 		return false;
 	}
 </script>

@@ -12,6 +12,7 @@
 	var FISHEYE_FS_LABEL = '{tr}Full screen{/tr}';
 	var FISHEYE_FS_EXIT_LABEL = '{tr}Exit full screen{/tr}';
 	var FISHEYE_FS_ICON = '{$fsIcon|escape:"javascript"}';
+	var FISHEYE_PLAY_FULLSCREEN = {if $gBitSystem->isFeatureActive( 'fisheyemedia_play_fullscreen' )}true{else}false{/if};
 {literal}
 	( function() {
 		var v = document.getElementById( 'fisheye-episode-player' );
@@ -52,7 +53,9 @@
 				pushed = true;
 			} catch( e ) {}
 		};
-		var leave = function() {
+		// pStop: leaving by Back, Escape or the browser's own exit, with "Play episodes full screen" on, also stops the
+		// episode - back to the poster and episode list, as if Play had not been pressed
+		var leave = function( pStop ) {
 			if( !active ) {
 				return;
 			}
@@ -67,6 +70,9 @@
 				history.back();
 			}
 			pushed = false;
+			if( pStop && FISHEYE_PLAY_FULLSCREEN && window.fisheyeResetEpisodePlayer ) {
+				fisheyeResetEpisodePlayer();
+			}
 		};
 		var fillOn = function() {
 			enter();
@@ -74,11 +80,7 @@
 			document.documentElement.classList.add( 'video-fill-page' );
 			btn.title = FISHEYE_FS_EXIT_LABEL;
 		};
-		btn.addEventListener( 'click', function() {
-			if( active ) {
-				leave();
-				return;
-			}
+		var startFullscreen = function() {
 			var request = v.requestFullscreen || v.webkitRequestFullscreen || v.webkitEnterFullscreen;
 			if( !request ) {
 				fillOn();
@@ -92,12 +94,28 @@
 			} catch( e ) {
 				fillOn();
 			}
+		};
+		btn.addEventListener( 'click', function() {
+			if( active ) {
+				leave();
+				return;
+			}
+			startFullscreen();
 		}, false );
+		// "Play episodes full screen": the play code calls this from the Play click itself, which is the user gesture the
+		// browser needs to allow the full screen request
+		if( FISHEYE_PLAY_FULLSCREEN ) {
+			window.fisheyePlayFullscreen = function() {
+				if( !active ) {
+					startFullscreen();
+				}
+			};
+		}
 		var onFullscreenChange = function() {
 			if( fsElement() === v ) {
 				enter();
 			} else if( active && !v.classList.contains( 'video-fill' ) ) {
-				leave();
+				leave( true );
 			}
 		};
 		document.addEventListener( 'fullscreenchange', onFullscreenChange, false );
@@ -106,13 +124,13 @@
 		window.addEventListener( 'popstate', function() {
 			if( active ) {
 				pushed = false;
-				leave();
+				leave( true );
 			}
 		}, false );
 		document.addEventListener( 'keydown', function( e ) {
 			if( active && ( e.key == 'Escape' || e.keyCode == 461 ) ) {
 				e.preventDefault();
-				leave();
+				leave( true );
 			}
 		}, false );
 	} )();
