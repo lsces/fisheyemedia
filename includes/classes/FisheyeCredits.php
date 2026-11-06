@@ -17,6 +17,7 @@
 namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\Liberty\LibertyXref;
+use Bitweaver\Liberty\LibertyXrefType;
 
 class FisheyeCredits {
 
@@ -765,13 +766,14 @@ class FisheyeCredits {
 	 */
 	public static function programRollup( int $pProgramId ): array {
 		global $gBitDb;
+		$vis = LibertyXrefType::visibleRowSqlForPackage( 'fisheyemedia', 'x', 'lc' );
 		$rows = $gBitDb->getAll(
 			"SELECT x.`item`, x.`xkey_ext`, x.`xref`, x.`data`, x.`xorder` FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`content_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
 			 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyeseason' AND x.`end_date` IS NULL
-			 AND x.`item` IN ( ".self::itemsSql()." ) AND x.`xkey_ext` IS NOT NULL",
-			[ $pProgramId ]
+			 AND x.`item` IN ( ".self::itemsSql()." ) AND x.`xkey_ext` IS NOT NULL".$vis['where_sql'],
+			[ $pProgramId, ...$vis['bind_vars'] ]
 		) ?: [];
 		$byRole = [];
 		foreach( $rows as $row ) {
@@ -876,10 +878,12 @@ class FisheyeCredits {
 	public static function programCreators( int $pProgramId ): array {
 		global $gBitDb;
 		$ret = [];
+		$vis = LibertyXrefType::visibleRowSqlForPackage( 'fisheyemedia', 'x', 'lc' );
 		foreach( $gBitDb->getAll(
 			"SELECT x.`xkey_ext`, x.`xref` FROM `".BIT_DB_PREFIX."liberty_xref` x
-			 WHERE x.`content_id` = ? AND x.`item` = 'creator' AND x.`end_date` IS NULL AND x.`xkey_ext` IS NOT NULL ORDER BY x.`xorder`, x.`xref_id`",
-			[ $pProgramId ]
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 WHERE x.`content_id` = ? AND x.`item` = 'creator' AND x.`end_date` IS NULL AND x.`xkey_ext` IS NOT NULL".$vis['where_sql']." ORDER BY x.`xorder`, x.`xref_id`",
+			[ $pProgramId, ...$vis['bind_vars'] ]
 		) ?: [] as $row ) {
 			$ret[] = [ 'name' => trim( (string)$row['xkey_ext'] ), 'url' => !empty( $row['xref'] ) ? BIT_ROOT_URL.'index.php?content_id='.(int)$row['xref'] : null ];
 		}

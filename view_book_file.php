@@ -32,6 +32,10 @@ if( !$gContent || !$gContent->isValid() ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No such file' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
 }
 $gContent->verifyViewPermission();
+// the xref row's own item and group roles, as on the page that links here - view permission on the content alone is not enough
+if( !$gContent->isXrefRowVisible( $xrefId ) ) {
+	$gBitSystem->fatalError( KernelTools::tra( 'No such file' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
+}
 
 $path = FisheyeBookFiles::pathFor( (string)$row['xkey_ext'], max( 1, (int)( $_REQUEST['track'] ?? 1 ) ) );
 if( $path === null ) {

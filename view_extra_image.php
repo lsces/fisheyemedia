@@ -49,6 +49,10 @@ if( !$gContent || !$gContent->isValid() ) {
 // same viewer permission as the film/season itself - an alternate poster is no more sensitive
 // than the film's own primary artwork, but shouldn't bypass a private gallery's access control.
 $gContent->verifyViewPermission();
+// the xref row's own item and group roles, as on the page that links here - view permission on the content alone is not enough
+if( !$gContent->isXrefRowVisible( $xrefId ) ) {
+	$gBitSystem->fatalError( KernelTools::tra( 'No such image' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
+}
 
 // an 'episode'/'featurette' row's own xkey_ext is its real video file - the image to serve here
 // is the thumb path stashed in its JSON data blob instead (see FisheyeSeason::

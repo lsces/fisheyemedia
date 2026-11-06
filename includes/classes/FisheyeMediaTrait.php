@@ -349,7 +349,8 @@ trait FisheyeMediaTrait {
 		if( !$this->mContentId ) {
 			return $counts;
 		}
-		$counts['extras'] = (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$vis = $this->getVisibleXrefSql( 'x' );
+		$counts['extras'] = (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'image' AND x.`end_date` IS NULL".$vis['where_sql'], [ $this->mContentId, ...$vis['bind_vars'] ] );
 		if( $folder = $this->getPicturesFolder() ) {
 			$counts['extras'] += (int)$this->mDb->getOne(
 				"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
@@ -374,7 +375,8 @@ trait FisheyeMediaTrait {
 	public function getExtrasGroups(): array {
 		global $gBitUser;
 		$pictures = [];
-		$rows = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
+		$vis = $this->getVisibleXrefSql( 'x' );
+		$rows = $this->mDb->getAll( "SELECT x.`xref_id`, x.`xkey_ext`, x.`data` FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'image' AND x.`end_date` IS NULL".$vis['where_sql']." ORDER BY x.`xorder`", [ $this->mContentId, ...$vis['bind_vars'] ] ) ?: [];
 		foreach( $rows as $row ) {
 			$data = json_decode( (string)$row['data'], true );
 			$view = FISHEYEMEDIA_PKG_URL.'view_extra_image.php?xref_id='.(int)$row['xref_id'];

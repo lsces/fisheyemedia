@@ -39,6 +39,10 @@ if( !$gContent || !$gContent->isValid() ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No such track' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
 }
 $gContent->verifyViewPermission();
+// the xref row's own item and group roles, as on the page that links here - view permission on the content alone is not enough
+if( !$gContent->isXrefRowVisible( $xrefId ) ) {
+	$gBitSystem->fatalError( KernelTools::tra( 'No such track' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
+}
 
 $root = method_exists( $gContent, 'getImageStorageRoot' ) ? $gContent->getImageStorageRoot() : '';
 $path = $root.$row['xkey_ext'];

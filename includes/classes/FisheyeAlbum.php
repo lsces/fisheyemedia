@@ -224,9 +224,10 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 */
 	public function getVideosGalleryContentId(): ?int {
 		global $gBitDb;
+		$vis = $this->getVisibleXrefSql( 'x' );
 		$xrefContentId = $gBitDb->getOne(
-			"SELECT `xref` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'videos' AND `end_date` IS NULL",
-			[ $this->mContentId ]
+			"SELECT x.`xref` FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'videos' AND x.`end_date` IS NULL".$vis['where_sql'],
+			[ $this->mContentId, ...$vis['bind_vars'] ]
 		);
 		return $xrefContentId ? (int)$xrefContentId : null;
 	}
@@ -727,9 +728,10 @@ class FisheyeAlbum extends FisheyeMediaImage {
 	 * @return string|null
 	 */
 	public function getReleaseMbid(): ?string {
+		$vis = $this->getVisibleXrefSql( 'x' );
 		$mbid = $this->mDb->getOne(
-			"SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'mbid' AND `end_date` IS NULL",
-			[ $this->mContentId ]
+			"SELECT x.`xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'mbid' AND x.`end_date` IS NULL".$vis['where_sql'],
+			[ $this->mContentId, ...$vis['bind_vars'] ]
 		);
 		return $mbid ? trim( $mbid ) : null;
 	}

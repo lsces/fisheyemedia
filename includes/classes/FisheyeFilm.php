@@ -599,14 +599,16 @@ class FisheyeFilm extends FisheyeMediaImage {
 
 	/** This film's featurettes (its bonus content), in order, read straight from the xref rows. */
 	public function getFeaturettes(): array {
-		$rows = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'featurette' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
+		$vis = $this->getVisibleXrefSql( 'x' );
+		$rows = $this->mDb->getAll( "SELECT x.`xref_id`, x.`xkey_ext`, x.`data` FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'featurette' AND x.`end_date` IS NULL".$vis['where_sql']." ORDER BY x.`xorder`", [ $this->mContentId, ...$vis['bind_vars'] ] ) ?: [];
 		return array_map( [ self::class, 'featuretteFromXref' ], $rows );
 	}
 
 	/** The Extras button counts the featurettes apart from the rest. */
 	public function getExtrasCounts(): array {
 		$counts = parent::getExtrasCounts();
-		$counts['featurettes'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'featurette' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$vis = $this->getVisibleXrefSql( 'x' );
+		$counts['featurettes'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'featurette' AND x.`end_date` IS NULL".$vis['where_sql'], [ $this->mContentId, ...$vis['bind_vars'] ] );
 		return $counts;
 	}
 
