@@ -72,9 +72,21 @@ $formFisheyeMediaGeneral = [
 ];
 $gBitSmarty->assign( 'formFisheyeMediaGeneral', $formFisheyeMediaGeneral );
 
+// Tick boxes: stored 'y' when ticked, 'n' when not (an unticked box is absent from the request)
+$formFisheyeMediaFlags = [
+	"fisheyemedia_local_download" => [
+		'label' => 'Enable local download',
+		'note' => 'Show a "Download original file" button beside Play Episode on episode and featurette pages. Off by default: the player\'s full screen icon gives a clean full screen. Switch it on to save a file locally, which is still the way to get 5.1 audio out of an episode, as the in-page player can downmix it or go silent.',
+	],
+];
+$gBitSmarty->assign( 'formFisheyeMediaFlags', $formFisheyeMediaFlags );
+
 if( !empty( $_REQUEST['fisheyemediaGeneralSubmit'] ) ) {
 	foreach( $formFisheyeMediaGeneral as $item => $data ) {
 		$gBitSystem->storeConfig( $item, trim( (string)( $_REQUEST[$item] ?? '' ) ), FISHEYEMEDIA_PKG_NAME );
+	}
+	foreach( $formFisheyeMediaFlags as $item => $data ) {
+		$gBitSystem->storeConfig( $item, !empty( $_REQUEST[$item] ) ? 'y' : 'n', FISHEYEMEDIA_PKG_NAME );
 	}
 }
 

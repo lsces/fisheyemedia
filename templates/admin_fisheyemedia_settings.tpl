@@ -19,6 +19,15 @@
 					{/forminput}
 				</div>
 			{/foreach}
+			{foreach from=$formFisheyeMediaFlags key=item item=output}
+				<div class="form-group">
+					{formlabel label=$output.label for=$item}
+					{forminput}
+						<input type="checkbox" name="{$item}" id="{$item}" value="y" {if $gBitSystem->isFeatureActive($item)}checked="checked"{/if} />
+						{formhelp note=$output.note}
+					{/forminput}
+				</div>
+			{/foreach}
 			<input type="submit" class="btn btn-primary" name="fisheyemediaGeneralSubmit" value="{tr}Change Preferences{/tr}" />
 		{/form}
 

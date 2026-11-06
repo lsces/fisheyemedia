@@ -22,10 +22,12 @@
 		{/if}
 		<p class="episode-play-action">
 			<a class="btn btn-primary" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}play_episode.php?xref_id={$featurette.xref_id}" data-title="{$featurette.title|escape}" onclick="return {$playToggleFn|default:'fisheyeToggleEpisodePlayback'}(this, this.href);">&#9658; {tr}Play{/tr}</a>
-			{* Same reasoning as episode_detail_panels_inc.tpl's own download link - `download`
-			   saves rather than plays inline, the only reliable way to get 5.1+ audio out of a
-			   featurette whose in-page playback commonly downmixes or goes silent on it. *}
+			{if $gBitSystem->isFeatureActive( 'fisheyemedia_local_download' )}
+			{* Same option and reasoning as episode_detail_panels_inc.tpl's own download link - off unless "Enable local download"
+			   is ticked in Media Library Settings; `download` saves rather than plays inline, the only reliable way to get 5.1+
+			   audio out of a featurette whose in-page playback commonly downmixes or goes silent on it. *}
 			<a class="btn btn-default" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}play_episode.php?xref_id={$featurette.xref_id}" download>{tr}Download original file{/tr}</a>
+			{/if}
 		</p>
 	</div>
 {/foreach}
