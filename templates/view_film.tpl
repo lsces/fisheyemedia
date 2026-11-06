@@ -77,8 +77,19 @@
 			   captured lazily off the player's own <source> the first time any featurette plays. *}
 			var fisheyeFilmSourceUrl = null;
 			var fisheyePlayingFeaturetteBtn = null;
-			var FISHEYE_FEATURETTE_PLAY_LABEL = '▶ {tr}Play{/tr}';
-			var FISHEYE_FEATURETTE_FILM_LABEL = '◀ {tr}Film{/tr}';
+			{capture assign=playIcon}{biticon ipackage="icons" iname="media-playback-start-large" iexplain="" iforce="icon" isize="large"}{/capture}
+			{capture assign=filmBackIcon}{biticon ipackage="icons" iname="media-skip-backward" iexplain="" iforce="icon" isize="large"}{/capture}
+			var FISHEYE_FEATURETTE_PLAY_ICON = '{$playIcon|escape:"javascript"}';
+			var FISHEYE_FEATURETTE_FILM_ICON = '{$filmBackIcon|escape:"javascript"}';
+			var FISHEYE_FEATURETTE_PLAY_TEXT = '{tr}Play{/tr}';
+			var FISHEYE_FEATURETTE_FILM_TEXT = '{tr}Film{/tr}';
+
+			function fisheyeSetFeaturetteButton( btn, icon, text ) {
+				var label = ( icon === FISHEYE_FEATURETTE_PLAY_ICON && btn.dataset.title ) ? btn.dataset.title : text;
+				btn.innerHTML = icon;
+				btn.title = label;
+				btn.setAttribute( 'aria-label', label );
+			}
 
 			function fisheyeResetToFilm() {
 				var player = document.getElementById( 'liberty-video-player' );
@@ -90,7 +101,7 @@
 					player.play();
 				}
 				if( fisheyePlayingFeaturetteBtn ) {
-					fisheyePlayingFeaturetteBtn.textContent = FISHEYE_FEATURETTE_PLAY_LABEL;
+					fisheyeSetFeaturetteButton( fisheyePlayingFeaturetteBtn, FISHEYE_FEATURETTE_PLAY_ICON, FISHEYE_FEATURETTE_PLAY_TEXT );
 					fisheyePlayingFeaturetteBtn = null;
 				}
 			}
@@ -109,13 +120,13 @@
 					fisheyeFilmSourceUrl = source.src;
 				}
 				if( fisheyePlayingFeaturetteBtn ) {
-					fisheyePlayingFeaturetteBtn.textContent = FISHEYE_FEATURETTE_PLAY_LABEL;
+					fisheyeSetFeaturetteButton( fisheyePlayingFeaturetteBtn, FISHEYE_FEATURETTE_PLAY_ICON, FISHEYE_FEATURETTE_PLAY_TEXT );
 				}
 				player.pause();
 				source.src = url;
 				player.load();
 				player.play();
-				btn.textContent = FISHEYE_FEATURETTE_FILM_LABEL;
+				fisheyeSetFeaturetteButton( btn, FISHEYE_FEATURETTE_FILM_ICON, FISHEYE_FEATURETTE_FILM_TEXT );
 				fisheyePlayingFeaturetteBtn = btn;
 				player.scrollIntoView( { behavior: 'smooth', block: 'center' } );
 				return false;

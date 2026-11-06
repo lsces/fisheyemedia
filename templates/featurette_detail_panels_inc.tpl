@@ -9,6 +9,7 @@
    hidden-until-clicked poster) - both toggle functions accept the same (btn, url) shape and
    read/restore the button's own dataset.title, so this template doesn't need to know which one
    it's calling. *}
+{capture assign=playIcon}{biticon ipackage="icons" iname="media-playback-start-large" iexplain="" iforce="icon" isize="large"}{/capture}
 {foreach from=$featurettes item=featurette name=featuretteDetails}
 	<div class="featurette-detail" id="featurette-detail-{$smarty.foreach.featuretteDetails.index}"{if !$smarty.foreach.featuretteDetails.first} style="display:none;"{/if}>
 		<h3>{$featurette.title|escape}</h3>
@@ -21,7 +22,7 @@
 			</dl>
 		{/if}
 		<p class="episode-play-action">
-			<a class="btn btn-primary" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}play_episode.php?xref_id={$featurette.xref_id}" data-title="{$featurette.title|escape}" onclick="return {$playToggleFn|default:'fisheyeToggleEpisodePlayback'}(this, this.href);">&#9658; {tr}Play{/tr}</a>
+			<a class="btn btn-link" title="{$featurette.title|escape}" aria-label="{$featurette.title|escape}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}play_episode.php?xref_id={$featurette.xref_id}" data-title="{$featurette.title|escape}" onclick="return {$playToggleFn|default:'fisheyeToggleEpisodePlayback'}(this, this.href);">{$playIcon}</a>
 			{if $gBitSystem->isFeatureActive( 'fisheyemedia_local_download' )}
 			{* Same option and reasoning as episode_detail_panels_inc.tpl's own download link - off unless "Enable local download"
 			   is ticked in Media Library Settings; `download` saves rather than plays inline, the only reliable way to get 5.1+

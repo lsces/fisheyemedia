@@ -6,8 +6,8 @@
    Asks the video for real full screen (standard, then webkit, then iOS webkitEnterFullscreen); with none of those,
    or a refusal, the video fills the browser window instead (.video-fill / .video-fill-page, themes base.css).
    Full screen holds one history entry so the remote's Back key (keyCode 461) or Escape leaves it instead of the
-   page. The button follows the player's visibility - the player stays hidden until Play Episode is pressed. *}
-{capture assign=fsIcon}{biticon ipackage="icons" iname="view-fullscreen-green" iexplain="Full screen" iforce="icon"}{/capture}
+   page. The button is placed next to the Play / Stop button of the episode or featurette that is playing, and hidden when nothing is. *}
+{capture assign=fsIcon}{biticon ipackage="icons" iname="view-fullscreen-green" iexplain="Full screen" iforce="icon" isize="large"}{/capture}
 <script>
 	var FISHEYE_FS_LABEL = '{tr}Full screen{/tr}';
 	var FISHEYE_FS_EXIT_LABEL = '{tr}Exit full screen{/tr}';
@@ -23,7 +23,20 @@
 		btn.className = 'btn btn-link btn-sm video-fullscreen';
 		btn.innerHTML = FISHEYE_FS_ICON;
 		btn.title = FISHEYE_FS_LABEL;
-		v.parentNode.insertBefore( btn, v.nextSibling );
+		btn.hidden = true;
+		// Sits beside the Play / Stop button of whichever episode or featurette is playing (episode_detail_panels_inc.tpl
+		// calls this on play and on stop), not beside the <video>, which sits among the page's floated columns
+		var gap = document.createTextNode( ' ' );
+		window.fisheyePlaceFullscreen = function( pAnchor ) {
+			if( pAnchor ) {
+				pAnchor.parentNode.insertBefore( gap, pAnchor.nextSibling );
+				pAnchor.parentNode.insertBefore( btn, gap.nextSibling );
+				btn.hidden = false;
+			} else {
+				leave();
+				btn.hidden = true;
+			}
+		};
 		var pushed = false;
 		var active = false;
 		var fsElement = function() {
@@ -102,13 +115,6 @@
 				leave();
 			}
 		}, false );
-		var sync = function() {
-			btn.hidden = ( window.getComputedStyle( v ).display == 'none' );
-		};
-		sync();
-		if( window.MutationObserver ) {
-			new MutationObserver( sync ).observe( v, { attributes: true, attributeFilter: [ 'style', 'class' ] } );
-		}
 	} )();
 {/literal}
 </script>

@@ -3,6 +3,7 @@
    which is visible by index. Shared between view_season.tpl and view_program_single_season.tpl -
    factored out rather than duplicated, no wrapping column div here so each caller supplies its
    own. *}
+{capture assign=playIcon}{biticon ipackage="icons" iname="media-playback-start-large" iexplain="" iforce="icon" isize="large"}{/capture}
 {foreach from=$episodes item=episode name=episodeDetails}
 	<div class="episode-detail" id="episode-detail-{$smarty.foreach.episodeDetails.index}"{if !$smarty.foreach.episodeDetails.first} style="display:none;"{/if}>
 		<h3>{$episode.title|escape}</h3>
@@ -18,7 +19,7 @@
 			{if $episode.audio}<dt>{tr}Audio{/tr}</dt><dd>{$episode.audio|escape}</dd>{/if}
 		</dl>
 		<p class="episode-play-action">
-			<a class="btn btn-primary" id="episode-play-btn-{$smarty.foreach.episodeDetails.index}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}play_episode.php?xref_id={$episode.xref_id}" target="_blank" rel="noopener" onclick="return fisheyeToggleEpisodePlayback(this, this.href);">&#9658; {tr}Play Episode{/tr}</a>
+			<a class="btn btn-link" title="{tr}Play Episode{/tr}" aria-label="{tr}Play Episode{/tr}" id="episode-play-btn-{$smarty.foreach.episodeDetails.index}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}play_episode.php?xref_id={$episode.xref_id}" target="_blank" rel="noopener" onclick="return fisheyeToggleEpisodePlayback(this, this.href);">{$playIcon}</a>
 			{if $gBitSystem->isFeatureActive( 'fisheyemedia_local_download' )}
 			{* Off unless Media Library Settings has "Enable local download" ticked: the full screen icon now covers what
 			   this link was added for (a clean full screen). `download` asks the browser to save rather than play inline
@@ -49,8 +50,19 @@
 	// is ever in "Stop" state at a time, tracked via fisheyePlayingBtn so switching to a different
 	// episode's button resets whichever one was previously showing "Stop" back to "Play Episode".
 	var fisheyePlayingBtn = null;
-	var FISHEYE_PLAY_LABEL = '&#9658; {tr}Play Episode{/tr}';
-	var FISHEYE_STOP_LABEL = '&#9632; {tr}Stop{/tr}';
+	{capture assign=stopIcon}{biticon ipackage="icons" iname="media-playback-stop-large" iexplain="" iforce="icon" isize="large"}{/capture}
+	var FISHEYE_PLAY_ICON = '{$playIcon|escape:"javascript"}';
+	var FISHEYE_STOP_ICON = '{$stopIcon|escape:"javascript"}';
+	var FISHEYE_PLAY_TEXT = '{tr}Play Episode{/tr}';
+	var FISHEYE_STOP_TEXT = '{tr}Stop{/tr}';
+
+	// The button is just the icon; the label is its tooltip and accessible name, set as plain text
+	// (a featurette's title is data, not markup)
+	function fisheyeSetPlayButton( btn, icon, text ) {
+		btn.innerHTML = icon;
+		btn.title = text;
+		btn.setAttribute( 'aria-label', text );
+	}
 
 	function fisheyeResetEpisodePlayer() {
 		var poster = document.getElementById( 'fisheye-episode-poster' );
@@ -72,8 +84,12 @@
 			// Featurette buttons (featurette_detail_panels_inc.tpl) set their own dataset.title so their
 			// own label is restored here, rather than the generic episode "Play Episode" text -
 			// an episode button never sets this, so its own behaviour is unchanged.
-			fisheyePlayingBtn.innerHTML = fisheyePlayingBtn.dataset.title ? ( '&#9658; ' + fisheyePlayingBtn.dataset.title ) : FISHEYE_PLAY_LABEL;
+			fisheyeSetPlayButton( fisheyePlayingBtn, FISHEYE_PLAY_ICON, fisheyePlayingBtn.dataset.title ? fisheyePlayingBtn.dataset.title : FISHEYE_PLAY_TEXT );
 			fisheyePlayingBtn = null;
+			// the full screen icon (video_fullscreen_inc.tpl) goes with the playing button
+			if( window.fisheyePlaceFullscreen ) {
+				fisheyePlaceFullscreen( null );
+			}
 		}
 	}
 
@@ -100,8 +116,11 @@
 				col.style.display = 'none';
 			}
 		} );
-		btn.innerHTML = FISHEYE_STOP_LABEL;
+		fisheyeSetPlayButton( btn, FISHEYE_STOP_ICON, FISHEYE_STOP_TEXT );
 		fisheyePlayingBtn = btn;
+		if( window.fisheyePlaceFullscreen ) {
+			fisheyePlaceFullscreen( btn );
+		}
 		return false;
 	}
 </script>
