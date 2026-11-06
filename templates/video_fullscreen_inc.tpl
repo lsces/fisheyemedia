@@ -6,25 +6,33 @@
    Asks the video for real full screen (standard, then webkit, then iOS webkitEnterFullscreen); with none of those,
    or a refusal, the video fills the browser window instead (.video-fill / .video-fill-page, themes base.css).
    Full screen holds one history entry so the remote's Back key (keyCode 461) or Escape leaves it instead of the
-   page. The button is placed next to the Play / Stop button of the episode or featurette that is playing, and hidden when nothing is. *}
+   page. Pass playerId to use it on another player (the film page passes liberty-video-player). The button is placed next to the Play / Stop button of the episode or featurette that is playing, and hidden when nothing is. *}
 {capture assign=fsIcon}{biticon ipackage="icons" iname="view-fullscreen-green" iexplain="Full screen" iforce="icon" isize="large"}{/capture}
 <script>
 	var FISHEYE_FS_LABEL = '{tr}Full screen{/tr}';
 	var FISHEYE_FS_EXIT_LABEL = '{tr}Exit full screen{/tr}';
 	var FISHEYE_FS_ICON = '{$fsIcon|escape:"javascript"}';
+	var FISHEYE_FS_PLAYER_ID = '{$playerId|default:'fisheye-episode-player'}';
 	var FISHEYE_PLAY_FULLSCREEN = {if $gBitSystem->isFeatureActive( 'fisheyemedia_play_fullscreen' )}true{else}false{/if};
 {literal}
 	( function() {
-		var v = document.getElementById( 'fisheye-episode-player' );
+		var v = document.getElementById( FISHEYE_FS_PLAYER_ID );
 		if( !v ) {
 			return;
 		}
+		// A film's page has its own player, always showing the film (liberty's player.tpl, view_film.tpl) and no Play or Stop
+		// button of ours: the icon sits beside the player, and Play is the player's own control (see FISHEYE_PLAY_FULLSCREEN
+		// below). The episode and season pages swap their player in and out under Play / Stop buttons instead.
+		var ownPlayer = ( FISHEYE_FS_PLAYER_ID != 'fisheye-episode-player' );
 		var btn = document.createElement( 'button' );
 		btn.type = 'button';
 		btn.className = 'btn btn-link btn-sm video-fullscreen';
 		btn.innerHTML = FISHEYE_FS_ICON;
 		btn.title = FISHEYE_FS_LABEL;
-		btn.hidden = true;
+		btn.hidden = !ownPlayer;
+		if( ownPlayer ) {
+			v.parentNode.insertBefore( btn, v.nextSibling );
+		}
 		// Sits beside the Play / Stop button of whichever episode or featurette is playing (episode_detail_panels_inc.tpl
 		// calls this on play and on stop), not beside the <video>, which sits among the page's floated columns
 		var gap = document.createTextNode( ' ' );
@@ -70,8 +78,12 @@
 				history.back();
 			}
 			pushed = false;
-			if( pStop && FISHEYE_PLAY_FULLSCREEN && window.fisheyeResetEpisodePlayer ) {
-				fisheyeResetEpisodePlayer();
+			if( pStop && FISHEYE_PLAY_FULLSCREEN ) {
+				if( window.fisheyeResetEpisodePlayer && !ownPlayer ) {
+					fisheyeResetEpisodePlayer();
+				} else {
+					v.pause();
+				}
 			}
 		};
 		var fillOn = function() {
@@ -110,6 +122,11 @@
 					startFullscreen();
 				}
 			};
+			// The film page's player starts from its own control (or a featurette button), not our Play button: its play
+			// event follows that click closely enough for the browser to still count it as the user's gesture
+			if( ownPlayer ) {
+				v.addEventListener( 'play', window.fisheyePlayFullscreen, false );
+			}
 		}
 		var onFullscreenChange = function() {
 			if( fsElement() === v ) {

@@ -133,5 +133,6 @@
 			}
 		</script>
 	{/if}
+	{include file="bitpackage:fisheyemedia/video_fullscreen_inc.tpl" playerId="liberty-video-player"}
 </div>
 {/strip}
