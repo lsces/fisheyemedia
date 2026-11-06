@@ -1,5 +1,6 @@
-{* A full screen icon button (the green view-fullscreen-green icon) after the shared episode player (#fisheye-episode-player), on the built-in webOS TV
-   browser only: its own control bar has no full screen button, every desktop browser's does. Included from
+{* A full screen icon button (the green view-fullscreen-green icon) after the shared episode player (#fisheye-episode-player), for the built-in webOS TV
+   browser, whose own control bar has no full screen button (most desktop browsers' do). Shown in every browser while we
+   find out why it did not appear on the TV when it was limited to a Web0S/webOS user agent. Included from
    episode_detail_panels_inc.tpl, so it comes with the player's own page.
 
    Asks the video for real full screen (standard, then webkit, then iOS webkitEnterFullscreen); with none of those,
@@ -14,7 +15,7 @@
 {literal}
 	( function() {
 		var v = document.getElementById( 'fisheye-episode-player' );
-		if( !v || !/Web0S|webOS/i.test( navigator.userAgent ) ) {
+		if( !v ) {
 			return;
 		}
 		var btn = document.createElement( 'button' );
