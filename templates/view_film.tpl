@@ -20,7 +20,7 @@
 				{* player.tpl directly, not video/view.tpl via getMimeTemplate() - skips its
 				   trailing mime_meta_inc.tpl include (Uploaded by/Downloads/Last Modified/
 				   Hits), which just duplicates/clutters what this page already shows better *}
-				{include file="bitpackage:liberty/mime/video/player.tpl" attachment=$gContent->mInfo.image_file}
+				{include file="bitpackage:liberty/mime/video/player.tpl" attachment=$gContent->mInfo.image_file showDownload=$gBitSystem->isFeatureActive( 'fisheyemedia_local_download' )}
 			</div>
 			<div class="col-md-4 film-facts">
 				{if $gContent->mInfo.data}

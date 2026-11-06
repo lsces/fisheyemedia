@@ -7,9 +7,11 @@
    or a refusal, the video fills the browser window instead (.video-fill / .video-fill-page, themes base.css).
    Full screen holds one history entry so the remote's Back key (keyCode 461) or Escape leaves it instead of the
    page. Pass playerId to use it on another player (the film page passes liberty-video-player). The button is placed next to the Play / Stop button of the episode or featurette that is playing, and hidden when nothing is. *}
-{capture assign=fsIcon}{biticon ipackage="icons" iname="view-fullscreen-green" iexplain="Full screen" iforce="icon" isize="large"}{/capture}
+{* On the film page (playerId passed) the icon is Play: it starts the film and goes full screen *}
+{if !empty( $playerId )}{capture assign=fsIcon}{biticon ipackage="icons" iname="media-playback-start-large" iexplain="Play full screen" iforce="icon" isize="large"}{/capture}
+{else}{capture assign=fsIcon}{biticon ipackage="icons" iname="view-fullscreen-green" iexplain="Full screen" iforce="icon" isize="large"}{/capture}{/if}
 <script>
-	var FISHEYE_FS_LABEL = '{tr}Full screen{/tr}';
+	var FISHEYE_FS_LABEL = '{if !empty( $playerId )}{tr}Play full screen{/tr}{else}{tr}Full screen{/tr}{/if}';
 	var FISHEYE_FS_EXIT_LABEL = '{tr}Exit full screen{/tr}';
 	var FISHEYE_FS_ICON = '{$fsIcon|escape:"javascript"}';
 	var FISHEYE_FS_PLAYER_ID = '{$playerId|default:'fisheye-episode-player'}';
@@ -92,7 +94,13 @@
 			document.documentElement.classList.add( 'video-fill-page' );
 			btn.title = FISHEYE_FS_EXIT_LABEL;
 		};
+		var requestedAt = 0;
 		var startFullscreen = function() {
+			// the play event and a click can both ask within the same moment: one request is enough
+			if( Date.now() - requestedAt < 1000 ) {
+				return;
+			}
+			requestedAt = Date.now();
 			var request = v.requestFullscreen || v.webkitRequestFullscreen || v.webkitEnterFullscreen;
 			if( !request ) {
 				fillOn();
@@ -113,6 +121,9 @@
 				return;
 			}
 			startFullscreen();
+			if( ownPlayer ) {
+				v.play();
+			}
 		}, false );
 		// "Play episodes full screen": the play code calls this from the Play click itself, which is the user gesture the
 		// browser needs to allow the full screen request
