@@ -103,3 +103,4 @@
 		return false;
 	}
 </script>
+{include file="bitpackage:fisheyemedia/video_fullscreen_inc.tpl"}
