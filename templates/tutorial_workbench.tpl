@@ -29,7 +29,7 @@
 			{elseif $st.contentId}
 				<p>{tr}Registered.{/tr}</p>
 			{else}
-				{if !$hasTopGallery}<div class="alert alert-warning"><p>{tr}There is no top-level Local Tutorials gallery yet, so the course cannot be filed. Make it from Load Local Tutorials first.{/tr}</p></div>{/if}
+				{if !$hasTopGallery}<div class="alert alert-warning"><p>{tr}There is no top-level Local Tutorials gallery yet, so the course cannot be filed. Make it on the{/tr} <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}tutorial_workbench.php">{tr}workbench front page{/tr}</a> {tr}first.{/tr}</p></div>{/if}
 				{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`tutorial_workbench.php"}
 					<input type="hidden" name="course" value="{$st.name|escape}" />
 					<input type="submit" class="btn btn-primary" name="register_course" value="{tr}Register the course{/tr}" />

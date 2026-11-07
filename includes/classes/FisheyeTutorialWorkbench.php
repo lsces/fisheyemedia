@@ -28,6 +28,24 @@ class FisheyeTutorialWorkbench {
 		return (bool)FisheyeGallery::getTopGalleryId( FisheyeProgram::TUTORIALS_FOLDER );
 	}
 
+	/**
+	 * Make the top-level Local Tutorials gallery (a grid of courses, layout program_grid) when it is not there; a course is filed in it when registered.
+	 *
+	 * @return string|null  an error text, null when the gallery was made or already exists
+	 */
+	public static function createTopGallery(): ?string {
+		if( self::hasTopGallery() ) {
+			return null;
+		}
+		$gallery = new FisheyeGallery();
+		$storeHash = [ 'title' => FisheyeProgram::TUTORIALS_FOLDER, 'gallery_pagination' => FISHEYE_PAGINATION_PROGRAM_GRID ];   // store() takes it by reference
+		if( !$gallery->store( $storeHash ) ) {
+			return implode( '; ', array_map( 'strval', array_values( $gallery->mErrors ) ) );
+		}
+		$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_PROGRAM_GRID );
+		return null;
+	}
+
 	/** The course folder names, alphabetically (case ignored; "2021 ..." before "60 ...", not 60 before 2021 as a natural sort would put them). */
 	public static function courses(): array {
 		$root = self::root();

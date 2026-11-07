@@ -24,6 +24,9 @@ $errors = [];
 $course = htmlspecialchars_decode( trim( (string)( $_REQUEST['course'] ?? '' ) ), ENT_NOQUOTES );
 
 if( $course === '' ) {
+	if( !empty( $_REQUEST['create_top'] ) && ( $error = FisheyeTutorialWorkbench::createTopGallery() ) !== null ) {
+		$errors[] = $error;
+	}
 	$all = FisheyeTutorialWorkbench::overview();
 	$showAll = !empty( $_REQUEST['all'] );
 	$gBitSmarty->assign( 'overview', $showAll ? $all : array_filter( $all, fn( $r ) => !$r['done'] ) );

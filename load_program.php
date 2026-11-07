@@ -67,14 +67,8 @@ $localGalleryId = FisheyeGallery::getTopGalleryId( $localFolder );
 // Local Tutorials has no loose-video loader (load_local.php) to make its top gallery, so this page offers to; a grid of courses is program_grid.
 $createTopError = null;
 if( $localParam === 'tutorials' && !$localGalleryId && !empty( $_REQUEST['fCreateTop'] ) ) {
-	$topGallery = new FisheyeGallery();
-	$storeHash = [ 'title' => FisheyeProgram::TUTORIALS_FOLDER, 'gallery_pagination' => FISHEYE_PAGINATION_PROGRAM_GRID ];
-	if( $topGallery->store( $storeHash ) ) {
-		$topGallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_PROGRAM_GRID );
-		$localGalleryId = (int)$topGallery->mGalleryId;
-	} else {
-		$createTopError = implode( '; ', $topGallery->mErrors );
-	}
+	$createTopError = FisheyeTutorialWorkbench::createTopGallery();
+	$localGalleryId = (int)FisheyeGallery::getTopGalleryId( $localFolder );
 }
 
 $galleryIdParam = (int)( $_REQUEST['gallery_id'] ?? 0 );
