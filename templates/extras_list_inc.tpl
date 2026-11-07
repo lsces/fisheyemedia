@@ -29,7 +29,8 @@
 							<a href="{$extra.url|escape}" target="_blank" rel="noopener" title="{$extra.title|escape}">
 								<img class="thumb img-responsive center-block media-cover" src="{$extra.thumb|escape}" alt="{$extra.title|escape}" />
 							</a>
-							{if $extra.label|default:''}<h4>{$extra.label|escape}</h4>{elseif $gBitSystem->isFeatureActive('fisheye_gallery_list_image_titles')}<h4>{$extra.title|escape}</h4>{/if}
+							{if $extra.showTitle|default:false}<h4>{$extra.title|escape}</h4>{if $extra.label|default:''}<p class="text-muted">{$extra.label|escape}</p>{/if}
+							{elseif $extra.label|default:''}<h4>{$extra.label|escape}</h4>{elseif $gBitSystem->isFeatureActive('fisheye_gallery_list_image_titles')}<h4>{$extra.title|escape}</h4>{/if}
 						{/box}
 					</div>
 				{foreachelse}

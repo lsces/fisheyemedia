@@ -72,7 +72,7 @@ class FisheyeSection extends FisheyeSeason {
 		foreach( $rows as $row ) {
 			$data = json_decode( (string)$row['data'], true ) ?: [];
 			$name = basename( (string)$row['xkey_ext'] );
-			$items[] = [ 'thumb' => $this->getFileThumbUrl( (int)$row['xref_id'], $name ), 'url' => FISHEYEMEDIA_PKG_URL.'view_season_file.php?xref_id='.(int)$row['xref_id'], 'title' => $name,
+			$items[] = [ 'thumb' => $this->getFileThumbUrl( (int)$row['xref_id'], $name ), 'url' => FISHEYEMEDIA_PKG_URL.'view_season_file.php?xref_id='.(int)$row['xref_id'], 'title' => $name, 'showTitle' => true,
 				'label' => strtoupper( (string)( $data['format'] ?? '' ) ).( !empty( $data['size'] ) ? ' '.$data['size'] : '' ) ];
 		}
 		return $items;
