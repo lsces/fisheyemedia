@@ -6,10 +6,20 @@
 
 <div class="admin liberty">
 	<div class="header">
-		<h1><a href="{$topGalleryUrl|escape}">{if $local}{tr}Local Videos{/tr}{else}{tr}TV Shows{/tr}{/if}</a>{if $scopeShow} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php{if $local}?local=1{/if}">{tr}Next{/tr}</a> - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_program.php?content_id={$scopeShow.content_id}">{$scopeShow.title|escape}</a>{/if}</h1>
+		<h1><a href="{$topGalleryUrl|escape}">{if $local}{tr}{$localFolder}{/tr}{else}{tr}TV Shows{/tr}{/if}</a>{if $scopeShow} - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php{if $local}?local={$localParam}{/if}">{tr}Next{/tr}</a> - <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_program.php?content_id={$scopeShow.content_id}">{$scopeShow.title|escape}</a>{/if}</h1>
 	</div>
 
 	<div class="body">
+
+		{if $createTopError}
+			<div class="alert alert-danger">{$createTopError|escape}</div>
+		{/if}
+		{if $needTopGallery}
+			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`load_program.php?local=`$localParam`"}
+				<p>{tr}There is no top-level{/tr} {$localFolder|escape} {tr}gallery yet.{/tr}</p>
+				<input type="submit" class="btn btn-primary" name="fCreateTop" value="{tr}Create the gallery{/tr}" />
+			{/form}
+		{/if}
 
 		{if $showResult.error}
 			<div class="alert alert-danger">{$showResult.error|escape}</div>
@@ -77,7 +87,7 @@
 			<p>{tr}Showing up to{/tr} {$candidateLimit} {tr}not-yet-loaded shows.{/tr}</p>
 			<ul>
 				{foreach from=$candidates item=show}
-					<li><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?{if $local}local=1&amp;{/if}show={$show|escape:'url'}">{$show|escape}</a></li>
+					<li><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?{if $local}local={$localParam}&amp;{/if}show={$show|escape:'url'}">{$show|escape}</a></li>
 				{/foreach}
 			</ul>
 		{elseif !$scopeShow}

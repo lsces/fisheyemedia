@@ -419,6 +419,50 @@ trait FisheyeMediaTrait {
 		return $root ? $root.$pRelativePath : '';
 	}
 
+	/** The icon for a file's type (the mime icon set, svg where there is one), or the generic file icon. */
+	public function getFileIconUrl( string $pFileName ): string {
+		global $gBitSystem;
+		return (string)( \Bitweaver\Liberty\LibertySystem::getMimeThumbnailURL( (string)$gBitSystem->lookupMimeType( $pFileName ), pathinfo( $pFileName, PATHINFO_EXTENSION ) )
+			?: \Bitweaver\Liberty\LibertySystem::getMimeThumbnailURL( 'application/generic' ) );
+	}
+
+	/** Whether poppler's pdftoppm is there to draw a PDF's first page. */
+	public static function canDrawPdfThumbs(): bool {
+		static $can = null;
+		return $can ??= is_executable( '/usr/bin/pdftoppm' );
+	}
+
+	/**
+	 * What to show for a file listed as an Extra: the first page of a PDF (through view_season_file.php?thumb=1, drawn on first use), else the file type's icon.
+	 * $pXrefId is the file's own 'extra' row.
+	 */
+	public function getFileThumbUrl( int $pXrefId, string $pFileName ): string {
+		return strtolower( pathinfo( $pFileName, PATHINFO_EXTENSION ) ) === 'pdf' && self::canDrawPdfThumbs()
+			? FISHEYEMEDIA_PKG_URL.'view_season_file.php?xref_id='.$pXrefId.'&thumb=1'
+			: $this->getFileIconUrl( $pFileName );
+	}
+
+	/**
+	 * The drawn first page of a PDF as a PNG file, made now if it is not kept yet: in this item's own storage folder (always writable, never beside the
+	 * file), named by the row and the file's modification time so a replaced PDF is drawn again. Null when it is not a PDF, pdftoppm is missing or fails.
+	 */
+	public function getFileThumbFile( int $pXrefId, string $pPath ): ?string {
+		if( strtolower( pathinfo( $pPath, PATHINFO_EXTENSION ) ) !== 'pdf' || !self::canDrawPdfThumbs() ) {
+			return null;
+		}
+		$dir = $this->getExtraImagePath( 'file-thumbs/' );
+		$base = $dir.$pXrefId.'-'.filemtime( $pPath );
+		if( is_file( $base.'.png' ) && filesize( $base.'.png' ) > 0 ) {
+			return $base.'.png';
+		}
+		\Bitweaver\KernelTools::mkdir_p( $dir );
+		foreach( (array)glob( $dir.$pXrefId.'-*.png' ) as $old ) {
+			@unlink( $old );   // an earlier drawing of a PDF that has since changed
+		}
+		exec( 'timeout 20 /usr/bin/pdftoppm -f 1 -l 1 -png -singlefile -scale-to-x 240 -scale-to-y -1 '.escapeshellarg( $pPath ).' '.escapeshellarg( $base ).' 2>/dev/null' );
+		return is_file( $base.'.png' ) && filesize( $base.'.png' ) > 0 ? $base.'.png' : null;
+	}
+
 	/**
 	 * Whether grabVideoFrameImage() exists and does anything for this content type - default
 	 * false here, overridden true on FisheyeSeason (the only type with an episode video to grab

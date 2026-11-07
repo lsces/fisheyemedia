@@ -57,9 +57,25 @@ const LOAD_PROGRAM_FLAT_SEASON = '.';
 // why (was a literal, install-order-dependent "2" here until 2026-09-03).
 $topGalleryId = FisheyeGallery::getTopGalleryId( 'TV Shows' );
 
-// ?local=1 lists the series in the Local Videos library instead of the TV library - see FisheyeProgram::locateShowFolder().
-$local = !empty( $_REQUEST['local'] );
-$localGalleryId = FisheyeGallery::getTopGalleryId( FisheyeProgram::LOCAL_FOLDER );
+// ?local=1 lists the series in the Local Videos library instead of the TV library, ?local=tutorials the courses in Local Tutorials -
+// see FisheyeProgram::locateShowFolder().
+$localParam = (string)( $_REQUEST['local'] ?? '' );
+$local = $localParam !== '';
+$localFolder = $localParam === 'tutorials' ? FisheyeProgram::TUTORIALS_FOLDER : FisheyeProgram::LOCAL_FOLDER;
+$localGalleryId = FisheyeGallery::getTopGalleryId( $localFolder );
+
+// Local Tutorials has no loose-video loader (load_local.php) to make its top gallery, so this page offers to; a grid of courses is program_grid.
+$createTopError = null;
+if( $localParam === 'tutorials' && !$localGalleryId && !empty( $_REQUEST['fCreateTop'] ) ) {
+	$topGallery = new FisheyeGallery();
+	$storeHash = [ 'title' => FisheyeProgram::TUTORIALS_FOLDER, 'gallery_pagination' => FISHEYE_PAGINATION_PROGRAM_GRID ];
+	if( $topGallery->store( $storeHash ) ) {
+		$topGallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_PROGRAM_GRID );
+		$localGalleryId = (int)$topGallery->mGalleryId;
+	} else {
+		$createTopError = implode( '; ', $topGallery->mErrors );
+	}
+}
 
 $galleryIdParam = (int)( $_REQUEST['gallery_id'] ?? 0 );
 // See load_film.php's own comment on this same decode - detoxify() HTML-escapes every $_REQUEST
@@ -74,9 +90,8 @@ $reloadCandidates = []; // already-registered seasons with more files on disk th
 $episodeReloadResult = null; // fReloadSeasonEpisodes result, only shown right after that action
 
 if( $galleryIdParam && $galleryIdParam !== $topGalleryId ) {
-	$program = new FisheyeProgram( $galleryIdParam );
-	$program->load();
-	if( $program->isValid() ) {
+	$program = FisheyeGallery::lookup( [ 'gallery_id' => $galleryIdParam ] );
+	if( $program instanceof FisheyeProgram && $program->isValid() ) {
 		$scopeShow = [ 'content_id' => $program->mContentId, 'gallery_id' => $program->mGalleryId, 'title' => $program->getTitle() ];
 	}
 } elseif( $showParam !== '' ) {
@@ -94,9 +109,9 @@ if( $galleryIdParam && $galleryIdParam !== $topGalleryId ) {
 
 if( $scopeShow === null && $local ) {
 
-	// Local Videos: folders whose video files are mostly tagged SnnEnn are series, loaded as shows into the Local Videos gallery.
-	$localRoot = \Bitweaver\Liberty\mime_film_get_storage_root();
-	$localDir = $localRoot.FisheyeProgram::LOCAL_FOLDER.'/';
+	// Local Videos / Local Tutorials: folders whose video files are mostly tagged SnnEnn are series, loaded as shows into that library's gallery.
+	$localRoot = $localFolder === FisheyeProgram::TUTORIALS_FOLDER ? FisheyeProgram::getTutorialsRoot() : \Bitweaver\Liberty\mime_film_get_storage_root();
+	$localDir = $localRoot.$localFolder.'/';
 	$entries = is_dir( $localDir ) ? scandir( $localDir ) : [];
 	natsort( $entries );
 	foreach( $entries as $entry ) {
@@ -116,7 +131,7 @@ if( $scopeShow === null && $local ) {
 			continue;
 		}
 		$existingContentId = $gBitDb->getOne(
-			"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeprogram' AND title = ?",
+			"SELECT content_id FROM liberty_content WHERE content_type_guid IN ( 'fisheyeprogram', 'fisheyecourse' ) AND title = ?",
 			[ $entry ]
 		);
 		if( !$existingContentId ) {
@@ -153,7 +168,7 @@ if( $scopeShow === null && $local ) {
 				continue;
 			}
 			$existingContentId = $gBitDb->getOne(
-				"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeprogram' AND title = ?",
+				"SELECT content_id FROM liberty_content WHERE content_type_guid IN ( 'fisheyeprogram', 'fisheyecourse' ) AND title = ?",
 				[ $entry ]
 			);
 			if( $existingContentId ) {
@@ -183,11 +198,12 @@ if( $scopeShow === null && $local ) {
 				$seasonResult['created'][] = [ 'folder' => $seasonFolder, 'content_id' => $row['created'], 'episodes' => $row['episodes'], 'images' => $row['images'] ];
 			}
 		}
-		if( $seasonResult['created'] && FisheyeProgram::locateShowFolder( $showTitle )['base'] === FisheyeProgram::LOCAL_FOLDER ) {
+		if( $seasonResult['created'] && FisheyeProgram::isLocalBase( FisheyeProgram::locateShowFolder( $showTitle )['base'] ) ) {
 			// No Plex poster for a local show: a frame from one of its seasons stands in.
-			$showProgram = new FisheyeProgram( null, $showContentId );
-			$showProgram->load();
-			$showProgram->grabFrameIfNoImage();
+			$showProgram = FisheyeGallery::lookup( [ 'content_id' => $showContentId ] );
+			if( $showProgram instanceof FisheyeProgram ) {
+				$showProgram->grabFrameIfNoImage();
+			}
 		}
 	} elseif( !empty( $_REQUEST['fReloadSeasonEpisodes'] ) ) {
 		// The show-page shortcut for a season that's picked up more episode files than are
@@ -197,9 +213,8 @@ if( $scopeShow === null && $local ) {
 		// otherwise lives.
 		$reloadSeasonId = (int)( $_REQUEST['season_content_id'] ?? 0 );
 		if( $reloadSeasonId ) {
-			$reloadSeason = new FisheyeSeason( null, $reloadSeasonId );
-			$reloadSeason->load();
-			if( $reloadSeason->isValid() ) {
+			$reloadSeason = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => $reloadSeasonId ] );
+			if( $reloadSeason instanceof FisheyeSeason && $reloadSeason->isValid() ) {
 				$episodeReloadResult = [ 'title' => $reloadSeason->getTitle(), 'episodes' => $reloadSeason->reloadPlexEpisodes( true ) ];
 			}
 		}
@@ -208,7 +223,9 @@ if( $scopeShow === null && $local ) {
 	$location = FisheyeProgram::locateShowFolder( $showTitle );
 	$root = $location['root'];
 	$showDir = $root.$location['base'].'/'.$showTitle.'/';
-	$local = $location['base'] === FisheyeProgram::LOCAL_FOLDER;
+	$local = FisheyeProgram::isLocalBase( $location['base'] );
+	$localFolder = $location['base'];
+	$localParam = $location['base'] === FisheyeProgram::TUTORIALS_FOLDER ? 'tutorials' : '1';
 	if( !empty( $root ) && is_dir( $showDir ) ) {
 		$entries = scandir( $showDir );
 		natsort( $entries );
@@ -217,6 +234,17 @@ if( $scopeShow === null && $local ) {
 				break;
 			}
 			if( str_starts_with( $entry, '.' ) || !is_dir( $showDir.$entry ) ) {
+				continue;
+			}
+			// A folder with no video in it (a course's quiz link, handouts) is not a season: it would only fail to load.
+			$hasVideo = false;
+			foreach( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $showDir.$entry, \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+				if( $file->isFile() && in_array( strtolower( $file->getExtension() ), LOAD_PROGRAM_EXTENSIONS, true ) ) {
+					$hasVideo = true;
+					break;
+				}
+			}
+			if( !$hasVideo ) {
 				continue;
 			}
 			$seasonTitle = $showTitle.' - '.$entry;
@@ -228,7 +256,7 @@ if( $scopeShow === null && $local ) {
 			$existingContentId = $gBitDb->getOne(
 				"SELECT lc.content_id FROM liberty_content lc
 				 INNER JOIN fisheye_gallery_image_map m ON m.item_content_id = lc.content_id AND m.gallery_content_id = ?
-				 WHERE lc.content_type_guid = 'fisheyeseason' AND lc.title = ?",
+				 WHERE lc.content_type_guid IN ( 'fisheyeseason', 'fisheyesection' ) AND lc.title = ?",
 				[ $showContentId, $seasonTitle ]
 			);
 			if( $existingContentId ) {
@@ -242,7 +270,7 @@ if( $scopeShow === null && $local ) {
 		if( empty( $candidates ) ) {
 			$flatSeasonTitle = $showTitle.' - Season 1';
 			$existingFlatContentId = $gBitDb->getOne(
-				"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeseason' AND title = ?",
+				"SELECT content_id FROM liberty_content WHERE content_type_guid IN ( 'fisheyeseason', 'fisheyesection' ) AND title = ?",
 				[ $flatSeasonTitle ]
 			);
 			if( !$existingFlatContentId ) {
@@ -267,13 +295,12 @@ if( $scopeShow === null && $local ) {
 	$registeredSeasonIds = $gBitDb->getCol(
 		"SELECT lc.content_id FROM liberty_content lc
 		 INNER JOIN fisheye_gallery_image_map m ON m.item_content_id = lc.content_id AND m.gallery_content_id = ?
-		 WHERE lc.content_type_guid = 'fisheyeseason'",
+		 WHERE lc.content_type_guid IN ( 'fisheyeseason', 'fisheyesection' )",
 		[ $showContentId ]
 	);
 	foreach( $registeredSeasonIds as $seasonContentId ) {
-		$existingSeason = new FisheyeSeason( null, (int)$seasonContentId );
-		$existingSeason->load();
-		if( !$existingSeason->isValid() ) {
+		$existingSeason = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => (int)$seasonContentId ] );
+		if( !( $existingSeason instanceof FisheyeSeason ) || !$existingSeason->isValid() ) {
 			continue;
 		}
 		$onDisk = $existingSeason->getEpisodeFileCountOnDisk();
@@ -297,6 +324,10 @@ $topGalleryUrlHash = [ 'gallery_id' => $local && $localGalleryId ? $localGallery
 $gBitSmarty->assign( 'topGalleryUrl', FisheyeGallery::getDisplayUrlFromHash( $topGalleryUrlHash ) );
 
 $gBitSmarty->assign( 'local', $local );
+$gBitSmarty->assign( 'localFolder', $localFolder );
+$gBitSmarty->assign( 'needTopGallery', $local && !$localGalleryId );
+$gBitSmarty->assign( 'createTopError', $createTopError );
+$gBitSmarty->assign( 'localParam', $localParam );
 $gBitSmarty->assign( 'candidateLimit', LOAD_PROGRAM_LIMIT );
 $gBitSmarty->assign( 'candidates', $candidates );
 $gBitSmarty->assign( 'reloadCandidates', $reloadCandidates );

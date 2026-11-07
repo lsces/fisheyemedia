@@ -37,6 +37,10 @@ $formFisheyeMediaGeneral = [
 		'label' => 'Book Library Storage Path',
 		'note' => 'The folder that holds the book Library: one folder per author, then series, then book, with the ebook and audio book files inside (e.g. /srv/media/Library/). Leave blank to use the Library folder under the External Disk Storage Path above. Set it to put the Library on its own disk.',
 	],
+	"fisheye_tutorials_storage_root" => [
+		'label' => 'Tutorials Storage Path',
+		'note' => 'The folder that CONTAINS the Local Tutorials folder (one folder per video course, then Season NN - Section title, then the lessons tagged SnnEnn), e.g. /srv/media/ for /srv/media/Local Tutorials/. Leave blank to use the External Disk Storage Path above. Include a trailing slash.',
+	],
 	"fisheye_plex_db_path" => [
 		'label' => 'Plex Library Database File',
 		'note' => 'Unlike the storage paths above, this is the actual database FILE itself, not its containing folder - the full path ending in com.plexapp.plugins.library.db (e.g. /var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db). Read-only lookup, for backfilling genre/director/writer/star/rating/duration when importing a film already known to Plex. Leave blank to skip Plex metadata lookup entirely.',

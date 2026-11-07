@@ -36,6 +36,8 @@ define( 'FISHEYEPROGRAM_CONTENT_TYPE_GUID', 'fisheyeprogram' );
 class FisheyeProgram extends FisheyeMediaGallery {
 	// The folder under the film storage root, and the title of the top-level gallery, holding shows that are not in the TV library.
 	public const LOCAL_FOLDER = 'Local Videos';
+	// Likewise for downloaded video courses: a course is a show, a section a season. Its root is the Tutorials Storage Path setting, else the film root.
+	public const TUTORIALS_FOLDER = 'Local Tutorials';
 
 
 	public function __construct( $pGalleryId = null, $pContentId = null ) {
@@ -235,7 +237,23 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	 * Whether this show comes from the Local Videos library - no Plex, TMDB or TheTVDB entry to match: everything is read from the files.
 	 */
 	public function isLocal(): bool {
-		return self::locateShowFolder( $this->getTitle() )['base'] === self::LOCAL_FOLDER;
+		return self::isLocalBase( self::locateShowFolder( $this->getTitle() )['base'] );
+	}
+
+	/**
+	 * Whether a locateShowFolder() base is one of the local libraries (Local Videos, Local Tutorials) rather than the TV library.
+	 */
+	public static function isLocalBase( string $pBase ): bool {
+		return in_array( $pBase, [ self::LOCAL_FOLDER, self::TUTORIALS_FOLDER ], true );
+	}
+
+	/**
+	 * The root holding the Local Tutorials folder: the Tutorials Storage Path setting, else the film root. Empty string if neither is set.
+	 */
+	public static function getTutorialsRoot(): string {
+		global $gBitSystem;
+		$set = trim( (string)$gBitSystem->getConfig( 'fisheye_tutorials_storage_root', '' ) );
+		return $set !== '' ? rtrim( $set, '/' ).'/' : \Bitweaver\Liberty\mime_film_get_storage_root();
 	}
 
 	/**
@@ -244,7 +262,9 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	 * under the film root. The TV library wins when both exist, and a show found in neither resolves to the TV
 	 * library, as it always did.
 	 *
-	 * @return array{root:string,base:string}  root with trailing slash, base the folder under it ('TV Shows' or 'Local Videos')
+	 * A course from the Local Tutorials library sits in 'Local Tutorials/<title>' under the tutorials root, checked after Local Videos.
+	 *
+	 * @return array{root:string,base:string}  root with trailing slash, base the folder under it ('TV Shows', 'Local Videos' or 'Local Tutorials')
 	 */
 	public static function locateShowFolder( string $pShowTitle ): array {
 		$tvRoot = \Bitweaver\Liberty\mime_film_get_tvshow_storage_root( $pShowTitle );
@@ -252,6 +272,10 @@ class FisheyeProgram extends FisheyeMediaGallery {
 			$localRoot = \Bitweaver\Liberty\mime_film_get_storage_root();
 			if( $localRoot !== '' && is_dir( $localRoot.self::LOCAL_FOLDER.'/'.$pShowTitle ) ) {
 				return [ 'root' => $localRoot, 'base' => self::LOCAL_FOLDER ];
+			}
+			$tutorialsRoot = self::getTutorialsRoot();
+			if( $tutorialsRoot !== '' && is_dir( $tutorialsRoot.self::TUTORIALS_FOLDER.'/'.$pShowTitle ) ) {
+				return [ 'root' => $tutorialsRoot, 'base' => self::TUTORIALS_FOLDER ];
 			}
 		}
 		return [ 'root' => $tvRoot, 'base' => 'TV Shows' ];
@@ -268,9 +292,8 @@ class FisheyeProgram extends FisheyeMediaGallery {
 		$seasons = [];
 		$wanted = [];
 		foreach( FisheyeCredits::seasonIdsForProgram( (int)$this->mContentId ) as $seasonId ) {
-			$season = new FisheyeSeason( null, $seasonId );
-			$season->load();
-			if( $season->isValid() ) {
+			$season = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => $seasonId ] );
+			if( $season instanceof FisheyeSeason && $season->isValid() ) {
 				$seasons[] = $season;
 				$wanted = array_merge( $wanted, $season->episodesWithoutPeople() );
 			}
@@ -441,16 +464,17 @@ class FisheyeProgram extends FisheyeMediaGallery {
 		global $gBitDb;
 
 		$existingContentId = $gBitDb->getOne(
-			"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeprogram' AND title = ?",
+			"SELECT content_id FROM liberty_content WHERE content_type_guid IN ( 'fisheyeprogram', 'fisheyecourse' ) AND title = ?",
 			[ $pShowTitle ]
 		);
 		if( $existingContentId ) {
-			$existing = new FisheyeProgram( null, $existingContentId );
+			$existing = FisheyeGallery::lookup( [ 'content_id' => $existingContentId ] );
 			$existing->load();
 			return [ 'already' => $existingContentId, 'gallery_id' => $existing->mGalleryId ];
 		}
 
-		$program = new FisheyeProgram();
+		// A course in the Local Tutorials library is its own type, with its own scheme (see FisheyeCourse).
+		$program = $parentTitle === self::TUTORIALS_FOLDER ? new FisheyeCourse() : new FisheyeProgram();
 		// store() takes its param by reference - can't pass an array literal directly.
 		$storeHash = [ 'title' => $pShowTitle ];
 		if( !$program->store( $storeHash ) ) {
@@ -483,7 +507,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 		// edit_program.php) something to attach a manually-confirmed match to - but no metadata/
 		// image fetch runs until a match is actually confirmed, automatic or manual.
 		// A Local Videos show has no Plex entry by design, so there is nothing to match or fetch.
-		if( $parentTitle === self::LOCAL_FOLDER ) {
+		if( self::isLocalBase( $parentTitle ) ) {
 			return [ 'created' => $program->mContentId, 'gallery_id' => $program->mGalleryId, 'linked' => $linked, 'local' => true ];
 		}
 		if( !$program->hasPlexMatch() ) {

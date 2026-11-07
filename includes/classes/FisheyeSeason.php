@@ -18,6 +18,7 @@ namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\KernelTools;
 use Bitweaver\Fisheye\FisheyeGallery;
+use Bitweaver\Fisheye\FisheyeImage;
 
 // mime_film_get_tvshow_storage_root() below is only auto-loaded via the LibertyMime
 // attachment-plugin dispatch, which never fires for a season (no video attachment of its own) -
@@ -409,18 +410,19 @@ class FisheyeSeason extends FisheyeMediaImage {
 		$alreadySeeded = false;
 
 		$existingContentId = $gBitDb->getOne(
-			"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeseason' AND title = ?",
+			"SELECT content_id FROM liberty_content WHERE content_type_guid IN ( 'fisheyeseason', 'fisheyesection' ) AND title = ?",
 			[ $seasonTitle ]
 		);
 		if( $existingContentId ) {
-			$season = new FisheyeSeason( null, $existingContentId );
+			$season = FisheyeImage::lookup( [ 'content_id' => $existingContentId ] );
 			$season->load();
 			$alreadySeeded = (bool)$gBitDb->getOne(
 				"SELECT xref_id FROM liberty_xref WHERE content_id = ? AND item = 'episode'",
 				[ $existingContentId ]
 			);
 		} else {
-			$season = new FisheyeSeason();
+			// A section of a Local Tutorials course is its own type, with its own scheme (see FisheyeSection).
+			$season = FisheyeProgram::locateShowFolder( $pShowTitle )['base'] === FisheyeProgram::TUTORIALS_FOLDER ? new FisheyeSection() : new FisheyeSeason();
 			// store() takes its param by reference - can't pass an array literal directly.
 			$storeHash = [ 'title' => $seasonTitle ];
 			if( !$season->store( $storeHash ) ) {
@@ -492,6 +494,10 @@ class FisheyeSeason extends FisheyeMediaImage {
 		// season was already registered (e.g. moved into place later) gets picked up on the next
 		// ordinary reload, not just at first creation.
 		$featurettes = $season->registerFeaturettesFromDisk();
+		// A Local Tutorials section also carries the files that go with its lessons.
+		if( $season instanceof FisheyeSection ) {
+			$season->registerFilesFromDisk();
+		}
 
 		return [ 'created' => $season->mContentId, 'episodes' => $episodes, 'images' => $images, 'featurettes' => $featurettes ];
 	}
@@ -511,13 +517,13 @@ class FisheyeSeason extends FisheyeMediaImage {
 	}
 
 	/**
-	 * Whether this season belongs to a show from the Local Videos library (see FisheyeProgram::isLocal()).
+	 * Whether this season belongs to a show from a local library (Local Videos or Local Tutorials) - see FisheyeProgram::isLocal().
 	 */
 	public function isLocal(): bool {
-		return FisheyeProgram::locateShowFolder( $this->showTitleFromParents() )['base'] === FisheyeProgram::LOCAL_FOLDER;
+		return FisheyeProgram::isLocalBase( FisheyeProgram::locateShowFolder( $this->showTitleFromParents() )['base'] );
 	}
 
-	private function showTitleFromParents(): string {
+	protected function showTitleFromParents(): string {
 		$parents = $this->getParentGalleries();
 		return $parents ? ( current( $parents )['title'] ?? '' ) : '';
 	}
@@ -627,7 +633,7 @@ class FisheyeSeason extends FisheyeMediaImage {
 	 *                                                   null if the show/root/folder can't be
 	 *                                                   resolved at all by either method.
 	 */
-	private function resolveSeasonDirectoryFromDisk(): ?array {
+	protected function resolveSeasonDirectoryFromDisk(): ?array {
 		$parents = $this->getParentGalleries();
 		$showTitle = empty( $parents ) ? '' : ( current( $parents )['title'] ?? '' );
 		if( empty( $showTitle ) ) {

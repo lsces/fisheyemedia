@@ -97,6 +97,22 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 		'handler_file'      => 'FisheyeProgram.php',
 	] );
 
+	// A video course in the Local Tutorials library and a section of one: a program and a season with their own xref scheme (FisheyeCourse, FisheyeSection).
+	$gLibertySystem->registerContentType( 'fisheyecourse', [
+		'content_type_guid' => 'fisheyecourse',
+		'content_name'      => 'Tutorial Course',
+		'handler_class'     => 'FisheyeCourse',
+		'handler_package'   => 'fisheyemedia',
+		'handler_file'      => 'FisheyeCourse.php',
+	] );
+	$gLibertySystem->registerContentType( 'fisheyesection', [
+		'content_type_guid' => 'fisheyesection',
+		'content_name'      => 'Tutorial Section',
+		'handler_class'     => 'FisheyeSection',
+		'handler_package'   => 'fisheyemedia',
+		'handler_file'      => 'FisheyeSection.php',
+	] );
+
 	// Contributes the three grid layouts above into FisheyeGallery via the generic
 	// registerService()/getServiceValues() extension point - any package could do the same for
 	// its own layout, this isn't special-cased to fisheyemedia in the base package. 'layouts'
