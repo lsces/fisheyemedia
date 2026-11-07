@@ -15,7 +15,6 @@ use Bitweaver\Fisheye\FisheyeGallery;
 class FisheyeTutorialWorkbench {
 	/** Seasons loaded, or seasons whose files are loaded, per press. */
 	public const BATCH = 10;
-	private const VIDEO = [ 'mkv', 'mp4', 'm4v', 'avi' ];
 
 	/** The Local Tutorials folder with its closing slash, or '' when there is no root set up or no such folder. */
 	public static function root(): string {
@@ -55,16 +54,6 @@ class FisheyeTutorialWorkbench {
 		return $names;
 	}
 
-	/** Whether a folder holds at least one lesson video, at any depth. */
-	private static function hasVideo( string $pDir ): bool {
-		foreach( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $pDir, \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
-			if( $file->isFile() && in_array( strtolower( $file->getExtension() ), self::VIDEO, true ) ) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	/**
 	 * Where a course stands: whether it is registered, its season folders (only those with a lesson video are seasons) with the season each
 	 * became and how many files are on disk against registered, and what each step has left.
@@ -73,7 +62,7 @@ class FisheyeTutorialWorkbench {
 	 */
 	public static function status( string $pCourse ): array {
 		global $gBitDb;
-		$st = [ 'name' => $pCourse, 'error' => null, 'contentId' => 0, 'galleryId' => 0, 'url' => null, 'legacy' => false, 'seasons' => [], 'seasonsLoaded' => 0, 'seasonsTodo' => 0, 'filesTodo' => 0, 'done' => false ];
+		$st = [ 'name' => $pCourse, 'error' => null, 'contentId' => 0, 'galleryId' => 0, 'url' => null, 'legacy' => false, 'courseFiles' => [ 'disk' => 0, 'have' => 0, 'todo' => false ], 'seasons' => [], 'seasonsLoaded' => 0, 'seasonsTodo' => 0, 'filesTodo' => 0, 'done' => false ];
 		$dir = self::root().$pCourse.'/';
 		if( $pCourse === '' || str_contains( $pCourse, '/' ) || !is_dir( $dir ) ) {
 			$st['error'] = 'That course folder is not in the Local Tutorials folder.';
@@ -105,7 +94,7 @@ class FisheyeTutorialWorkbench {
 		$folders = array_filter( scandir( $dir ) ?: [], fn( $d ) => $d[0] !== '.' && is_dir( $dir.$d ) );
 		natcasesort( $folders );
 		foreach( $folders as $folder ) {
-			if( !self::hasVideo( $dir.$folder ) ) {
+			if( !FisheyeSection::folderHasLessons( $dir.$folder ) ) {
 				continue;
 			}
 			$cid = $have[$pCourse.' - '.$folder] ?? 0;
@@ -117,7 +106,13 @@ class FisheyeTutorialWorkbench {
 			$st['filesTodo'] += $row['filesTodo'] ? 1 : 0;
 			$st['seasons'][] = $row;
 		}
-		$st['done'] = $st['contentId'] && !$st['seasonsTodo'] && !$st['filesTodo'];
+		if( $st['contentId'] ) {
+			// the files that belong to the whole course (see FisheyeCourse::scanFilesIn()): on disk against registered
+			$st['courseFiles']['disk'] = count( FisheyeCourse::scanFilesIn( $dir ) );
+			$st['courseFiles']['have'] = (int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'extra' AND `end_date` IS NULL", [ $st['contentId'] ] );
+			$st['courseFiles']['todo'] = $st['courseFiles']['disk'] !== $st['courseFiles']['have'];
+		}
+		$st['done'] = $st['contentId'] && !$st['seasonsTodo'] && !$st['filesTodo'] && !$st['courseFiles']['todo'];
 		return $st;
 	}
 
@@ -208,6 +203,20 @@ class FisheyeTutorialWorkbench {
 	public static function loadFiles( string $pCourse ): array {
 		$st = self::status( $pCourse );
 		$ret = [ 'seasons' => 0, 'files' => 0, 'errors' => [] ];
+		// the files of the whole course first (one registration, however many there are)
+		if( $st['contentId'] && $st['courseFiles']['todo'] ) {
+			$course = FisheyeGallery::lookup( [ 'content_id' => $st['contentId'] ] );
+			if( $course instanceof FisheyeCourse ) {
+				$done = $course->registerFilesFromDisk();
+				$ret['files'] += $done['files'];
+				foreach( $done['errors'] as $error ) {
+					$ret['errors'][] = $error;
+				}
+				if( $done['errors'] ) {
+					return $ret;
+				}
+			}
+		}
 		if( !FisheyeSection::extraItemDefined() ) {
 			$ret['errors'][] = 'The media scheme has no "extra" item for seasons yet, so no file can be registered: apply the scheme from the Local Scheme page (admin menu), then press Load files again.';
 			return $ret;

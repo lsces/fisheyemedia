@@ -32,7 +32,7 @@
 									{if $row.error}{$row.error|escape}
 									{elseif !$row.contentId}{tr}not registered{/tr}
 									{else}
-										{if $row.seasonsTodo}{$row.seasonsTodo} {tr}seasons to load{/tr}{/if}{if $row.seasonsTodo && $row.filesTodo}; {/if}{if $row.filesTodo}{$row.filesTodo} {tr}seasons with files to load{/tr}{/if}{if $row.done}<span class="text-muted">{tr}nothing{/tr}</span>{/if}
+										{if $row.seasonsTodo}{$row.seasonsTodo} {tr}seasons to load{/tr}{/if}{if $row.seasonsTodo && $row.filesTodo}; {/if}{if $row.filesTodo}{$row.filesTodo} {tr}seasons with files to load{/tr}{/if}{if $row.courseFiles.todo}{if $row.seasonsTodo || $row.filesTodo}; {/if}{tr}course files to load{/tr}{/if}{if $row.done}<span class="text-muted">{tr}nothing{/tr}</span>{/if}
 									{/if}
 								</td>
 							</tr>

@@ -51,16 +51,17 @@
 
 				{* ---- 3. Files ---- *}
 				<h3>3. {tr}Files{/tr}</h3>
-				{if $st.filesTodo}
-					<p class="help-block">{tr}Exercise archives, notes and handouts in a season's folder become Extras on that season, opened (downloaded) from there. At most{/tr} {$batch} {tr}seasons are done per press.{/tr}</p>
+				{if $st.filesTodo || $st.courseFiles.todo}
+					<p class="help-block">{tr}Exercise archives, notes and handouts in a season's folder become Extras on that season, and the files that belong to the whole course (loose in its folder, or in a folder with no lessons) become Extras on the course; each is opened (downloaded) from there. At most{/tr} {$batch} {tr}seasons are done per press.{/tr}</p>
 					{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`tutorial_workbench.php"}
 						<input type="hidden" name="course" value="{$st.name|escape}" />
-						<input type="submit" class="btn btn-primary" name="load_files" value="{tr}Load files{/tr} ({$st.filesTodo} {tr}seasons{/tr})" />
+						<input type="submit" class="btn btn-primary" name="load_files" value="{tr}Load files{/tr} ({$st.filesTodo} {tr}seasons{/tr}{if $st.courseFiles.todo}, {tr}and the course's own{/tr}{/if})" />
 					{/form}
 				{else}
-					<p>{tr}The files of every loaded season are up to date.{/tr}</p>
+					<p>{tr}The files of every loaded season, and of the course, are up to date.{/tr}</p>
 				{/if}
 
+				<p class="help-block">{tr}Course files{/tr}: {$st.courseFiles.disk} {tr}on disk{/tr}, {$st.courseFiles.have} {tr}loaded{/tr}{if $st.courseFiles.todo} - <strong>{tr}differs{/tr}</strong>{/if}</p>
 				<table class="table table-condensed">
 					<thead><tr><th>{tr}Season folder{/tr}</th><th>{tr}Loaded{/tr}</th><th>{tr}Files on disk{/tr}</th><th>{tr}Files loaded{/tr}</th></tr></thead>
 					<tbody>

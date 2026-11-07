@@ -13,6 +13,7 @@ namespace Bitweaver\Fisheyemedia;
 define( 'FISHEYESECTION_CONTENT_TYPE_GUID', 'fisheyesection' );
 
 class FisheyeSection extends FisheyeSeason {
+	use FisheyeTutorialFilesTrait;
 
 	public function __construct( $pImageId = null, $pContentId = null ) {
 		parent::__construct( $pImageId, $pContentId );
@@ -37,45 +38,6 @@ class FisheyeSection extends FisheyeSeason {
 			}
 		}
 		return $ret;
-	}
-
-	/** The Extras button counts the section's files along with its pictures. */
-	public function getExtrasCounts(): array {
-		$counts = parent::getExtrasCounts();
-		$vis = $this->getVisibleXrefSql( 'x' );
-		$counts['extras'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'extra' AND x.`end_date` IS NULL".$vis['where_sql'], [ $this->mContentId, ...$vis['bind_vars'] ] );
-		return $counts;
-	}
-
-	/** The section's files lead the plain Extras strip, ahead of its pictures. */
-	public function getExtrasGroups(): array {
-		$extras = parent::getExtrasGroups();
-		if( $files = $this->getExtraFileItems() ) {
-			foreach( $extras['groups'] as &$group ) {
-				if( $group['id'] === 'pictures' ) {
-					$group['items'] = array_merge( $files, $group['items'] );
-					unset( $group );
-					return $extras;
-				}
-			}
-			unset( $group );
-			$extras['groups'][] = [ 'id' => 'pictures', 'kind' => 'Extras', 'items' => $files, 'links' => [] ];
-		}
-		return $extras;
-	}
-
-	/** The season's files (exercise archives, notes) as Extras items: the file type's own icon, the file name, and the download link. */
-	private function getExtraFileItems(): array {
-		$vis = $this->getVisibleXrefSql( 'x' );
-		$rows = $this->mDb->getAll( "SELECT x.`xref_id`, x.`xkey_ext`, x.`data` FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = ? AND x.`item` = 'extra' AND x.`end_date` IS NULL".$vis['where_sql']." ORDER BY x.`xorder`", [ $this->mContentId, ...$vis['bind_vars'] ] ) ?: [];
-		$items = [];
-		foreach( $rows as $row ) {
-			$data = json_decode( (string)$row['data'], true ) ?: [];
-			$name = basename( (string)$row['xkey_ext'] );
-			$items[] = [ 'thumb' => $this->getFileThumbUrl( (int)$row['xref_id'], $name ), 'url' => FISHEYEMEDIA_PKG_URL.'view_season_file.php?xref_id='.(int)$row['xref_id'], 'title' => $name, 'showTitle' => true,
-				'label' => strtoupper( (string)( $data['format'] ?? '' ) ).( !empty( $data['size'] ) ? ' '.$data['size'] : '' ) ];
-		}
-		return $items;
 	}
 
 	/** Extensions that are the course's lessons or their subtitles, not files that go with it. */
@@ -125,34 +87,38 @@ class FisheyeSection extends FisheyeSeason {
 	 * @return array{files:int,errors:list<string>}
 	 */
 	public function registerFilesFromDisk(): array {
-		$summary = [ 'files' => 0, 'errors' => [] ];
 		$dirInfo = $this->resolveSeasonDirectoryFromDisk();
 		if( !$dirInfo ) {
-			return $summary;
+			return [ 'files' => 0, 'errors' => [] ];
 		}
-		if( !self::extraItemDefined() ) {
-			$summary['errors'][] = 'The media scheme has no "extra" item for tutorial sections yet: apply it from the Local Scheme page.';
-			return $summary;
+		if( !self::extraItemDefinedFor( FISHEYESECTION_CONTENT_TYPE_GUID ) ) {
+			return [ 'files' => 0, 'errors' => [ 'The media scheme has no "extra" item for tutorial sections yet: apply it from the Local Scheme page.' ] ];
 		}
-		$files = $this->scanExtraFiles();
-		\Bitweaver\Liberty\LibertyContent::deleteXrefByItem( (int)$this->mContentId, [ 'extra' ] );
-		foreach( $files as $order => $file ) {
-			$size = $file['bytes'] >= 1048576 ? round( $file['bytes'] / 1048576, 1 ).' MB' : max( 1, (int)round( $file['bytes'] / 1024 ) ).' KB';
-			$hash = [ 'content_id' => $this->mContentId, 'item' => 'extra', 'xkey_ext' => $dirInfo['relative'].'/'.$file['rel'],
-				'edit' => json_encode( [ 'format' => $file['ext'], 'size' => $size, 'note' => '' ] ), 'xorder' => $order + 1 ];
-			if( $this->storeXref( $hash ) ) {
-				$summary['files']++;
-			} else {
-				$summary['errors'][] = $file['rel'].': '.implode( '; ', array_map( 'strval', array_values( $this->mErrors ) ) );
-			}
-		}
-		return $summary;
+		return $this->storeExtraFileRows( $dirInfo['relative'], $this->scanExtraFiles() );
 	}
 
-	/** Whether the site's media scheme has the tutorial section's 'extra' item - without it strict xref refuses every file row (apply the scheme from the Local Scheme page). */
+	/** Whether the site's media scheme has the tutorial section's 'extra' item (see extraItemDefinedFor()). */
 	public static function extraItemDefined(): bool {
-		global $gBitDb;
-		return (bool)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref_item` WHERE `content_type_guid` = 'fisheyesection' AND `item` = 'extra'" );
+		return self::extraItemDefinedFor( FISHEYESECTION_CONTENT_TYPE_GUID );
+	}
+
+	/** Whether a file name is one that goes with the lessons (not a video or subtitle, not hidden or a system file). */
+	public static function isExtraFileName( string $pName ): bool {
+		return $pName !== '' && $pName[0] !== '.' && strtolower( $pName ) !== 'thumbs.db'
+			&& !in_array( strtolower( pathinfo( $pName, PATHINFO_EXTENSION ) ), self::NOT_EXTRA_FILES, true );
+	}
+
+	/** The lesson video extensions. */
+	private const LESSON_VIDEO = [ 'mkv', 'mp4', 'm4v', 'avi' ];
+
+	/** Whether a folder holds at least one lesson video, at any depth: a folder that does is a section, one that does not holds files that go with the course. */
+	public static function folderHasLessons( string $pDir ): bool {
+		foreach( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $pDir, \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+			if( $file->isFile() && in_array( strtolower( $file->getExtension() ), self::LESSON_VIDEO, true ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** The real path of a file registered under xkey_ext, only when it lies under the tutorials root; null otherwise. */

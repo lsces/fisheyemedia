@@ -57,8 +57,8 @@ if( !empty( $_REQUEST['register_course'] ) ) {
 	$errors = array_merge( $errors, $done['errors'] );
 } elseif( !empty( $_REQUEST['load_files'] ) ) {
 	$done = FisheyeTutorialWorkbench::loadFiles( $course );
-	if( $done['seasons'] ) {
-		$messages[] = $done['seasons'].' '.KernelTools::tra( 'seasons scanned,' ).' '.$done['files'].' '.KernelTools::tra( 'files registered.' );
+	if( $done['seasons'] || $done['files'] ) {
+		$messages[] = $done['seasons'].' '.KernelTools::tra( 'seasons scanned,' ).' '.$done['files'].' '.KernelTools::tra( 'files registered (the course\'s own included).' );
 	}
 	$errors = array_merge( $errors, $done['errors'] );
 }
