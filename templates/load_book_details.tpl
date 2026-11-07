@@ -137,8 +137,9 @@
 
 		{if $noCoverCount}
 			{if $showNoCover}
-			<h3>{tr}Books without a cover{/tr} ({$noCoverCount})</h3>
-			<p class="help-block">{tr}No image at all - add your own photograph or scan from the book's edit page; the first image added becomes its tile.{/tr}{if $noCoverCount > $noCoverShown} {tr}Showing the first{/tr} {$noCoverShown}.{/if}</p>
+			<h3>{tr}Books without a cover{/tr} ({$noCoverCount}{if $onlyIsbn}, {tr}with an ISBN{/tr}{/if})</h3>
+			<p class="help-block">{tr}No image at all, or an image whose tile files are missing (marked) - find a cover or add your own photograph or scan; the first image added becomes its tile.{/tr}{if $noCoverCount > $noCoverShown} {tr}Showing the first{/tr} {$noCoverShown}.{/if}
+				{if $onlyIsbn}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php?nocover=1">{tr}Show the ones with no ISBN too{/tr}</a>{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php?nocover=1&amp;isbn=1">{tr}Only the books with an ISBN{/tr}</a>{/if}</p>
 			<table class="table table-condensed">
 				<thead><tr><th>{tr}Title{/tr}</th><th>{tr}Author{/tr}</th><th>{tr}Year{/tr}</th><th>{tr}ISBN{/tr}</th><th></th></tr></thead>
 				<tbody>
@@ -148,7 +149,7 @@
 							<td>{foreach from=$book.authors item=author name=au}{$author|escape}{if !$smarty.foreach.au.last}, {/if}{/foreach}</td>
 							<td>{$book.year|escape}</td>
 							<td>{$book.isbn|escape}</td>
-							<td><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_book.php?content_id={$book.content_id}">{tr}Edit{/tr}</a></td>
+							<td>{if $book.tiles}<span class="text-muted">{tr}tile files missing{/tr}</span> {/if}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}pick_cover.php?content_id={$book.content_id}">{tr}Find a Cover{/tr}</a>&nbsp;<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_book.php?content_id={$book.content_id}">{tr}Edit{/tr}</a></td>
 						</tr>
 					{/foreach}
 				</tbody>

@@ -222,16 +222,25 @@ if( !empty( $_REQUEST['replace_blank'] ) ) {
 	$pending = load_book_details_pending( $after, $job, $again );
 }
 
-// Books with no image at all (no thumbnail attachment): the ones that need a cover of your own - a photograph or a scan. Title
-// order, with the author, year and ISBN so the right copy is picked up. The first image added to a book becomes its tile.
+// Books with no cover: no image at all (no thumbnail attachment), or an attachment whose tile files are missing (a tile that failed or was never made -
+// the grid shows a name tile for it, so it is no cover as far as a reader can tell). These need a cover of your own - a photograph or a scan. Title
+// order, with the author, year and ISBN so the right copy is picked up; 'isbn=1' leaves out the books with no ISBN. The first image added to a book
+// becomes its tile.
+$onlyIsbn = !empty( $_REQUEST['isbn'] );
 $noCover = [];
 foreach( $gBitDb->getAll(
-	"SELECT lc.`content_id`, lc.`title`, lc.`event_time` FROM `".BIT_DB_PREFIX."liberty_content` lc
+	"SELECT lc.`content_id`, lc.`title`, lc.`event_time`,
+		( SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) AS attachments
+	 FROM `".BIT_DB_PREFIX."liberty_content` lc
 	 WHERE lc.`content_type_guid` = 'fisheyebook'
-	 AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` )
 	 ORDER BY lc.`title`"
 ) ?: [] as $row ) {
-	$noCover[(int)$row['content_id']] = [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'], 'year' => $row['event_time'] ? gmdate( 'Y', (int)$row['event_time'] ) : '', 'authors' => [], 'isbn' => '' ];
+	$id = (int)$row['content_id'];
+	$tilesMissing = (int)$row['attachments'] > 0;
+	if( $tilesMissing && !empty( glob( FisheyeBookCovers::thumbsDir( $id ).'*' ) ) ) {
+		continue;   // has a picture and its tile files
+	}
+	$noCover[$id] = [ 'content_id' => $id, 'title' => $row['title'], 'year' => $row['event_time'] ? gmdate( 'Y', (int)$row['event_time'] ) : '', 'authors' => [], 'isbn' => '', 'tiles' => $tilesMissing ];
 }
 if( $noCover ) {
 	$ids = implode( ',', array_keys( $noCover ) );
@@ -241,6 +250,9 @@ if( $noCover ) {
 		} elseif( $x['item'] === 'isbn' ) {
 			$noCover[(int)$x['content_id']]['isbn'] = (string)$x['xkey'];
 		}
+	}
+	if( $onlyIsbn ) {
+		$noCover = array_filter( $noCover, fn( $b ) => $b['isbn'] !== '' );
 	}
 }
 
@@ -268,6 +280,7 @@ $gBitSmarty->assign( 'pressSeconds', round( $pressSeconds, 1 ) );
 $gBitSmarty->assign( 'totalSeconds', round( $secondsBefore + $pressSeconds, 1 ) );
 $gBitSmarty->assign( 'pressBooks', is_array( $results ) ? count( $results ) : 0 );
 $gBitSmarty->assign( 'showNoCover', !empty( $_REQUEST['nocover'] ) );
+$gBitSmarty->assign( 'onlyIsbn', $onlyIsbn );
 $gBitSmarty->assign( 'batchSize', LOAD_BOOK_DETAILS_BATCH );
 $gBitSmarty->assign( 'results', $results );
 

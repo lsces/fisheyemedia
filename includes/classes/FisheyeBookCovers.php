@@ -236,6 +236,11 @@ class FisheyeBookCovers {
 		return $out;
 	}
 
+	/** The folder holding a book's tile files (thumbs/), by content_id alone: storage/attachments/<id mod 1000>/<id>/thumbs/ - no object to load. */
+	public static function thumbsDir( int $pContentId ): string {
+		return STORAGE_PKG_PATH.'attachments/'.( $pContentId % 1000 ).'/'.$pContentId.'/thumbs/';
+	}
+
 	/**
 	 * A front board for a book that has no cover: a scanned cloth, cut to the shape of a book, with a ruled border and the title and
 	 * author lettered on it in a serif face, set a little proud of a darker copy so it reads as stamped.
