@@ -4,6 +4,8 @@
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}admin/admin_fisheyemedia_settings.php">{tr}Media Library Settings{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}admin/admin_import_film.php">{tr}Import Film{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_local.php">{tr}Load Local Videos{/tr}</a></li>
+	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?local=tutorials">{tr}Load Local Tutorials{/tr}</a></li>
+	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}tutorial_workbench.php">{tr}Tutorial workbench{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_authors.php">{tr}Book Authors from OL{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_books.php">{tr}Add books from a sheet{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php">{tr}Book Details from OL{/tr}</a></li>
