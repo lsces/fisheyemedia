@@ -183,7 +183,10 @@ Library folder (the **Book Library Storage Path** in Media Library Settings; oth
 an `Audio` folder for a recording in many files (a second recording is `Audio2`) and anything else beside them. A book with no series is `Library/<author>/<book>/`. Folder names are
 the gallery and book titles exactly.
 
-**Book Files from the Library** (the folder icon on an author's gallery, or the Media menu) finds each book's folder from the
+The **Author workbench** and **Series workbench** load these files by themselves when an author or series is opened, so the page below is no longer
+on the Media menu; it stays in the package, at `load_book_files.php`, for a bulk run over any set of books (see *Pages that are not on the menu*).
+
+**Book Files from the Library** (`load_book_files.php`) finds each book's folder from the
 galleries the book is filed in, shows what is in it, and ticks the books whose folder holds files. **Scan** writes the ticked books'
 ebook, audio book and other-file rows (twenty books a press). A scan rebuilds only those three kinds; a book whose folder is not found
 keeps what it has. Pictures and cover files are left to the pictures folder. With a search, the folders under the matching authors that no
@@ -201,7 +204,8 @@ A series written by more than one author (a shared world, a ship series) is kept
 `Library/Various Authors/<series>/<book>/` with a `SeriesCatalogue.csv` in the series folder listing every book of the series, whoever wrote it.
 Its files live there once; an author's own folder does not hold a copy.
 
-**Various Authors series** (Media menu) reads each series catalogue and shows what filing it would do. Tick the series and it:
+The **Series workbench** does this one series at a time. The all-at-once page, **Various Authors series** (`load_various_authors.php`, not on the
+Media menu), reads each series catalogue and shows what filing it would do. Tick the series and it:
 
 - creates the **Various Authors** gallery under Library, and the series gallery under that, when they are missing;
 - finds each catalogue book already in the database (by ISBN, else title and author) and adds it to the series in catalogue order - added,
@@ -309,6 +313,20 @@ plain text, **Link Book Credits** (dry run first, then `?apply=1`) links every c
 contact. **Merge Contact Credits** moves one contact's book credits and other names to another when a person
 was entered twice. A book's credited people appear on its page; a contact's page lists the books that credit
 them.
+
+### Pages that are not on the menu
+
+The Media menu lists what is used day to day. These pages are kept, reached by their address under the package folder, because each is the
+simplest way to do a job in bulk, or once, when a library is being set up on a new installation:
+
+| Page | What it is for |
+|---|---|
+| `load_book_files.php` | Book Files from the Library: scan any set of books (a search, twenty a press) and write their ebook, audio book and other-file rows, and list the folders that hold no catalogued book. The workbenches do this per author or series as they open. |
+| `load_various_authors.php` | Various Authors series: file every `SeriesCatalogue.csv` series in one pass (a dry run first). The Series workbench does one series at a time. |
+| `link_book_credits.php` | Link Books: link book credits that name a person who has an author contact. For books loaded before their author's contact existed; a dry run unless `apply=1`. |
+| `load_book_covers.php` | Book Covers from a Gallery: bring covers in from another site's gallery whose images are titled with the book's ISBN-13. A one-off import when moving a library between sites. |
+| `retag_book_authors.php` | Tag every contact credited as an author on a book or series with the Book Author type. A dry run unless `apply=1`. |
+| `load_program.php?local=tutorials` | Load the courses of the Local Tutorials folder (and `?local=1` the Local Videos series). The Tutorial workbench does the same course by course. |
 
 ## Playing
 
