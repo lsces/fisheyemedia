@@ -83,6 +83,9 @@ if( $gGallery && str_starts_with( $gContent->getTitle(), $gGallery->getTitle() )
 	$seasonTitleSuffix = substr( $gContent->getTitle(), strlen( $gGallery->getTitle() ) );
 }
 $gBitSmarty->assign( 'seasonTitleSuffix', $seasonTitleSuffix );
+// The galleries above the show ("TV Shows", "Local Tutorials"), for the heading's own breadcrumb: the trail without its last link, which is the show itself
+// and is already the link the title carries.
+$gBitSmarty->assign( 'seasonCrumbs', array_slice( $gContent->getBreadcrumbTrail(), 0, -1 ) );
 $gBitSmarty->assign( 'gContent', $gContent );
 
 $gBitSystem->setCanonicalLink( $gContent->getDisplayUrl() );

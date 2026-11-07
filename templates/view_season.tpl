@@ -15,9 +15,9 @@
 		   breadcrumb line, and rather than trying to make the shared, type-agnostic breadcrumb
 		   component type-aware. *}
 		{if $gGallery && $seasonTitleSuffix}
-			<h1><a href="{$gGallery->getDisplayUrl()|escape}">{$gGallery->getTitle()|escape}</a>{$seasonTitleSuffix|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
+			<h1>{foreach from=$seasonCrumbs item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}<a href="{$gGallery->getDisplayUrl()|escape}">{$gGallery->getTitle()|escape}</a>{$seasonTitleSuffix|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 		{elseif $gGallery}
-			<h1><a href="{$gGallery->getDisplayUrl()|escape}">{$gContent->getTitle()|escape}</a>{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
+			<h1>{foreach from=$seasonCrumbs item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}<a href="{$gGallery->getDisplayUrl()|escape}">{$gContent->getTitle()|escape}</a>{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 		{else}
 			<h1>{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>
 		{/if}
@@ -71,7 +71,7 @@
 	{if $episodes|@count}
 		<div class="fisheye-tab-panel" id="fisheye-tab-episodes">
 			{if $gContent->hasUpdatePermission()}
-				<div class="fisheye-tab-header"><a title="{tr}Reload Episodes{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_season.php?content_id={$gContent->mContentId}&amp;fReloadEpisodes=1">{biticon ipackage="icons" iname="view-refresh" iexplain="Reload Episodes"}</a></div>
+				<div class="fisheye-tab-header"><a title="{tr}Reload Episodes{/tr}" href="{$gContent->getEditUrl()|escape}&amp;fReloadEpisodes=1">{biticon ipackage="icons" iname="view-refresh" iexplain="Reload Episodes"}</a></div>
 			{/if}
 			{include file="bitpackage:fisheyemedia/episode_grid_inc.tpl"}
 		</div>

@@ -38,8 +38,9 @@
 					<a href="{$galItem->getDisplayUrl()|escape}">
 						<img class="thumb img-responsive center-block" src="{$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}" alt="{$galItem->mInfo.title|escape|default:'image'}" />
 					</a>
-					{if $gBitSystem->isFeatureActive('fisheye_gallery_list_image_titles')}
-						<h4>{$galItem->mInfo.title|escape}</h4>
+					{* A course's thumbnail is a frame from a video, with no text on it, so its title always shows; a TV show shows it when the site setting is on. The title links as the image does. *}
+					{if $gBitSystem->isFeatureActive('fisheye_gallery_list_image_titles') || $galItem->mInfo.content_type_guid eq 'fisheyecourse'}
+						<h4><a href="{$galItem->getDisplayUrl()|escape}">{$galItem->mInfo.title|escape}</a></h4>
 					{/if}
 					{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='body' serviceHash=$galItem->mInfo type=mini}
 					{if $gBitSystem->isFeatureActive('fisheye_gallery_list_image_descriptions')}
