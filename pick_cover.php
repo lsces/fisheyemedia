@@ -182,6 +182,8 @@ $gBitSmarty->assign( 'madePreview', $madePreview );
 $gBitSmarty->assign( 'hasIsbn', $isbn13 !== '' || $isbn10 !== '' );
 $gBitSmarty->assign( 'searchTerm', rawurlencode( $isbn13 ?: $isbn10 ?: $gContent->getTitle() ) );
 $gBitSmarty->assign( 'titleTerm', rawurlencode( $gContent->getTitle() ) );
+// The first author, for a bookseller search by title and author: it lists every edition, where an ISBN search shows only the one the book has.
+$gBitSmarty->assign( 'authorTerm', rawurlencode( (string)$gContent->mDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'author' AND `end_date` IS NULL AND `xkey_ext` IS NOT NULL ORDER BY `xorder`", [ $gContent->mContentId ] ) ) );
 $gBitSmarty->assign( 'isbn13', $isbn13 );
 $gBitSmarty->assign( 'isbn10', $isbn10 );
 $gBitSystem->display( 'bitpackage:fisheyemedia/pick_cover.tpl', KernelTools::tra( 'Find a Cover: ' ).$gContent->getTitle(), [ 'display_mode' => 'edit' ] );

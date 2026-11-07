@@ -54,7 +54,7 @@
 		{legend legend="A picture from a web address"}
 			<p>{tr}Paste the address of a bookseller's page (or of the picture itself) and the pictures on it are listed.{/tr}
 				<a href="https://www.amazon.co.uk/s?k={$searchTerm}" target="_blank" rel="noopener">Amazon</a> |
-				<a href="https://www.abebooks.co.uk/servlet/SearchResults?{if $isbn13}isbn={$isbn13|escape:'url'}{else}tn={$titleTerm}{/if}" target="_blank" rel="noopener">AbeBooks</a> |
+				<a href="https://www.abebooks.co.uk/servlet/SearchResults?tn={$titleTerm}{if $authorTerm}&amp;an={$authorTerm}{/if}" title="{tr}Searches by title and author, so the other editions (another language, another cover) come up too{/tr}" target="_blank" rel="noopener">AbeBooks</a> |
 				<a href="https://www.google.com/search?tbm=isch&amp;q={$searchTerm}+book+cover" target="_blank" rel="noopener">Google Images</a> |
 				<a href="https://openlibrary.org/search?q={$searchTerm}" target="_blank" rel="noopener">Open Library</a>
 			</p>
