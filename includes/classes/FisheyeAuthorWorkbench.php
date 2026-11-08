@@ -239,7 +239,7 @@ class FisheyeAuthorWorkbench {
 		$st = [ 'contentId' => $pContentId, 'name' => $name, 'folder' => $folder, 'abs' => $abs, 'error' => null, 'hasCatalogue' => $csv !== '' && is_file( $csv ),
 			'parsed' => [], 'rows' => [], 'total' => 0, 'loaded' => 0, 'missing' => [], 'noIsbn' => 0, 'noWikidata' => 0, 'aliases' => [], 'galleryId' => 0, 'galleryUrl' => '', 'qid' => '', 'hasContact' => false,
 			'catalogue' => [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'changes' => 0, 'error' => null ], 'direct' => [], 'children' => [], 'proposal' => [ 'series' => [], 'unmatched' => [], 'empty' => [] ], 'singleFolders' => 0, 'moves' => [], 'seriesPending' => false,
-			'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'albumFolders' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'done' => false, 'next' => 'books' ];
+			'files' => [ 'blocked' => true, 'todo' => 0, 'albumTodo' => 0, 'albumFolders' => 0, 'books' => [], 'noFolder' => [], 'unmatched' => [] ], 'extras' => [ 'files' => 0, 'galleryId' => 0, 'loaded' => 0 ], 'done' => false, 'next' => 'books' ];
 		if( $name === '' ) {
 			$st['error'] = 'That is not an author gallery.';
 			return $st;
@@ -322,6 +322,14 @@ class FisheyeAuthorWorkbench {
 		if( !$st['missing'] && !$st['seriesPending'] && $folder !== null ) {
 			$st['files'] = FisheyeSeriesWorkbench::filesStatus( self::allBooks( $pContentId ), $folder.'/' );
 			$st['moves'] = self::folderMoves( $st );
+		}
+
+		// The author's Extras folder (loose files that are not books) is its own gallery, not a folder with no book.
+		$st['files']['unmatched'] = array_values( array_diff( $st['files']['unmatched'], [ FisheyeExtrasGallery::FOLDER ] ) );
+		if( $extras = FisheyeExtrasGallery::folderFor( $folder ) ) {
+			$st['extras']['files'] = count( FisheyeExtrasGallery::scanFiles( $extras['dir'] ) );
+			$st['extras']['galleryId'] = FisheyeExtrasGallery::findFor( $pContentId );
+			$st['extras']['loaded'] = FisheyeExtrasGallery::rowCount( $st['extras']['galleryId'] );
 		}
 
 		if( $st['missing'] ) {

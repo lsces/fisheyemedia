@@ -278,6 +278,17 @@
 					<p class="text-muted">{tr}No book of this author has a folder yet.{/tr}</p>
 				{/if}
 			{/if}
+			{if $st.extras.files}
+				<h3>4. {tr}Extras{/tr}</h3>
+				{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`author_workbench.php"}
+					<input type="hidden" name="gallery_id" value="{$st.galleryId}" />
+					<p>{tr}Extras folder{/tr}: {$st.extras.files} {tr}files that are not books (papers, adaptations, compilations).{/tr}
+					{if $st.extras.galleryId}{tr}They are in the{/tr} <a href="{$smarty.const.BIT_ROOT_URL}index.php?content_id={$st.extras.galleryId}">{tr}Extras gallery{/tr}</a>: {$st.extras.loaded} {tr}loaded.{/tr}{else}{tr}No Extras gallery yet.{/tr}{/if}</p>
+					<div class="form-group submit">
+						<input type="submit" class="btn btn-default" name="load_extras" value="{if $st.extras.galleryId}{tr}Reload the Extras files{/tr}{else}{tr}Make the Extras gallery and load the files{/tr}{/if}" />
+					</div>
+				{/form}
+			{/if}
 		{/if}
 	</div>
 </div>

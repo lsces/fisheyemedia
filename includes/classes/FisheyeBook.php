@@ -1664,7 +1664,7 @@ class FisheyeBook extends FisheyeMediaImage {
 			if( !empty( $data['edition'] ) ) {
 				$label .= ' - '.$data['edition'];
 			}
-			$files[] = [ 'thumb' => $cover, 'url' => FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'], 'title' => basename( rtrim( (string)$row['xkey_ext'], '/' ) ), 'label' => $label ];
+			$files[] = [ 'thumb' => $cover, 'url' => $row['item'] === 'audiobook' ? FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] : FisheyeBookFiles::openUrl( (int)$row['xref_id'], basename( rtrim( (string)$row['xkey_ext'], '/' ) ), FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] ), 'title' => basename( rtrim( (string)$row['xkey_ext'], '/' ) ), 'label' => $label ];
 		}
 		if( $extras['groups'] ) {
 			$extras['groups'][0]['items'] = array_merge( $files, $extras['groups'][0]['items'] );

@@ -1,6 +1,6 @@
 <?php
 /**
- * Serves one of a tutorial section's (or course's) files (an exercise archive, notes, a handout) by xref_id only, never a path - the view_book_file.php shape:
+ * Serves one of a tutorial section's (or course's, or an author's Extras gallery's) files (an exercise archive, notes, a handout) by xref_id only, never a path - the view_book_file.php shape:
  * the row names the season, the season's view permission and the row's own roles decide, and the file must lie under the tutorials root
  * (FisheyeSection::extraFilePath()). Always a download.
  *
@@ -28,7 +28,7 @@ if( !$row ) {
 }
 
 $gContent = FisheyeImage::lookup( [ 'content_id' => $row['content_id'] ] );
-if( !$gContent || !$gContent->isValid() || !( $gContent instanceof FisheyeSection || $gContent instanceof FisheyeCourse ) ) {
+if( !$gContent || !$gContent->isValid() || !( $gContent instanceof FisheyeSection || $gContent instanceof FisheyeCourse || $gContent instanceof FisheyeExtrasGallery ) ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No such file' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
 }
 $gContent->verifyViewPermission();
@@ -36,7 +36,8 @@ if( !$gContent->isXrefRowVisible( $xrefId ) ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'No such file' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
 }
 
-$path = FisheyeSection::extraFilePath( (string)$row['xkey_ext'] );
+// An author's Extras gallery holds paths under the Library root; a course or section's are under the tutorials root.
+$path = $gContent instanceof FisheyeExtrasGallery ? FisheyeBookFiles::pathFor( (string)$row['xkey_ext'] ) : FisheyeSection::extraFilePath( (string)$row['xkey_ext'] );
 if( $path === null ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'The file was not found' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
 }
@@ -55,5 +56,9 @@ if( !empty( $_REQUEST['thumb'] ) ) {
 	KernelTools::bit_redirect( $gContent->getFileIconUrl( basename( $path ) ) );
 }
 
-header( 'Content-Disposition: attachment; filename="'.rawurlencode( basename( $path ) ).'"' );
+// An author's Extras file that a browser can show (a PDF, a picture, plain text) opens in place; &download=1 forces a download. Everything else, and every
+// tutorial archive, is a download.
+$showInline = $gContent instanceof FisheyeExtrasGallery && empty( $_REQUEST['download'] )
+	&& in_array( strtolower( pathinfo( $path, PATHINFO_EXTENSION ) ), [ 'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt' ], true );
+header( 'Content-Disposition: '.( $showInline ? 'inline' : 'attachment' ).'; filename="'.rawurlencode( basename( $path ) ).'"' );
 \Bitweaver\Liberty\liberty_serve_range_file( $path, $gBitSystem->verifyMimeType( $path ) );

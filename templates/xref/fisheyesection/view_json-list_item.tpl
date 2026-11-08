@@ -6,7 +6,7 @@
 {assign var=extraName value=$xrefInfo.xkey_ext|basename}
 <td>{$xrefInfo.xref_title|escape}</td>
 <td>
-	<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_season_file.php?xref_id={$xrefInfo.xref_id}" title="{tr}Download{/tr}">
+	{assign var=extraExt value=$extraName|lower|regex_replace:'/^.*\./':''}{if $extraExt == 'pdf' || $extraExt == 'epub'}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_extra_file.php?xref_id={$xrefInfo.xref_id}" title="{tr}Open{/tr}">{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}view_season_file.php?xref_id={$xrefInfo.xref_id}" title="{tr}Download{/tr}">{/if}
 		<img src="{$gContent->getFileThumbUrl($xrefInfo.xref_id, $extraName)|escape}" alt="{$extraData.format|default:''|escape}" style="height:48px; width:48px; vertical-align:middle;" /> {$extraName|escape}
 	</a>
 	{if $extraData.size|default:''}<span class="text-muted">({$extraData.size|escape})</span>{/if}

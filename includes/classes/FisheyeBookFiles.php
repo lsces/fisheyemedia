@@ -437,6 +437,14 @@ class FisheyeBookFiles {
 		return $real && is_file( $real ) && str_starts_with( $real, $root.'/' ) ? $real : null;
 	}
 
+	/**
+	 * Where a file listed as an Extra opens: a PDF or an epub in the site's own viewer page (view_extra_file.php: pdf.js, or the epub.js reader, each able to take a search term to find), anything else
+	 * where $pPlainUrl says (the plain file page, a download). $pXrefId is the file's own xref row.
+	 */
+	public static function openUrl( int $pXrefId, string $pName, string $pPlainUrl ): string {
+		return in_array( strtolower( pathinfo( $pName, PATHINFO_EXTENSION ) ), [ 'pdf', 'epub' ], true ) ? FISHEYEMEDIA_PKG_URL.'view_extra_file.php?xref_id='.$pXrefId : $pPlainUrl;
+	}
+
 	public static function mimeFor( string $pPath ): ?string {
 		return self::MIME[strtolower( pathinfo( $pPath, PATHINFO_EXTENSION ) )] ?? null;
 	}

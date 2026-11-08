@@ -129,6 +129,12 @@ if( !$st['error'] ) {
 		} else {
 			$messages[] = count( $made['added'] ).' '.KernelTools::tra( 'folders added to the catalogue file as books to load' ).( $made['added'] ? ': '.implode( ', ', $made['added'] ) : '' ).'.';
 		}
+	} elseif( !empty( $_REQUEST['load_extras'] ) && $st['folder'] !== null ) {
+		$made = FisheyeExtrasGallery::makeAndLoad( $contentId, $st['folder'] );
+		if( $made['galleryId'] ) {
+			$messages[] = KernelTools::tra( 'Extras gallery ready' ).': '.$made['files'].' '.KernelTools::tra( 'files loaded (referenced where they are, not copied).' );
+		}
+		$errors = array_merge( $errors, $made['errors'] );
 	} elseif( !empty( $_REQUEST['move_folders'] ) ) {
 		$moved = FisheyeAuthorWorkbench::applyMoves( $st, array_map( 'intval', array_keys( (array)( $_REQUEST['move_book'] ?? [] ) ) ) );
 		$messages[] = $moved['moved'].' '.KernelTools::tra( 'folders moved to match their series.' );

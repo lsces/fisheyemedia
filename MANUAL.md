@@ -218,6 +218,20 @@ Media menu), reads each series catalogue and shows what filing it would do. Tick
 On an author's series page a **Full Series** tile leads to the combined series; inside the combined series each author's gallery is
 labelled "<Author>'s <series>". Running it again changes nothing that is already done.
 
+### An author's Extras, and the file viewers
+
+Material that goes with an author but is not one of the books (papers, adaptations, compilations, maps) lives in `Library/<author>/Extras/`. The
+**Author workbench** shows it as *4. Extras*: **Make the Extras gallery and load the files** makes a gallery called Extras under the author gallery
+(the *Extras List* layout) and registers every file in the folder, sub-folders included, as an `extra` row of it. The files are served from where they
+are and never copied, so a file lives once; the gallery shows each with a thumbnail (the first page of a PDF) and opens it. The media scheme needs the
+`extra` item (and its group) for the `fisheyeextras` content type: apply it from the **Local Scheme** page. Text in a file referenced this way is not
+put into the search index.
+
+A PDF opens in the **pdf.js** viewer already in `themes/js`, an epub in the **epub.js** reader (`themes/js/epubjs-<version>/`): the page
+`view_extra_file.php?xref_id=<n>` shows either inside the site, and both take `&highlight=<term>` to find and mark a word (the epub reader also
+lists every hit). The same page is used for PDFs and epubs on a book's Extras strip and on tutorial courses and sections; any other file type
+downloads. The files are fetched through `view_season_file.php` (or `view_book_file.php` for a book), which checks the permission and the path.
+
 ### Covers and pictures
 
 - **Cover:** the book's front cover is its tile. It is found automatically (Open Library, then Google Books)
