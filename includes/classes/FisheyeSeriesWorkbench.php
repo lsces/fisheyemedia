@@ -182,6 +182,10 @@ class FisheyeSeriesWorkbench {
 			if( $skip( $dir ) || !is_dir( $base.$dir ) || strcasecmp( $dir, FisheyeExtrasGallery::FOLDER ) === 0 ) {
 				continue;
 			}
+			// an empty folder (what is left when a book's folder was moved into a series) holds nothing to catalogue
+			if( !array_diff( scandir( $base.$dir ) ?: [], [ '.', '..' ] ) ) {
+				continue;
+			}
 			$inner = array_filter( array_diff( scandir( $base.$dir ) ?: [], [ '.', '..' ] ), fn( $d ) => !$skip( $d ) && is_dir( $base.$dir.'/'.$d ) );
 			foreach( $inner ? array_map( fn( $d ) => $dir.'/'.$d, $inner ) : [ $dir ] as $rel ) {
 				if( !isset( $pMatched[rtrim( $pBaseRel.$rel, '/' )] ) ) {
