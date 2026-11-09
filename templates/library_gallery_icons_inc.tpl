@@ -2,8 +2,8 @@
    program galleries have, plus Add Books from ISBNs and, for an admin, the Author workbench front page on the top-level Library pool only (same title gating as
    music_gallery_icons_inc.tpl's own 'Music') - the bulk loaders (authors, the catalogue, book details, covers) are links in the Fisheyemedia
    admin menu, not page icons; an author's gallery gets the Author workbench (books, series and files for that author, one page), preceded by the author's contact icon (the contact page once linked, the creating page before). Edit is safe here:
-   FisheyeMediaGallery::addToGalleries() keeps a library gallery's parents, which edit.php would otherwise drop
-   (it detached series from their author) - Edit is for renaming and the description, the load pages do the filing. *}
+   Edit goes to this package's edit_gallery.php (title, description and where the gallery is located), not fisheye's edit.php, which would
+   detach a library gallery from its parent (FisheyeMediaGallery::addToGalleries() keeps them if that page is reached anyway). *}
 <div class="floaticon">
 	{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
 	{if $gContent->hasUpdatePermission()}
@@ -27,7 +27,7 @@
 				<a title="{tr}Author workbench: load books, sort series, load files{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="bwfm-author" iexplain="Author workbench"}</a>
 			{/if}
 		{/if}
-		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}edit.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
+		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_gallery.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
 		<a title="{tr}Image Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Image Order"}</a>
 	{/if}
 	{if $gContent->getPreference('is_public')}
