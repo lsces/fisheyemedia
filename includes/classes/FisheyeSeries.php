@@ -184,7 +184,8 @@ class FisheyeSeries extends FisheyeMediaGallery {
 		$haystacks = [];
 		$nameKeys = [];
 		foreach( scandir( $pAuthorFolderAbsolute ) ?: [] as $entry ) {
-			if( str_starts_with( $entry, '.' ) || !is_dir( $pAuthorFolderAbsolute.$entry ) ) {
+			// the author's Extras folder is loose files in a gallery of its own; what it is named after (a stage version of a book) must not claim a book
+			if( str_starts_with( $entry, '.' ) || !is_dir( $pAuthorFolderAbsolute.$entry ) || strcasecmp( $entry, FisheyeExtrasGallery::FOLDER ) === 0 ) {
 				continue;
 			}
 			$keys = [];

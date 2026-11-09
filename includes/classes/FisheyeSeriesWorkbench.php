@@ -178,7 +178,8 @@ class FisheyeSeriesWorkbench {
 		}
 		$skip = fn( string $pDir ): bool => $pDir === '' || $pDir[0] === '.' || in_array( strtolower( $pDir ), [ 'pictures', 'optional' ], true ) || stripos( $pDir, 'audio' ) === 0;
 		foreach( array_diff( scandir( $base ) ?: [], [ '.', '..' ] ) as $dir ) {
-			if( $skip( $dir ) || !is_dir( $base.$dir ) ) {
+			// An author's Extras folder is loose files in a gallery of its own (FisheyeExtrasGallery), however many folders it holds: never books
+			if( $skip( $dir ) || !is_dir( $base.$dir ) || strcasecmp( $dir, FisheyeExtrasGallery::FOLDER ) === 0 ) {
 				continue;
 			}
 			$inner = array_filter( array_diff( scandir( $base.$dir ) ?: [], [ '.', '..' ] ), fn( $d ) => !$skip( $d ) && is_dir( $base.$dir.'/'.$d ) );
