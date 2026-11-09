@@ -41,6 +41,14 @@ $formFisheyeMediaGeneral = [
 		'label' => 'Tutorials Storage Path',
 		'note' => 'The folder that CONTAINS the Local Tutorials folder (one folder per video course, then Season NN - Section title, then the lessons tagged SnnEnn), e.g. /srv/media/ for /srv/media/Local Tutorials/. Leave blank to use the External Disk Storage Path above. Include a trailing slash.',
 	],
+	"mimeext_root_documentation" => [
+		'label' => 'Documentation Storage Path',
+		'note' => 'The folder of documents (PDFs, epubs) that the Docs workbench loads where they are, without copying them into storage/: one folder per topic, e.g. /srv/media/Documentation/. Leave blank to switch the Docs workbench off. Include a trailing slash.',
+	],
+	"fisheyemedia_docs_zips_path" => [
+		'label' => 'Documentation Upload Sources Path',
+		'note' => 'Optional. The folder holding the same topic folders as the Documentation Storage Path, from which zips are made and uploaded into the Documentation gallery, e.g. /srv/media/DocsUploads/. The Docs workbench lists the files there that never reached the gallery. Leave blank to skip that list. Include a trailing slash.',
+	],
 	"fisheye_plex_db_path" => [
 		'label' => 'Plex Library Database File',
 		'note' => 'Unlike the storage paths above, this is the actual database FILE itself, not its containing folder - the full path ending in com.plexapp.plugins.library.db (e.g. /var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db). Read-only lookup, for backfilling genre/director/writer/star/rating/duration when importing a film already known to Plex. Leave blank to skip Plex metadata lookup entirely.',

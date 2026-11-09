@@ -37,6 +37,8 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 	// An item's pictures folder: the plain grid, with the folder's title linking back to the item it belongs to.
 	define( 'FISHEYE_PAGINATION_IMAGES_GRID', 'images_grid' );
 	define( 'FISHEYE_PAGINATION_EXTRAS_LIST', 'extras_list' );
+	// The Documentation gallery and its topic galleries: a grid of cover tiles with the Docs workbench icon (docs_grid).
+	define( 'FISHEYE_PAGINATION_DOCS_GRID', 'docs_grid' );
 	// Title of the nested gallery load_video.php keeps an artist's videos in - getCategorizedItems()
 	// lists its contents as the artist page's own Videos strip.
 	define( 'FISHEYEMEDIA_VIDEOS_GALLERY_TITLE', 'Videos' );
@@ -140,6 +142,7 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 			FISHEYE_PAGINATION_LIBRARY_GRID => 'Library Grid',
 			FISHEYE_PAGINATION_IMAGES_GRID  => 'Images Grid',
 			FISHEYE_PAGINATION_EXTRAS_LIST  => 'Extras List',
+			FISHEYE_PAGINATION_DOCS_GRID    => 'Docs Grid',
 		],
 		// rows/cols per the 2026-09-24 tuning (film/program trimmed to 3*8; music_grid keeps
 		// 4*8 stored even though its own template no longer paginates - see
@@ -151,6 +154,7 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 			FISHEYE_PAGINATION_LIBRARY_GRID => [ 'rows' => 4, 'cols' => 8 ],
 			FISHEYE_PAGINATION_IMAGES_GRID  => [ 'rows' => 4, 'cols' => 8 ],
 			FISHEYE_PAGINATION_EXTRAS_LIST  => [ 'rows' => 4, 'cols' => 8 ],
+			FISHEYE_PAGINATION_DOCS_GRID    => [ 'rows' => 4, 'cols' => 8 ],
 		],
 	] );
 

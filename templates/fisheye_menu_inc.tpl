@@ -5,6 +5,7 @@
 {strip}
 {if $gBitUser->hasPermission('p_fisheye_view')}
 	<li class="divider"></li>
+	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Documentation">{biticon ipackage="icons" iname="document" iexplain="Documentation" ilocation=menu}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Films">{biticon ipackage="icons" iname="video-x-generic" iexplain="Films" ilocation=menu}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Library">{biticon ipackage="icons" iname="folder-open" iexplain="Library" ilocation=menu}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Local+Tutorials">{biticon ipackage="icons" iname="applications-education" iexplain="Local Tutorials" ilocation=menu}</a></li>
