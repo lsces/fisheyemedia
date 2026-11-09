@@ -13,6 +13,8 @@
 			<div class="alert alert-success"><p>{$message|escape}</p></div>
 		{/foreach}
 
+		<p><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php">&laquo; {tr}All authors{/tr}</a></p>
+
 		{if $st.error}
 			<div class="alert alert-danger"><p>{$st.error|escape}</p></div>
 		{else}
