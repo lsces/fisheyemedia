@@ -126,6 +126,31 @@ class FisheyeBookFiles {
 		return $counts;
 	}
 
+	/**
+	 * The paths register() would write for this book (xkey_ext of its ebook, extra and single-file audiobook rows), sorted, and the paths its live rows
+	 * have now. They differ when a file was renamed, replaced (a mobi recoded to epub) or the folder moved - the counts alone do not show that.
+	 *
+	 * @return array{expected:list<string>,have:list<string>}
+	 */
+	public static function pathsFor( FisheyeBook $pBook ): array {
+		$out = [ 'expected' => [], 'have' => [] ];
+		if( !( $folder = self::folderFor( $pBook ) ) ) {
+			return $out;
+		}
+		foreach( self::scan( $folder['abs'] ) as $files ) {
+			foreach( $files as $file ) {
+				$out['expected'][] = $folder['rel'].$file['rel'];
+			}
+		}
+		$rows = $pBook->mDb->getCol(
+			"SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `end_date` IS NULL AND ( `item` IN ('ebook','extra') OR ( `item` = 'audiobook' AND `xref` IS NULL ) )",
+			[ (int)$pBook->mContentId ] ) ?: [];
+		$out['have'] = array_map( 'strval', $rows );
+		sort( $out['expected'], SORT_STRING );
+		sort( $out['have'], SORT_STRING );
+		return $out;
+	}
+
 	/** Rebuild the book's ebook / audiobook / extra rows from its folder. A book with no folder keeps what it has. */
 	public static function register( FisheyeBook $pBook ): array {
 		$summary = [ 'folder' => null, 'ebook' => 0, 'audiobook' => 0, 'extra' => 0, 'errors' => [] ];

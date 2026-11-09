@@ -149,7 +149,9 @@ class FisheyeSeriesWorkbench {
 			}
 			$matched[rtrim( $preview['folder'], '/' )] = true;
 			$found = $preview['ebook'] + $preview['audiobook'] + $preview['extra'];
-			$todo = $found > 0 && $found !== $have;
+			// the counts differ, or the files do (a mobi recoded to an epub is one file for one row, but another file)
+			$paths = FisheyeBookFiles::pathsFor( $book );
+			$todo = $found > 0 && ( $found !== $have || ( $paths['expected'] && $paths['expected'] !== $paths['have'] ) );
 			$files['todo'] += $todo ? 1 : 0;
 			$files['albumTodo'] += $preview['albums'] > 0 ? 1 : 0;
 			$files['albumFolders'] += $preview['albums'];
