@@ -133,6 +133,12 @@ class FisheyeAuthorWorkbench {
 				$done['errors'][] = $move['title'].' - could not move '.$move['from'];
 			} else {
 				$done['moved']++;
+				// the series folder the book came out of, once it holds nothing: removed (rmdir cannot remove a folder with anything in it),
+				// never the author's own folder
+				$parent = dirname( $root.$move['from'] );
+				if( $parent !== rtrim( $root.$pStatus['folder'], '/' ) && str_starts_with( $parent, $root.$pStatus['folder'].'/' ) && !array_diff( scandir( $parent ) ?: [ '.' ], [ '.', '..' ] ) ) {
+					@rmdir( $parent );
+				}
 			}
 		}
 		return $done;
