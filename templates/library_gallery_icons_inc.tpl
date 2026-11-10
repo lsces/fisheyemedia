@@ -27,7 +27,6 @@
 				<a title="{tr}Author workbench: load books, sort series, load files{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="bwfm-author" iexplain="Author workbench"}</a>
 			{/if}
 		{/if}
-		<a title="{tr}Add a gallery inside this one{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_gallery.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="folder-new" iexplain="Add gallery"}</a>
 		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_gallery.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
 		<a title="{tr}Image Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Image Order"}</a>
 	{/if}

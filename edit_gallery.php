@@ -1,7 +1,7 @@
 <?php
 /**
  * Edit page for a gallery whose place is managed by a loader (Library author and series galleries, Documentation galleries - see
- * FisheyeManagedGallery): title, description, and where it is located. fisheye's own Edit page detaches such a gallery from its parent when it is
+ * FisheyeManagedGallery): title, description, where it is located, and a form to add a gallery inside it. fisheye's own Edit page detaches such a gallery from its parent when it is
  * saved, so the Edit icons of these layouts come here. Any other gallery is handed to fisheye's own Edit page.
  *
  * @package fisheyemedia
@@ -33,6 +33,19 @@ if( !empty( $_REQUEST['cancelgallery'] ) ) {
 }
 
 $feedback = [];
+// the "add a gallery inside this one" form: the new gallery takes this one's layout (FisheyeManagedGallery::create)
+$addTitle = '';
+$addEdit = '';
+if( !empty( $_REQUEST['addgallery'] ) ) {
+	$addTitle = trim( (string)( $_REQUEST['new_title'] ?? '' ) );
+	$addEdit = (string)( $_REQUEST['new_edit'] ?? '' );
+	( new FisheyeGallery() )->verifyCreatePermission();
+	[ $made, $errors ] = FisheyeManagedGallery::create( $gContent, $addTitle, $addEdit );
+	if( $made ) {
+		KernelTools::bit_redirect( $made->getDisplayUrl() );
+	}
+	$feedback['error'] = array_map( fn( $e ) => KernelTools::tra( $e ), $errors );
+}
 // what the form shows: the gallery as it is, or what was typed when a save was refused
 $formTitle = $gContent->getTitle();
 $formEdit = (string)$gContent->getField( 'data' );
@@ -72,4 +85,6 @@ $gBitSmarty->assign( 'placements', FisheyeManagedGallery::placements( $gContent 
 $gBitSmarty->assign( 'feedback', $feedback );
 $gBitSmarty->assign( 'formTitle', $formTitle );
 $gBitSmarty->assign( 'formEdit', $formEdit );
+$gBitSmarty->assign( 'addTitle', $addTitle );
+$gBitSmarty->assign( 'addEdit', $addEdit );
 $gBitSystem->display( 'bitpackage:fisheyemedia/edit_gallery.tpl', KernelTools::tra( 'Edit gallery' ), [ 'display_mode' => 'edit' ] );

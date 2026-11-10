@@ -49,6 +49,30 @@
 				<input type="submit" class="btn btn-primary" name="savegallery" value="{tr}Save{/tr}" />
 			</div>
 		{/form}
+
+		<h2>{tr}Add a gallery inside this one{/tr}</h2>
+		{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`edit_gallery.php"}
+			<input type="hidden" name="gallery_id" value="{$gContent->mGalleryId}" />
+
+			<div class="form-group">
+				{formlabel label="Title" for="new-gallery-title"}
+				{forminput}
+					<input type="text" class="form-control" name="new_title" id="new-gallery-title" size="50" maxlength="160" value="{$addTitle|escape}" />
+					{formhelp note="The new gallery is made inside this one and takes its layout."}
+				{/forminput}
+			</div>
+
+			<div class="form-group">
+				{formlabel label="Description" for="new-gallery-desc"}
+				{forminput}
+					<textarea class="form-control" name="new_edit" id="new-gallery-desc" rows="3" cols="50">{$addEdit|escape}</textarea>
+				{/forminput}
+			</div>
+
+			<div class="form-group submit">
+				<input type="submit" class="btn btn-primary" name="addgallery" value="{tr}Add gallery{/tr}" />
+			</div>
+		{/form}
 	</div>
 </div>
 {/strip}
