@@ -34,13 +34,14 @@ function fisheyemedia_content_display( $pObject, &$pParamHash ) {
 }
 
 /**
- * Image Order's Copy/Move-to-gallery pickers list every gallery; ordering a Library Grid gallery (an author, series or book list) offers
- * only other Library Grid galleries. Literal values in the join: the list's own binds come ahead of a service join's. Runs for every content list, so it does nothing outside that one page.
+ * Image Order's Copy/Move-to-gallery pickers list every gallery; ordering a managed gallery (an author, series or book list in the Library, a
+ * Documentation gallery - see FisheyeManagedGallery) offers only the galleries of its own tree. Literal ids in the join: the list's own binds come
+ * ahead of a service join's. Runs for every content list, so it does nothing outside that one page.
  */
 function fisheyemedia_content_list_sql( $pObject, $pParamHash = null ) {
 	global $gContent;
-	if( basename( $_SERVER['SCRIPT_NAME'] ?? '' ) !== 'image_order.php' || !is_object( $gContent ) || !method_exists( $gContent, 'getLayout' )
-		|| !$gContent->isValid() || $gContent->getLayout() !== FISHEYE_PAGINATION_LIBRARY_GRID ) {
+	if( basename( $_SERVER['SCRIPT_NAME'] ?? '' ) !== 'image_order.php' || !is_object( $gContent ) || !$gContent instanceof \Bitweaver\Fisheye\FisheyeGallery
+		|| !\Bitweaver\Fisheyemedia\FisheyeManagedGallery::isManaged( $gContent ) ) {
 		return [];
 	}
 	// loadImages() asks the same service for the gallery's own items, which must all stay - only the gallery picker (getList) is narrowed.
@@ -54,8 +55,12 @@ function fisheyemedia_content_list_sql( $pObject, $pParamHash = null ) {
 	if( !$picker ) {
 		return [];
 	}
+	$ids = array_map( 'intval', \Bitweaver\Fisheyemedia\FisheyeManagedGallery::treeIds( $gContent ) );
+	if( !$ids ) {
+		return [];
+	}
 	return [
-		'join_sql'  => " INNER JOIN `".BIT_DB_PREFIX."liberty_content_prefs` fmlg ON( fmlg.`content_id`=lc.`content_id` AND fmlg.`pref_name`='gallery_pagination' AND fmlg.`pref_value`='".FISHEYE_PAGINATION_LIBRARY_GRID."' ) ",
+		'join_sql'  => " INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery` fmtg ON( fmtg.`content_id`=lc.`content_id` AND fmtg.`content_id` IN (".implode( ',', $ids ).") ) ",
 	];
 }
 

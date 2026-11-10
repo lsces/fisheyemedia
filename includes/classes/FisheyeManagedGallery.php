@@ -60,6 +60,31 @@ class FisheyeManagedGallery {
 	}
 
 	/**
+	 * Every gallery in the same tree(s) as a gallery: the top-level gallery above each of its parents (Documentation, Library ...) and everything below
+	 * it, the gallery itself included. What Image Order's Copy/Move-to-gallery picker offers for a managed gallery.
+	 *
+	 * @return list<int> content ids
+	 */
+	public static function treeIds( FisheyeGallery $pGallery ): array {
+		$nodes = self::tree();
+		$me = (int)$pGallery->mContentId;
+		if( !isset( $nodes[$me] ) ) {
+			return [];
+		}
+		$ids = [ $me => true ];
+		foreach( $nodes[$me]['parents'] ?: [ $me ] as $parent ) {
+			$top = $parent;
+			for( $guard = 0; ( $nodes[$top]['parents'][0] ?? null ) !== null && $guard < 20; $guard++ ) {
+				$top = $nodes[$top]['parents'][0];
+			}
+			foreach( array_merge( [ $top ], self::below( $nodes, $top ) ) as $id ) {
+				$ids[$id] = true;
+			}
+		}
+		return array_keys( $ids );
+	}
+
+	/**
 	 * The gallery's current parents, and for each the galleries it could be moved under: the top-level gallery of that parent's tree and everything
 	 * below it, except the gallery itself and what is below it.
 	 *
