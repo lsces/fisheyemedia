@@ -153,6 +153,46 @@ class FisheyeManagedGallery {
 	}
 
 	/**
+	 * A new gallery inside a managed one, with the parent's layout and thumbnail size (and its protector role, as fisheye's own create page does for a
+	 * sub-gallery), so it comes out the same kind as the gallery it is made in - fisheye's create page stores whatever its form says, which is the site
+	 * default when left blank.
+	 *
+	 * @return array{0:?FisheyeGallery,1:list<string>}  the new gallery, or null and the reasons
+	 */
+	public static function create( FisheyeGallery $pParent, string $pTitle, string $pDescription ): array {
+		global $gBitDb;
+		$title = trim( $pTitle );
+		if( $title === '' ) {
+			return [ null, [ 'You must specify a title for this gallery' ] ];
+		}
+		if( $gBitDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_content` lc
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery` g ON g.`content_id` = lc.`content_id`
+			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = lc.`content_id`
+			 WHERE m.`gallery_content_id` = ? AND lc.`title` = ?", [ (int)$pParent->mContentId, $title ] ) ) {
+			return [ null, [ 'There is already a gallery of that name here.' ] ];
+		}
+		$layout = $pParent->getLayout();
+		$hash = [ 'title' => $title, 'edit' => $pDescription, 'gallery_pagination' => $layout ];
+		if( $pParent->getField( 'thumbnail_size' ) ) {
+			$hash['thumbnail_size'] = $pParent->getField( 'thumbnail_size' );
+		}
+		$role = $gBitDb->getOne( "SELECT `role_id` FROM `".BIT_DB_PREFIX."liberty_content_role_map` WHERE `content_id` = ?", [ (int)$pParent->mContentId ] );
+		if( $role !== null && $role !== false ) {
+			$hash['protector']['role_id'] = $role;
+		}
+		$gallery = new FisheyeGallery();
+		if( !$gallery->store( $hash ) ) {
+			return [ null, array_values( array_map( 'strval', $gallery->mErrors ) ) ?: [ 'The gallery could not be made.' ] ];
+		}
+		$gallery->storePreference( 'gallery_pagination', $layout );
+		if( !$pParent->addItem( $gallery->mContentId ) && !$gallery->isInGallery( $pParent->mContentId, $gallery->mContentId ) ) {
+			return [ null, [ 'The gallery was made but could not be put into '.$pParent->getTitle().'.' ] ];
+		}
+		return [ $gallery, [] ];
+	}
+
+	/**
 	 * Apply moves that checkMoves() passed: the new place is added before the old one is left.
 	 *
 	 * @param array<int,int> $pMoves current parent content_id => new parent content_id

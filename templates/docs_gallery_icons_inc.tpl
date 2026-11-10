@@ -11,6 +11,7 @@
 				<a title="{tr}Docs workbench: load the files of this topic{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?topic={$gContent->getTitle()|escape:'url'}">{biticon ipackage="icons" iname="document-properties" iexplain="Docs workbench"}</a>
 			{/if}
 		{/if}
+		<a title="{tr}Add a gallery inside this one{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_gallery.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="folder-new" iexplain="Add gallery"}</a>
 		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_gallery.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
 		<a title="{tr}Image Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Image Order"}</a>
 		{* upload documents (PDFs, epubs, or a zip of them) straight into this gallery, for one-offs and later additions; loading in place is the workbench's job *}
