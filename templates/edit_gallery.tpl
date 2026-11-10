@@ -9,6 +9,8 @@
 
 	<div class="body">
 		{formfeedback hash=$feedback}
+		{jstabs}
+		{jstab title="{tr}Edit{/tr}"}
 		{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`edit_gallery.php"}
 			<input type="hidden" name="gallery_id" value="{$gContent->mGalleryId}" />
 
@@ -50,7 +52,8 @@
 			</div>
 		{/form}
 
-		<h2>{tr}Add a gallery inside this one{/tr}</h2>
+		{/jstab}
+		{jstab title="{tr}Add Gallery{/tr}"}
 		{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`edit_gallery.php"}
 			<input type="hidden" name="gallery_id" value="{$gContent->mGalleryId}" />
 
@@ -58,7 +61,7 @@
 				{formlabel label="Title" for="new-gallery-title"}
 				{forminput}
 					<input type="text" class="form-control" name="new_title" id="new-gallery-title" size="50" maxlength="160" value="{$addTitle|escape}" />
-					{formhelp note="The new gallery is made inside this one and takes its layout."}
+					{formhelp note="The new gallery is made inside this one and takes its layout, thumbnail size and access."}
 				{/forminput}
 			</div>
 
@@ -73,6 +76,8 @@
 				<input type="submit" class="btn btn-primary" name="addgallery" value="{tr}Add gallery{/tr}" />
 			</div>
 		{/form}
+		{/jstab}
+		{/jstabs}
 	</div>
 </div>
 {/strip}
