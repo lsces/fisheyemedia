@@ -14,10 +14,10 @@
 			{if !$hasTop}
 				<div class="alert alert-warning"><p>{tr}There is no top-level gallery called{/tr} {$topTitle|escape}{tr}, so nothing can be filed. Make it first.{/tr}</p></div>
 			{/if}
-			<p>{tr}Every topic - the folders in Documentation, the galleries and the upload sources folders - and what is left to load. The files are loaded where they are, not copied, and filed in a gallery for their folder under{/tr} {$topTitle|escape}.</p>
+			<p>{tr}Every topic - the folders in Documentation and the galleries - and what is left to load. The files are loaded where they are, not copied, and filed in a gallery for their folder under{/tr} {$topTitle|escape}.</p>
 			{if $overview}
 				<table class="table table-condensed">
-					<thead><tr><th>{tr}Topic{/tr}</th><th>{tr}Files{/tr}</th><th>{tr}Loaded{/tr}</th><th>{tr}Left to do{/tr}</th><th>{tr}Uploaded{/tr}</th><th>{tr}Not in the gallery{/tr}</th></tr></thead>
+					<thead><tr><th>{tr}Topic{/tr}</th><th>{tr}Files{/tr}</th><th>{tr}Loaded{/tr}</th><th>{tr}Left to do{/tr}</th><th>{tr}Uploaded{/tr}</th></tr></thead>
 					<tbody>
 						{foreach from=$overview key=name item=row}
 							<tr>
@@ -26,7 +26,6 @@
 								<td>{$row.loaded}</td>
 								<td>{if $row.error}{$row.error|escape}{elseif $row.todo}{$row.todo}{else}<span class="text-muted">{tr}nothing{/tr}</span>{/if}</td>
 								<td>{$row.uploaded}</td>
-								<td>{if $row.notInGallery}{$row.notInGallery}{else}<span class="text-muted">-</span>{/if}</td>
 							</tr>
 						{/foreach}
 					</tbody>

@@ -67,21 +67,6 @@
 			{else}
 				<p class="text-muted">{tr}Nothing was uploaded into this gallery.{/tr}</p>
 			{/if}
-
-			<h3>{tr}In the upload sources but not in the gallery{/tr} <small>{$uploads.missing|@count}</small></h3>
-			{if $uploads.missing}
-				<p class="help-block">{tr}Files in this topic's upload sources folders with no matching title in the gallery.{/tr}</p>
-				<table class="table table-condensed">
-					<thead><tr><th>{tr}File{/tr}</th><th>{tr}Size{/tr}</th></tr></thead>
-					<tbody>
-						{foreach from=$uploads.missing item=miss}
-							<tr><td>{$miss.path|escape}</td><td>{($miss.size/1048576)|string_format:"%.1f"} MB</td></tr>
-						{/foreach}
-					</tbody>
-				</table>
-			{else}
-				<p class="text-muted">{tr}Every file in the upload sources for this topic is in the gallery.{/tr}</p>
-			{/if}
 		{/if}
 	</div>
 </div>

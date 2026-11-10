@@ -2,7 +2,7 @@
 /**
  * Docs workbench: the files in the Documentation folder, one topic at a time (see FisheyeDocsWorkbench). The front page lists every topic and
  * what is left; a topic page lists its files and loads the next few in place, filed in the Documentation gallery tree, and shows what the gallery
- * holds from uploads and which files in the upload sources folder are not in it. Recomputed from the database
+ * holds from uploads. Recomputed from the database
  * and the disk after every press, so it can be repeated; nothing is written until a button is pressed.
  *
  * @package fisheyemedia

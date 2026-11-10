@@ -43,11 +43,7 @@ $formFisheyeMediaGeneral = [
 	],
 	"mimeext_root_documentation" => [
 		'label' => 'Documentation Storage Path',
-		'note' => 'The folder of documents (PDFs, epubs) that the Docs workbench loads where they are, without copying them into storage/: one folder per topic, e.g. /srv/media/Documentation/. Leave blank to switch the Docs workbench off. Include a trailing slash.',
-	],
-	"fisheyemedia_docs_zips_path" => [
-		'label' => 'Documentation Upload Sources Path',
-		'note' => 'Optional. The folder holding the same topic folders as the Documentation Storage Path, from which zips are made and uploaded into the Documentation gallery, e.g. /srv/media/DocsUploads/. The Docs workbench lists the files there that never reached the gallery. Leave blank to skip that list. Include a trailing slash.',
+		'note' => 'The folder of documents (PDFs, epubs) that the Docs workbench loads where they are, without copying them into storage/: one folder per topic, e.g. /srv/media/Documentation/. Leave blank to use the Documentation folder under the External Disk Storage Path above. Include a trailing slash.',
 	],
 	"fisheye_plex_db_path" => [
 		'label' => 'Plex Library Database File',

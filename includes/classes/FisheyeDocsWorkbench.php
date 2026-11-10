@@ -5,7 +5,7 @@
  * top-level "Documentation" gallery. The text of a PDF goes into liberty_content_data for search. Each step is recomputed from the database and
  * the disk, so it can be repeated; a file counts as loaded when an attachment holds its path (the extdoc_path preference).
  *
- * Smaller documents can instead be uploaded into the gallery as zips (a stored copy), so this is for the big ones. The root is the Documentation
+ * Smaller documents can instead be uploaded into the gallery as archives (a stored copy), so this is for the big ones. The root is the Documentation
  * Storage Path setting (kernel_config mimeext_root_documentation); the same plugin takes a 'library' root for the Library's extras.
  *
  * @package fisheyemedia
@@ -28,10 +28,18 @@ class FisheyeDocsWorkbench {
 	/** The preference value is a VARCHAR(250). */
 	private const SPEC_MAX = 250;
 
-	/** The Documentation folder with its closing slash, or '' when there is none. */
+	/**
+	 * The Documentation folder with its closing slash, or '' when there is none: the Documentation Storage Path setting, else the Documentation folder
+	 * under the External Disk Storage Path (as the Library and Tutorials paths fall back).
+	 */
 	public static function root(): string {
 		global $gBitSystem;
-		$root = realpath( (string)$gBitSystem->getConfig( 'mimeext_root_documentation', '' ) );
+		$set = trim( (string)$gBitSystem->getConfig( 'mimeext_root_documentation', '' ) );
+		if( $set === '' ) {
+			$disk = function_exists( '\\Bitweaver\\Liberty\\mime_film_get_storage_root' ) ? \Bitweaver\Liberty\mime_film_get_storage_root() : '';
+			$set = $disk !== '' ? $disk.'Documentation/' : '';
+		}
+		$root = $set !== '' ? realpath( $set ) : false;
 		return $root && is_dir( $root ) ? $root.'/' : '';
 	}
 
@@ -110,20 +118,13 @@ class FisheyeDocsWorkbench {
 		return $st;
 	}
 
-	/** Topic names that have a gallery under Documentation or a folder in the upload sources path, whether or not Documentation still holds files for them. */
+	/** Topic names that have a gallery under Documentation, whether or not Documentation still holds files for them. */
 	private static function topicsWithUploads(): array {
 		global $gBitDb;
 		$names = [];
 		if( $top = self::topContentId() ) {
 			foreach( $gBitDb->getAll( "SELECT lc.`title` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id` WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyegallery'", [ $top ] ) ?: [] as $row ) {
 				$names[] = (string)$row['title'];
-			}
-		}
-		if( $zips = self::zipsRoot() ) {
-			foreach( scandir( $zips ) ?: [] as $dir ) {
-				if( $dir[0] !== '.' && is_dir( $zips.$dir ) ) {
-					$names[] = preg_replace( '/ part \d+$/', '', $dir );
-				}
 			}
 		}
 		return array_values( array_unique( $names ) );
@@ -143,7 +144,6 @@ class FisheyeDocsWorkbench {
 		foreach( $all as $topic => &$row ) {
 			$up = self::uploads( $topic );
 			$row['uploaded'] = count( $up['uploaded'] );
-			$row['notInGallery'] = count( $up['missing'] );
 		}
 		unset( $row );
 		return $all;
@@ -169,25 +169,15 @@ class FisheyeDocsWorkbench {
 		return $id ? (int)$id : null;
 	}
 
-	/** The upload sources folder (the zips that are uploaded into the gallery are made from it; setting fisheyemedia_docs_zips_path) with its closing slash, '' when there is none. */
-	public static function zipsRoot(): string {
-		global $gBitSystem;
-		$dir = realpath( (string)$gBitSystem->getConfig( 'fisheyemedia_docs_zips_path', '' ) );
-		return $dir && is_dir( $dir ) ? $dir.'/' : '';
-	}
-
 	/**
-	 * What the topic gallery holds that did not come from the Documentation folder - the files uploaded as zips (stored copies) - and which files of
-	 * the topic's folders in the upload sources path (the topic's own and its "part N" folders) are not in the gallery at all: matched by file name against
-	 * the titles, ignoring case, the extension and punctuation.
+	 * What the topic gallery holds that did not come from the Documentation folder - the files uploaded into it (stored copies).
 	 *
-	 * @return array{uploaded:array,missing:array}
+	 * @return array{uploaded:array}
 	 */
 	public static function uploads( string $pTopic ): array {
 		global $gBitDb;
-		$out = [ 'uploaded' => [], 'missing' => [] ];
+		$out = [ 'uploaded' => [] ];
 		$topicContentId = self::topicContentId( $pTopic );
-		$titles = [];
 		if( $topicContentId ) {
 			$rows = $gBitDb->getAll(
 				"SELECT lc.`content_id`, lc.`title`, a.`attachment_plugin_guid` AS guid, lf.`mime_type`, lf.`file_size` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
@@ -196,33 +186,12 @@ class FisheyeDocsWorkbench {
 				 LEFT JOIN `".BIT_DB_PREFIX."liberty_files` lf ON lf.`file_id` = a.`foreign_id`
 				 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` <> 'fisheyegallery' ORDER BY lc.`title`", [ $topicContentId ] ) ?: [];
 			foreach( $rows as $row ) {
-				$titles[self::normalise( (string)$row['title'] )] = true;
 				if( !str_starts_with( (string)$row['guid'], 'mimeext' ) ) {
 					$out['uploaded'][] = [ 'contentId' => (int)$row['content_id'], 'title' => (string)$row['title'], 'mime' => (string)$row['mime_type'], 'size' => (int)$row['file_size'] ];
 				}
 			}
 		}
-		$zips = self::zipsRoot();
-		if( $zips !== '' ) {
-			foreach( scandir( $zips ) ?: [] as $dir ) {
-				if( $dir[0] === '.' || !is_dir( $zips.$dir ) || ( $dir !== $pTopic && !preg_match( '/^'.preg_quote( $pTopic, '/' ).' part \d+$/', $dir ) ) ) {
-					continue;
-				}
-				$it = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $zips.$dir, \FilesystemIterator::SKIP_DOTS ) );
-				foreach( $it as $file ) {
-					if( $file->isFile() && $file->getFilename()[0] !== '.' && !isset( $titles[self::normalise( pathinfo( $file->getFilename(), PATHINFO_FILENAME ) )] ) ) {
-						$out['missing'][] = [ 'path' => $dir.'/'.substr( $file->getPathname(), strlen( $zips.$dir ) + 1 ), 'size' => (int)$file->getSize(), 'kind' => strtolower( $file->getExtension() ) ];
-					}
-				}
-			}
-			usort( $out['missing'], fn( $a, $b ) => strcasecmp( $a['path'], $b['path'] ) );
-		}
 		return $out;
-	}
-
-	/** A name for matching a file against a title: lower case, letters and digits only. */
-	private static function normalise( string $pName ): string {
-		return preg_replace( '/[^a-z0-9]+/', '', strtolower( $pName ) ) ?? '';
 	}
 
 	/**
