@@ -1,6 +1,6 @@
 <?php
 /**
- * Docs workbench: the files in the Documentation folder, one topic folder at a time, loaded in place as fisheye images (the mimeext* mime
+ * Docs workbench: the files in the Documentation folder, one topic folder at a time (and, as a second kind, the Magazines folder, one title at a time), loaded in place as fisheye images (the mimeext* mime
  * plugins (one per file type: mimeextpdf and mimeextepub) keeps the file where it is and puts a link to it in storage/), filed in a gallery tree that mirrors the folders under the existing
  * top-level "Documentation" gallery. The text of a PDF goes into liberty_content_data for search. Each step is recomputed from the database and
  * the disk, so it can be repeated; a file counts as loaded when an attachment holds its path (the extdoc_path preference).
@@ -19,8 +19,41 @@ class FisheyeDocsWorkbench {
 	/** Files loaded per press (each PDF is read twice: text and first-page thumbnail). */
 	public const BATCH = 10;
 
-	/** Title of the existing top-level gallery the topic galleries go under. */
+	/** Title of the existing top-level gallery the topic galleries go under (Documentation kind; see topTitle()). */
 	public const TOP_TITLE = 'Documentation';
+
+	/**
+	 * The collections this workbench loads, each a source folder, a top-level gallery and a root key for the mimeext* plugins: Documentation (one folder
+	 * per topic) and Magazines (one folder per title, then year or volume folders). 'setting' is the kernel_config entry holding the folder, 'folder'
+	 * the name looked for under the External Disk Storage Path when the setting is blank.
+	 */
+	public const KINDS = [
+		'documentation' => [ 'top' => 'Documentation', 'folder' => 'Documentation', 'noun' => 'topic' ],
+		'magazines'     => [ 'top' => 'Magazines',     'folder' => 'Magazines',     'noun' => 'title' ],
+	];
+
+	/** Seconds a keep-going press works before it hands over to the next one (one file may overrun it; nginx allows 60). */
+	public const KEEP_GOING_SECONDS = 40;
+
+	/** The kind in use for this request: one of the KINDS keys. */
+	private static string $sKind = 'documentation';
+
+	public static function setKind( string $pKind ): void {
+		self::$sKind = isset( self::KINDS[$pKind] ) ? $pKind : 'documentation';
+	}
+
+	public static function kind(): string {
+		return self::$sKind;
+	}
+
+	public static function topTitle(): string {
+		return self::KINDS[self::$sKind]['top'];
+	}
+
+	/** Word for one folder of the kind, for the pages ("topic" or "title"). */
+	public static function noun(): string {
+		return self::KINDS[self::$sKind]['noun'];
+	}
 
 	/** The mime plugin for each file extension; a file of any other kind is listed but not loaded until its type has a plugin (mimeextmobi ...). */
 	public const HANDLERS = [ 'pdf' => 'mimeextpdf', 'epub' => 'mimeextepub' ];
@@ -28,16 +61,21 @@ class FisheyeDocsWorkbench {
 	/** The preference value is a VARCHAR(250). */
 	private const SPEC_MAX = 250;
 
-	/**
-	 * The Documentation folder with its closing slash, or '' when there is none: the Documentation Storage Path setting, else the Documentation folder
-	 * under the External Disk Storage Path (as the Library and Tutorials paths fall back).
-	 */
+	/** The folder of the kind in use, with its closing slash, or '' when there is none (see rootFor()). */
 	public static function root(): string {
+		return self::rootFor( self::$sKind );
+	}
+
+	/**
+	 * The source folder for a root key with its closing slash, or '' when there is none: the Storage Path setting (kernel_config mimeext_root_<key>),
+	 * else the kind's folder under the External Disk Storage Path (as the Library and Tutorials paths fall back). A key that is not a kind has only its setting.
+	 */
+	public static function rootFor( string $pKey ): string {
 		global $gBitSystem;
-		$set = trim( (string)$gBitSystem->getConfig( 'mimeext_root_documentation', '' ) );
-		if( $set === '' ) {
+		$set = trim( (string)$gBitSystem->getConfig( 'mimeext_root_'.$pKey, '' ) );
+		if( $set === '' && isset( self::KINDS[$pKey] ) ) {
 			$disk = function_exists( '\\Bitweaver\\Liberty\\mime_film_get_storage_root' ) ? \Bitweaver\Liberty\mime_film_get_storage_root() : '';
-			$set = $disk !== '' ? $disk.'Documentation/' : '';
+			$set = $disk !== '' ? $disk.self::KINDS[$pKey]['folder'].'/' : '';
 		}
 		$root = $set !== '' ? realpath( $set ) : false;
 		return $root && is_dir( $root ) ? $root.'/' : '';
@@ -46,9 +84,23 @@ class FisheyeDocsWorkbench {
 	/** content_id of the top-level Documentation gallery, or null when there is not one. */
 	public static function topContentId(): ?int {
 		global $gBitDb;
-		$galleryId = FisheyeGallery::getTopGalleryId( self::TOP_TITLE );
+		$galleryId = FisheyeGallery::getTopGalleryId( self::topTitle() );
 		$id = $galleryId ? $gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $galleryId ] ) : null;
 		return $id ? (int)$id : null;
+	}
+
+	/** Make the kind's top-level gallery (Docs Grid layout, no parent) when there is none; returns its content_id, or null on failure. */
+	public static function makeTop(): ?int {
+		if( $existing = self::topContentId() ) {
+			return $existing;
+		}
+		$gallery = new FisheyeGallery();
+		$storeHash = [ 'title' => self::topTitle(), 'gallery_pagination' => FISHEYE_PAGINATION_DOCS_GRID ];   // store() takes it by reference
+		if( !$gallery->store( $storeHash ) ) {
+			return null;
+		}
+		$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_DOCS_GRID );
+		return (int)$gallery->mContentId;
 	}
 
 	/** The topic folder names, alphabetically. */
@@ -59,7 +111,7 @@ class FisheyeDocsWorkbench {
 		return $names;
 	}
 
-	/** Loaded files: "documentation|<path>" => content_id. */
+	/** Loaded files: "<kind>|<path>" => content_id. */
 	public static function loaded(): array {
 		global $gBitDb;
 		$rows = $gBitDb->getAll(
@@ -93,21 +145,25 @@ class FisheyeDocsWorkbench {
 	 * @return array{name:string,error:?string,files:array,total:int,loaded:int,todo:int,noHandler:int,tooLong:array,done:bool}
 	 */
 	public static function status( string $pTopic ): array {
-		$st = [ 'name' => $pTopic, 'error' => null, 'files' => [], 'total' => 0, 'loaded' => 0, 'todo' => 0, 'noHandler' => 0, 'tooLong' => [], 'done' => false ];
+		$st = [ 'name' => $pTopic, 'error' => null, 'files' => [], 'total' => 0, 'loaded' => 0, 'todo' => 0, 'noHandler' => 0, 'tooLong' => [], 'folders' => [], 'done' => false ];
 		if( self::root() === '' ) {
-			$st['error'] = 'No Documentation folder was found: set the Documentation Storage Path in Media Library Settings.';
+			$st['error'] = 'No '.self::topTitle().' folder was found: set the '.self::topTitle().' Storage Path in Media Library Settings.';
 			return $st;
 		}
 		$loaded = self::loaded();
 		foreach( self::filesIn( $pTopic ) as $path ) {
-			$cid = $loaded['documentation|'.$path] ?? null;
+			$cid = $loaded[self::$sKind.'|'.$path] ?? null;
 			$handler = self::HANDLERS[strtolower( pathinfo( $path, PATHINFO_EXTENSION ) )] ?? null;
+			$folder = strlen( dirname( $path ) ) > strlen( $pTopic ) ? substr( dirname( $path ), strlen( $pTopic ) + 1 ) : '(top level)';
+			$st['folders'][$folder] = $st['folders'][$folder] ?? [ 'total' => 0, 'loaded' => 0 ];
+			$st['folders'][$folder]['total']++;
+			$cid && $st['folders'][$folder]['loaded']++;
 			$st['files'][] = [ 'path' => $path, 'name' => basename( $path ), 'contentId' => $cid ? (int)$cid : null, 'handler' => $handler, 'size' => (int)@filesize( self::root().$path ) ];
 			if( $cid ) {
 				$st['loaded']++;
 			} elseif( !$handler ) {
 				$st['noHandler']++;
-			} elseif( strlen( 'documentation|'.$path ) > self::SPEC_MAX ) {
+			} elseif( strlen( self::$sKind.'|'.$path ) > self::SPEC_MAX ) {
 				$st['tooLong'][] = $path;
 			} else {
 				$st['todo']++;
@@ -195,22 +251,31 @@ class FisheyeDocsWorkbench {
 	}
 
 	/**
-	 * Load the next BATCH unloaded files of a topic: each is filed in the gallery for its folder (made under Documentation when missing),
-	 * stored in place, and added to that gallery.
+	 * Load the next unloaded files of a topic: each is filed in the gallery for its folder (made under the kind's top gallery when missing),
+	 * stored in place, and added to that gallery. A plain press loads BATCH files; with $pSeconds it keeps loading until that many seconds have
+	 * gone (the file in hand is finished first), which is what the keep-going option uses.
 	 *
-	 * @return array{loaded:int,errors:array}
+	 * @return array{loaded:int,errors:array,seconds:int}
 	 */
-	public static function loadTopic( string $pTopic ): array {
+	public static function loadTopic( string $pTopic, int $pSeconds = 0 ): array {
 		global $gLibertySystem;
-		$result = [ 'loaded' => 0, 'errors' => [] ];
+		$started = microtime( true );
+		if( $pSeconds > 0 ) {
+			@set_time_limit( $pSeconds + 60 );
+		}
+		$result = [ 'loaded' => 0, 'errors' => [], 'seconds' => 0 ];
 		$top = self::topContentId();
 		if( !$top ) {
-			$result['errors'][] = 'There is no top-level '.self::TOP_TITLE.' gallery.';
-			return $result;
+			$result['errors'][] = 'There is no top-level '.self::topTitle().' gallery.';
+			$result['seconds'] = (int)round( microtime( true ) - $started );
+		return $result;
 		}
 				$st = self::status( $pTopic );
 		$todo = array_filter( $st['files'], fn( $f ) => !$f['contentId'] && $f['handler'] && !in_array( $f['path'], $st['tooLong'], true ) );
-		foreach( array_slice( $todo, 0, self::BATCH ) as $file ) {
+		foreach( $pSeconds > 0 ? $todo : array_slice( $todo, 0, self::BATCH ) as $file ) {
+			if( $pSeconds > 0 && ( microtime( true ) - $started ) >= $pSeconds ) {
+				break;
+			}
 			$galleryContentId = self::galleryFor( dirname( $file['path'] ), $top );
 			$galleryId = $galleryContentId ? self::galleryIdOf( $galleryContentId ) : null;
 			if( !$galleryId ) {
@@ -221,7 +286,7 @@ class FisheyeDocsWorkbench {
 			$image = new FisheyeImage();
 			$hash = [
 				'title' => pathinfo( $file['name'], PATHINFO_FILENAME ),
-				'mimeplugin' => [ $file['handler'] => [ 'root' => 'documentation', 'path' => $file['path'] ] ],
+				'mimeplugin' => [ $file['handler'] => [ 'root' => self::$sKind, 'path' => $file['path'] ] ],
 				'process_storage' => STORAGE_IMAGE,
 			];
 			if( $image->store( $hash ) && $image->mContentId ) {

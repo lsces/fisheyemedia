@@ -45,6 +45,10 @@ $formFisheyeMediaGeneral = [
 		'label' => 'Documentation Storage Path',
 		'note' => 'The folder of documents (PDFs, epubs) that the Docs workbench loads where they are, without copying them into storage/: one folder per topic, e.g. /srv/media/Documentation/. Leave blank to use the Documentation folder under the External Disk Storage Path above. Include a trailing slash.',
 	],
+	"mimeext_root_magazines" => [
+		'label' => 'Magazines Storage Path',
+		'note' => 'The folder of magazine scans (PDFs) that the Docs workbench loads where they are, without copying them into storage/: one folder per title, then a folder per year or volume, e.g. /srv/media/Magazines/. Leave blank to use the Magazines folder under the External Disk Storage Path above. Include a trailing slash.',
+	],
 	"fisheye_plex_db_path" => [
 		'label' => 'Plex Library Database File',
 		'note' => 'Unlike the storage paths above, this is the actual database FILE itself, not its containing folder - the full path ending in com.plexapp.plugins.library.db (e.g. /var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db). Read-only lookup, for backfilling genre/director/writer/star/rating/duration when importing a film already known to Plex. Leave blank to skip Plex metadata lookup entirely.',

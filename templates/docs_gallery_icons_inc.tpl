@@ -5,10 +5,16 @@
 	{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
 	{if $gContent->hasUpdatePermission()}
 		{if $gBitUser->hasPermission( 'p_fisheye_admin' )}
-			{if $gContent->getTitle() eq 'Documentation'}
-				<a title="{tr}Docs workbench: every topic folder and what is left to load{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php">{biticon ipackage="icons" iname="document-properties" iexplain="Docs workbench"}</a>
+			{* the collection is the top gallery of the trail (or this gallery when it is the top); the folder is the gallery just under it *}
+			{assign var=docsTrail value=$gContent->getBreadcrumbTrail()}
+			{assign var=docsTop value=$gContent->getTitle()}
+			{if $docsTrail|@count}{assign var=docsTop value=$docsTrail[0].title}{/if}
+			{assign var=docsKind value=$docsTop|lower}
+			{if $docsTrail|@count > 1}{assign var=docsFolder value=$docsTrail[1].title}{elseif $docsTrail|@count}{assign var=docsFolder value=$gContent->getTitle()}{else}{assign var=docsFolder value=''}{/if}
+			{if $docsFolder eq ''}
+				<a title="{tr}Workbench: every folder and what is left to load{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?kind={$docsKind|escape:'url'}">{biticon ipackage="icons" iname="document-properties" iexplain="Docs workbench"}</a>
 			{else}
-				<a title="{tr}Docs workbench: load the files of this topic{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?topic={$gContent->getTitle()|escape:'url'}">{biticon ipackage="icons" iname="document-properties" iexplain="Docs workbench"}</a>
+				<a title="{tr}Workbench: load the files of this folder{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?kind={$docsKind|escape:'url'}&amp;topic={$docsFolder|escape:'url'}">{biticon ipackage="icons" iname="document-properties" iexplain="Docs workbench"}</a>
 			{/if}
 		{/if}
 		<a title="{tr}Edit{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_gallery.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>

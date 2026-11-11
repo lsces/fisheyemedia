@@ -13,6 +13,7 @@
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php">{tr}Author workbench{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}series_workbench.php">{tr}Series workbench{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php">{tr}Docs workbench{/tr}</a></li>
+	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?kind=magazines">{tr}Magazines workbench{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}add_books.php">{tr}Add Books from ISBNs{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}list_no_isbn.php">{tr}Books with no ISBN{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php?nocover=1">{tr}Book covers and details{/tr}</a></li>

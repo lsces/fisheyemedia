@@ -36,8 +36,8 @@ function mime_extdoc_resolve( string $pSpec ): ?string {
 	if( !preg_match( '/^[a-z]+$/', $key ) ) {
 		return null;
 	}
-	// the Documentation root falls back to the folder under the External Disk Storage Path (FisheyeDocsWorkbench::root()); another key has only its setting
-	$root = $key === 'documentation' ? realpath( \Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::root() ?: '/nonexistent' ) : realpath( (string)$gBitSystem->getConfig( 'mimeext_root_'.$key, '' ) );
+	// a collection's root falls back to its folder under the External Disk Storage Path (FisheyeDocsWorkbench::rootFor()); another key has only its setting
+	$root = realpath( \Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::rootFor( $key ) ?: '/nonexistent' );
 	if( !$root || $rel === '' || str_contains( $rel, '..' ) ) {
 		return null;
 	}
