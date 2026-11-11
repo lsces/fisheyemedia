@@ -38,8 +38,11 @@ if( $topic === '' ) {
 	$gBitSmarty->assign( 'errors', $errors );
 	$all = FisheyeDocsWorkbench::overview();
 	$showAll = !empty( $_REQUEST['all'] );
-	$gBitSmarty->assign( 'overview', $showAll ? $all : array_filter( $all, fn( $r ) => !$r['done'] ) );
-	$gBitSmarty->assign( 'finished', count( array_filter( $all, fn( $r ) => $r['done'] ) ) );
+	// the front page lists only what has files left to load (or an error to show); finished folders and folders with no files of their own
+	// (galleries made from uploads) are behind "Show the finished ones"
+	$hasWork = fn( $r ) => $r['error'] || $r['todo'] > 0;
+	$gBitSmarty->assign( 'overview', $showAll ? $all : array_filter( $all, $hasWork ) );
+	$gBitSmarty->assign( 'finished', count( array_filter( $all, fn( $r ) => !$hasWork( $r ) ) ) );
 	$gBitSmarty->assign( 'showAll', $showAll );
 	$gBitSmarty->assign( 'root', FisheyeDocsWorkbench::root() );
 	$gBitSmarty->assign( 'hasTop', (bool)FisheyeDocsWorkbench::topContentId() );
@@ -56,7 +59,8 @@ if( !empty( $_REQUEST['load_files'] ) ) {
 		$messages[] = $done['loaded'].' '.KernelTools::tra( 'files loaded' ).( $keepGoing ? ' ('.$done['seconds'].' s).' : '.' );
 	}
 	$errors = array_merge( $errors, $done['errors'] );
-	$gBitSmarty->assign( 'continue', $keepGoing && $done['loaded'] && !$errors );
+	// a file that fails does not stop the run (it is retried each press and listed); only a press that loads nothing does, so a bad PDF cannot stall an overnight load
+	$gBitSmarty->assign( 'continue', $keepGoing && $done['loaded'] > 0 );
 }
 $gBitSmarty->assign( 'keepGoingChecked', !empty( $_REQUEST['keep_going'] ) );
 $gBitSmarty->assign( 'keepSeconds', FisheyeDocsWorkbench::KEEP_GOING_SECONDS );

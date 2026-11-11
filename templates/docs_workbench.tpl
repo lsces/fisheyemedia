@@ -21,7 +21,7 @@
 
 			<h3>{tr}Files{/tr} <small>{$st.loaded} {tr}of{/tr} {$st.total} {tr}loaded{/tr}</small></h3>
 			{if $st.todo}
-				<p class="help-block">{tr}A press loads at most{/tr} {$batch} {tr}files. Keep going works for about{/tr} {$keepSeconds} {tr}seconds, then sends the next press by itself until the files are loaded or something goes wrong; close the page or press Stop to end it.{/tr}</p>
+				<p class="help-block">{tr}A press loads at most{/tr} {$batch} {tr}files. Keep going works for about{/tr} {$keepSeconds} {tr}seconds, then sends the next press by itself until the files are loaded, or a press loads nothing; a file that fails is listed and tried again, and does not stop it. Close the page or press Stop to end it.{/tr}</p>
 				{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php" id="docsWorkbenchForm"}
 					<input type="hidden" name="kind" value="{$kind}" />
 					<input type="hidden" name="topic" value="{$st.name|escape}" />
