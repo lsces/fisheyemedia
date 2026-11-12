@@ -290,6 +290,10 @@ class FisheyeDocsWorkbench {
 				'mimeplugin' => [ $file['handler'] => [ 'root' => self::$sKind, 'path' => $file['path'] ] ],
 				'process_storage' => STORAGE_IMAGE,
 			];
+			// an item filed in a restricted gallery is restricted the same way (as fisheye's own uploads do): restricting a gallery hides only its page
+			if( ( $inherit = FisheyeAccess::inheritedFor( $galleryContentId ) ) !== null ) {
+				$hash['protector']['role_id'] = $inherit;
+			}
 			if( $image->store( $hash ) && $image->mContentId ) {
 				$image->addToGalleries( [ $galleryId ] );
 				$result['loaded']++;
@@ -367,6 +371,10 @@ class FisheyeDocsWorkbench {
 		}
 		$gallery = new FisheyeGallery();
 		$storeHash = [ 'title' => $pTitle, 'gallery_pagination' => FISHEYE_PAGINATION_DOCS_GRID ];   // store() takes it by reference
+		// a gallery made inside a restricted gallery is restricted the same way
+		if( ( $inherit = FisheyeAccess::inheritedFor( $pParentContentId ) ) !== null ) {
+			$storeHash['protector']['role_id'] = $inherit;
+		}
 		if( !$gallery->store( $storeHash ) ) {
 			return null;
 		}
