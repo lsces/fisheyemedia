@@ -116,6 +116,14 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 		'handler_package'   => 'fisheyemedia',
 		'handler_file'      => 'FisheyeExtrasGallery.php',
 	] );
+	// One issue of a magazine (the Magazines workbench): a leaf like a book, with the issue's PDF referenced in place (FisheyeIssue).
+	$gLibertySystem->registerContentType( 'fisheyeissue', [
+		'content_type_guid' => 'fisheyeissue',
+		'content_name'      => 'Magazine Issue',
+		'handler_class'     => 'FisheyeIssue',
+		'handler_package'   => 'fisheyemedia',
+		'handler_file'      => 'FisheyeIssue.php',
+	] );
 	$gLibertySystem->registerContentType( 'fisheyesection', [
 		'content_type_guid' => 'fisheyesection',
 		'content_name'      => 'Tutorial Section',

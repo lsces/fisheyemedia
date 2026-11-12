@@ -34,6 +34,12 @@ if( $topic === '' ) {
 	if( !empty( $_REQUEST['make_top'] ) ) {
 		FisheyeDocsWorkbench::makeTop() ? $messages[] = KernelTools::tra( 'The top-level gallery was made.' ) : $errors[] = KernelTools::tra( 'The top-level gallery could not be made.' );
 	}
+	if( $kind === 'magazines' && !empty( $_REQUEST['convert_issues'] ) ) {
+		$conv = FisheyeDocsWorkbench::convertLoadedIssues();
+		$conv['converted'] ? $messages[] = $conv['converted'].' '.KernelTools::tra( 'loaded issues are now Magazine Issues.' ) : null;
+		$errors = array_merge( $errors, $conv['errors'] );
+	}
+	$gBitSmarty->assign( 'plainIssues', $kind === 'magazines' ? count( FisheyeDocsWorkbench::plainImageIssues() ) : 0 );
 	$gBitSmarty->assign( 'messages', $messages );
 	$gBitSmarty->assign( 'errors', $errors );
 	$all = FisheyeDocsWorkbench::overview();

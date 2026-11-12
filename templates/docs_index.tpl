@@ -12,6 +12,13 @@
 		{foreach from=$messages item=message}
 			<div class="alert alert-success"><p>{$message|escape}</p></div>
 		{/foreach}
+		{if $plainIssues}
+			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php"}
+				<input type="hidden" name="kind" value="{$kind}" />
+				<p>{$plainIssues} {tr}loaded issues are still plain Images, so they are found and listed as Images. Make them Magazine Issues (every row, thumbnail and file reference is kept).{/tr}</p>
+				<input type="submit" class="btn btn-default" name="convert_issues" value="{tr}Make them Magazine Issues{/tr}" />
+			{/form}
+		{/if}
 		{if !$root}
 			<div class="alert alert-warning"><p>{tr}No {$topTitle|escape} folder was found: set the {$topTitle|escape} Storage Path in Media Library Settings.{/tr}</p></div>
 		{else}

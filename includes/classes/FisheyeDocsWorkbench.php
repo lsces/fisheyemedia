@@ -283,7 +283,8 @@ class FisheyeDocsWorkbench {
 				continue;
 			}
 			self::activatePlugin( $file['handler'] );
-			$image = new FisheyeImage();
+			// a magazine file is a Magazine Issue; a document stays a plain Image
+			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : new FisheyeImage();
 			$hash = [
 				'title' => pathinfo( $file['name'], PATHINFO_FILENAME ),
 				'mimeplugin' => [ $file['handler'] => [ 'root' => self::$sKind, 'path' => $file['path'] ] ],
@@ -297,6 +298,41 @@ class FisheyeDocsWorkbench {
 			}
 		}
 		return $result;
+	}
+
+	/**
+	 * Magazine issues loaded before they had their own type are plain Images: how many, and (convertLoadedIssues) change them to Magazine Issues, keeping
+	 * every row, thumbnail and file reference. Done in the application (not by hand in the database), in one transaction, repeatable.
+	 */
+	public static function plainImageIssues(): array {
+		global $gBitDb;
+		$rows = $gBitDb->getCol(
+			"SELECT DISTINCT a.`content_id` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
+			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id`
+			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE 'magazines|%' AND lc.`content_type_guid` = 'fisheyeimage'" ) ?: [];
+		return array_map( 'intval', $rows );
+	}
+
+	/** @return array{converted:int,errors:list<string>} */
+	public static function convertLoadedIssues(): array {
+		global $gBitDb;
+		$ret = [ 'converted' => 0, 'errors' => [] ];
+		$ids = self::plainImageIssues();
+		if( !$ids ) {
+			return $ret;
+		}
+		$gBitDb->StartTrans();
+		foreach( $ids as $cid ) {
+			$gBitDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `content_type_guid` = 'fisheyeissue' WHERE `content_id` = ? AND `content_type_guid` = 'fisheyeimage'", [ $cid ] );
+			$ret['converted']++;
+		}
+		$gBitDb->CompleteTrans();
+		// getLibertyObject() looks a content item's type up through a query cached for an hour: without this flush a converted issue keeps coming back as an Image.
+		if( !empty( $gBitDb->mDb ) && method_exists( $gBitDb->mDb, 'CacheFlush' ) ) {
+			$gBitDb->mDb->CacheFlush();
+		}
+		return $ret;
 	}
 
 	/** content_id of the gallery for a folder path under Documentation (Architecture, Architecture/Sub), each level made when missing. */
