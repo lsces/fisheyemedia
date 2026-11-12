@@ -673,6 +673,42 @@ class FisheyeBook extends FisheyeMediaImage {
 	}
 
 	/**
+	 * A book with an epub and no ISBN takes the ISBN its epub carries (in its metadata, or printed on its copyright page or colophon - see
+	 * FisheyeBookCatalogue::epubIsbns()), stored as any ISBN row is so the Book Details jobs can then use it. The first number the epub gives is the
+	 * one taken (the publisher's own identifier comes first). An ISBN the book already has is never replaced. $pLook reports it and stores nothing.
+	 *
+	 * @return array{matched:bool,items:list<string>,error:string}
+	 */
+	public function isbnFromEpub( bool $pLook = false ): array {
+		$out = [ 'matched' => false, 'items' => [], 'error' => '' ];
+		if( $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ (int)$this->mContentId ] ) ) {
+			return $out;
+		}
+		$files = $this->mDb->getCol( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ebook' AND `end_date` IS NULL ORDER BY `xorder`", [ (int)$this->mContentId ] ) ?: [];
+		foreach( $files as $rel ) {
+			if( strtolower( pathinfo( (string)$rel, PATHINFO_EXTENSION ) ) !== 'epub' || !( $path = FisheyeBookFiles::pathFor( (string)$rel ) ) ) {
+				continue;
+			}
+			$found = FisheyeBookCatalogue::epubIsbns( $path );
+			if( !$found ) {
+				continue;
+			}
+			$out['matched'] = true;
+			$out['items'][] = 'isbn: '.$found[0].' from '.basename( $path ).( count( $found ) > 1 ? ' (it also names '.implode( ', ', array_slice( $found, 1 ) ).')' : '' );
+			if( !$pLook ) {
+				$hash = [ 'content_id' => (int)$this->mContentId, 'item' => 'isbn', 'isbn' => $found[0] ];
+				if( !$this->storeXref( $hash ) ) {
+					$out['matched'] = false;
+					$out['items'] = [];
+					$out['error'] = implode( ' ', (array)$this->mErrors ) ?: 'The ISBN could not be stored.';
+				}
+			}
+			return $out;
+		}
+		return $out;
+	}
+
+	/**
 	 * Every way an xref row is stored by hand (the Add form, the tab grid's edit) comes through here. An ISBN row is checked and
 	 * normalised first: whichever number was typed - ISBN-10 or ISBN-13, hyphens or not, in the `isbn`, `xkey_ext` or `xkey`
 	 * field - is stored as the ISBN-13 in xkey and the ISBN-10 beside it in xkey_ext, so the row always works for lookups, for

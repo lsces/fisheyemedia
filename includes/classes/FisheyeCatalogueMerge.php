@@ -70,6 +70,39 @@ class FisheyeCatalogueMerge {
 	}
 
 	/**
+	 * Write a catalogue file from the database: the database is the record and the file follows it. Empty cells are filled from the loaded books, books the
+	 * file lacks are added, and an ISBN the file has wrong is replaced by the book's (the ISBN-10 with it). Rows for books not loaded stay as they are, a
+	 * wish list. A year that differs is left alone - the file holds the work's first publication, the book often a later edition's - and listed as a
+	 * conflict. The old file is kept as for any other rewrite.
+	 *
+	 * @return array{filled:int,added:int,isbns:int,error:?string}
+	 */
+	public static function exportFile( array $pFile ): array {
+		$out = [ 'filled' => 0, 'added' => 0, 'isbns' => 0, 'error' => null ];
+		$plan = self::plan( $pFile );
+		if( $plan['error'] ) {
+			$out['error'] = $plan['error'];
+			return $out;
+		}
+		foreach( $plan['conflicts'] as [ , $column, , $value, , $row, $with ] ) {
+			if( $column === 'ISBN-13' && isset( $plan['body'][$row] ) ) {
+				$plan['body'][$row]['ISBN-13'] = $value;
+				foreach( $with as $c => $v ) {
+					$plan['body'][$row][$c] = $v;
+				}
+				$out['isbns']++;
+			}
+		}
+		$out['filled'] = count( $plan['filled'] );
+		$out['added'] = count( $plan['added'] );
+		$plan['changes'] = $out['filled'] + $out['added'] + $out['isbns'];
+		if( $plan['changes'] ) {
+			$out['error'] = self::write( $plan );
+		}
+		return $out;
+	}
+
+	/**
 	 * Put the file's year into the database for the books given (a catalogue and the database disagreeing on a year, the file being right): each book's
 	 * published row and event_time are set together. Recomputed from the file now; only a Year conflict of a listed book is touched. The date being replaced is
 	 * kept as the book's edition date (when there is none yet): a catalogue's year is the work's first publication, the database held a later edition's.
@@ -126,106 +159,6 @@ class FisheyeCatalogueMerge {
 		}
 		$error = self::write( [ 'error' => null, 'exists' => true, 'path' => $pPath, 'head' => $head, 'body' => $body, 'changes' => count( $filled ) ] );
 		return [ 'filled' => $error ? [] : $filled, 'error' => $error ];
-	}
-
-	/**
-	 * The ISBNs the author's own epubs carry for catalogue rows that have none: each row with an empty ISBN-13 cell is matched to an epub by title (the
-	 * epub's file name or the name of the folder it sits in, up to three folders down), and the ISBN-13s that epub's metadata lists are proposed. A
-	 * book whose epub names more than one (print and ebook editions) is offered with all of them, for the person to choose. Read-only.
-	 *
-	 * @return list<array{title:string,key:string,isbns:list<string>,file:string}>  key = md5 of the title, the form's field name
-	 */
-	public static function epubIsbnProposals( string $pAuthorAbs, string $pPath ): array {
-		$read = self::read( $pPath );
-		if( !$read || !is_dir( $pAuthorAbs ) ) {
-			return [];
-		}
-		$epubs = [];
-		$it = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $pAuthorAbs, \FilesystemIterator::SKIP_DOTS ) );
-		$it->setMaxDepth( 3 );
-		foreach( $it as $file ) {
-			if( $file->isFile() && strtolower( $file->getExtension() ) === 'epub' ) {
-				foreach( [ $file->getBasename( '.epub' ), basename( dirname( $file->getPathname() ) ) ] as $name ) {
-					$epubs[self::titleKey( $name )][$file->getPathname()] = true;
-				}
-			}
-		}
-		$out = [];
-		foreach( $read[1] as $row ) {
-			if( trim( (string)( $row['ISBN-13'] ?? '' ) ) !== '' || trim( (string)( $row['ISBN-10'] ?? '' ) ) !== '' ) {
-				continue;
-			}
-			$isbns = [];
-			$names = [];
-			foreach( array_keys( $epubs[self::titleKey( $row['Title'] )] ?? [] ) as $path ) {
-				foreach( FisheyeBookCatalogue::epubIsbns( $path ) as $isbn ) {
-					if( !in_array( $isbn, $isbns, true ) ) {
-						$isbns[] = $isbn;
-						$names[basename( $path )] = true;
-					}
-				}
-			}
-			if( $isbns ) {
-				$out[] = [ 'title' => $row['Title'], 'key' => md5( $row['Title'] ), 'isbns' => $isbns, 'file' => (string)array_key_first( $names ) ];
-			}
-		}
-		return $out;
-	}
-
-	/**
-	 * Write ISBNs into the catalogue file: for each title, its ISBN-13 and the ISBN-10 that goes with it, into the cells that are empty (a cell that holds
-	 * anything is never changed). The old file is kept as for any other rewrite.
-	 *
-	 * @param array<string,string> $pByTitle  title => ISBN-13
-	 * @return array{filled:list<string>,error:?string}  the titles whose cells were filled
-	 */
-	public static function fillIsbnCells( string $pPath, array $pByTitle ): array {
-		$read = self::read( $pPath );
-		if( !$read ) {
-			return [ 'filled' => [], 'error' => \Bitweaver\KernelTools::tra( 'The file could not be read as a catalogue (it needs the usual columns).' ) ];
-		}
-		[ $head, $body ] = $read;
-		$byKey = [];
-		foreach( $pByTitle as $title => $isbn ) {
-			$byKey[self::titleKey( (string)$title )] = $isbn;
-		}
-		$filled = [];
-		foreach( $body as &$row ) {
-			$key = self::titleKey( $row['Title'] );
-			if( isset( $byKey[$key] ) && trim( (string)( $row['ISBN-13'] ?? '' ) ) === '' && trim( (string)( $row['ISBN-10'] ?? '' ) ) === '' ) {
-				$isbn = FisheyeBook::normaliseIsbn( $byKey[$key] );
-				if( $isbn['isbn13'] !== '' ) {
-					$row['ISBN-13'] = $isbn['isbn13'];
-					$row['ISBN-10'] = $isbn['isbn10'];
-					$filled[] = $row['Title'];
-				}
-			}
-		}
-		unset( $row );
-		if( !$filled ) {
-			return [ 'filled' => [], 'error' => null ];
-		}
-		$error = self::write( [ 'error' => null, 'exists' => true, 'path' => $pPath, 'head' => $head, 'body' => $body, 'changes' => count( $filled ) ] );
-		return [ 'filled' => $error ? [] : $filled, 'error' => $error ];
-	}
-
-	/**
-	 * Give the books a catalogue file names an ISBN they do not have yet: a book loaded without one (a classic, or any book loaded from a Wikidata id) takes
-	 * the ISBN-13 its catalogue row holds, stored as any ISBN row is (so the Book Details jobs can then ask Open Library, Google Books and the shops). An ISBN
-	 * the book already has is never replaced. Recomputed from the file now.
-	 *
-	 * @return int  ISBNs stored
-	 */
-	public static function attachIsbns( array $pFile ): int {
-		$done = 0;
-		foreach( self::plan( $pFile )['isbn'] as [ , $isbn, $id ] ) {
-			$book = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => $id ] );
-			if( $book instanceof FisheyeBook ) {
-				$hash = [ 'content_id' => (int)$id, 'item' => 'isbn', 'isbn' => $isbn ];
-				$done += $book->storeXref( $hash ) ? 1 : 0;
-			}
-		}
-		return $done;
 	}
 
 	/**
@@ -448,7 +381,7 @@ class FisheyeCatalogueMerge {
 	 * @return array{kind:string,name:string,path:string,exists:bool,error:?string,head:array,body:array,filled:array,added:array,loose:array,conflicts:array,changes:int}
 	 */
 	public static function plan( array $pFile ): array {
-		$plan = $pFile + [ 'error' => null, 'head' => self::HEADER, 'body' => [], 'filled' => [], 'added' => [], 'loose' => [], 'conflicts' => [], 'attach' => [], 'isbn' => [], 'changes' => 0 ];
+		$plan = $pFile + [ 'error' => null, 'head' => self::HEADER, 'body' => [], 'filled' => [], 'added' => [], 'loose' => [], 'conflicts' => [], 'attach' => [], 'changes' => 0 ];
 		$books = self::details( self::bookIds( $pFile['kind'], $pFile['name'] ) );
 		if( $pFile['exists'] ) {
 			if( !( $read = self::read( $pFile['path'] ) ) ) {
@@ -475,13 +408,6 @@ class FisheyeCatalogueMerge {
 			}
 			$used[$id] = true;
 			$b = $books[$id];
-			// A book with no ISBN whose row has one: the file has what the book lacks (attachIsbns(), on request).
-			if( $b['isbn13'] === '' ) {
-				$fileIsbn = FisheyeBook::normaliseIsbn( trim( $row['ISBN-13'] ) !== '' ? $row['ISBN-13'] : (string)$row['ISBN-10'] )['isbn13'];
-				if( $fileIsbn !== '' ) {
-					$plan['isbn'][] = [ $row['Title'], $fileIsbn, $id ];
-				}
-			}
 			$want = [ 'ISBN-13' => $b['isbn13'], 'ISBN-10' => $b['isbn10'], 'Publisher' => $b['publisher'], 'Year' => $b['year'], 'Authors' => implode( '|', $b['authors'] ),
 				'Series' => $b['series'], 'Series no' => $b['pos'] ];
 			foreach( $want as $col => $val ) {

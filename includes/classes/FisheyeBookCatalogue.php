@@ -303,7 +303,8 @@ class FisheyeBookCatalogue {
 	/**
 	 * The ISBN-13s an epub's own metadata carries, in the order it lists them (the publisher's identifier first, then any other ISBN the metadata
 	 * mentions - a book often names its print edition as well as the ebook). Only numbers that pass their check digit are returned, an ISBN-10 as
-	 * its ISBN-13. Nothing is read but the package file; no text and no pictures.
+	 * its ISBN-13. After the metadata, the first six and last three pages of the book (the copyright page or colophon, where the publisher prints it) are read for an
+	 * "ISBN ..." line, since many ebooks leave it out of the metadata. No pictures are read.
 	 *
 	 * @return list<string>
 	 */
@@ -313,16 +314,40 @@ class FisheyeBookCatalogue {
 			return [];
 		}
 		$container = $zip->getFromName( 'META-INF/container.xml' );
-		$opf = $container !== false && preg_match( '/full-path="([^"]+)"/', $container, $m ) ? $zip->getFromName( $m[1] ) : false;
-		$zip->close();
+		$opfPath = $container !== false && preg_match( '/full-path="([^"]+)"/', $container, $m ) ? $m[1] : '';
+		$opf = $opfPath !== '' ? $zip->getFromName( $opfPath ) : false;
 		if( $opf === false ) {
+			$zip->close();
 			return [];
 		}
+		// the first few pages in reading order
+		$pages = '';
+		if( preg_match_all( '#<item\b[^>]*>#i', $opf, $items ) ) {
+			$hrefs = [];
+			foreach( $items[0] as $tag ) {
+				if( preg_match( '/\bid="([^"]+)"/', $tag, $iid ) && preg_match( '/\bhref="([^"]+)"/', $tag, $ihref ) ) {
+					$hrefs[$iid[1]] = $ihref[1];
+				}
+			}
+			$base = dirname( $opfPath ) === '.' ? '' : dirname( $opfPath ).'/';
+			if( preg_match_all( '/<itemref\b[^>]*idref="([^"]+)"/i', $opf, $spine ) ) {
+				$reading = array_values( array_filter( $spine[1], fn( $idref ) => isset( $hrefs[$idref] ) && preg_match( '/\.x?html?$/i', $hrefs[$idref] ) ) );
+				// the first six pages, and the last three (a colophon)
+				foreach( array_unique( array_merge( array_slice( $reading, 0, 6 ), array_slice( $reading, -3 ) ) ) as $idref ) {
+					$page = $zip->getFromName( $base.rawurldecode( $hrefs[$idref] ) );
+					$pages .= $page !== false ? ' '.strip_tags( (string)$page ) : '';
+				}
+			}
+		}
+		$zip->close();
 		$raw = [];
 		if( preg_match_all( '#<dc:identifier[^>]*>([^<]*)</dc:identifier>#i', $opf, $ids ) ) {
 			$raw = array_merge( $raw, $ids[1] );
 		}
 		if( preg_match_all( '/isbn[^0-9]{0,12}([0-9][0-9\- ]{8,16}[0-9Xx])/i', $opf, $text ) ) {
+			$raw = array_merge( $raw, $text[1] );
+		}
+		if( $pages !== '' && preg_match_all( '/isbn[^0-9]{0,12}([0-9][0-9\- ]{8,16}[0-9Xx])/i', $pages, $text ) ) {
 			$raw = array_merge( $raw, $text[1] );
 		}
 		$found = [];

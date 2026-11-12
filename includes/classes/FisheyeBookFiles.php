@@ -195,6 +195,12 @@ class FisheyeBookFiles {
 			if( $cover['error'] ) {
 				$summary['errors'][] = $cover['error'];
 			}
+			// ... and, with no ISBN yet, the ISBN the epub carries
+			$isbn = $pBook->isbnFromEpub();
+			$summary['isbn'] = $isbn['matched'] && !$isbn['error'];
+			if( $isbn['error'] ) {
+				$summary['errors'][] = $isbn['error'];
+			}
 		}
 		return $summary;
 	}

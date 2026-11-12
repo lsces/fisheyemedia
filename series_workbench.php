@@ -42,7 +42,12 @@ if( $series !== '' ) {
 			}
 		}
 	} elseif( !empty( $_REQUEST['update_catalogue'] ) && !$st['error'] ) {
-		$messages[] = FisheyeCatalogueMerge::updateSeries( $series ) ?? KernelTools::tra( 'The catalogue file had nothing to change.' );
+		$put = FisheyeCatalogueMerge::exportFile( [ 'kind' => 'series', 'name' => $series, 'path' => $catalogues[$series], 'exists' => true ] );
+		if( $put['error'] ) {
+			$errors[] = $put['error'];
+		} else {
+			$messages[] = KernelTools::tra( 'The catalogue file now follows the database' ).': '.$put['filled'].' '.KernelTools::tra( 'cells filled' ).', '.$put['added'].' '.KernelTools::tra( 'books added' ).', '.$put['isbns'].' '.KernelTools::tra( 'ISBNs corrected' ).'.';
+		}
 	} elseif( !empty( $_REQUEST['use_database_values'] ) && !$st['error'] ) {
 		$put = FisheyeCatalogueMerge::useDatabaseValues( [ 'kind' => 'series', 'name' => $series, 'path' => $catalogues[$series], 'exists' => true ],
 			array_map( fn( $v ) => htmlspecialchars_decode( (string)$v, ENT_NOQUOTES ), array_keys( (array)( $_REQUEST['db_value'] ?? [] ) ) ) );

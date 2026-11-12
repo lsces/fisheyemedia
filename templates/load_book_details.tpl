@@ -17,7 +17,7 @@
 							{if $made.error}{$made.error|escape}
 							{elseif $made.items}{foreach from=$made.items item=line name=lines}{$line|escape}{if !$smarty.foreach.lines.last}; {/if}{/foreach}
 							{elseif $made.matched}{tr}nothing missing that Open Library holds{/tr}
-							{elseif $job eq 'shops'}{tr}no cover at Amazon or AbeBooks{/tr}{elseif $job eq 'epub'}{tr}no cover in its epub{/tr}{else}{tr}not on Open Library{/tr}{/if}
+							{elseif $job eq 'shops'}{tr}no cover at Amazon or AbeBooks{/tr}{elseif $job eq 'epub'}{tr}no cover in its epub{/tr}{elseif $job eq 'epubisbn'}{tr}no ISBN in its epub{/tr}{else}{tr}not on Open Library{/tr}{/if}
 						</li>
 					{/foreach}
 				</ul>
@@ -80,6 +80,8 @@
 					<span class="help-block">{tr}For books older than their ISBNs: every book with a Wikidata work id (the catalogue's Wikidata column), with or without an ISBN. Wikidata gives the original publication date, the Gutenberg id and the Open Library work; the work then gives the description, genres and links. Blanks only - an id from the catalogue or entered by hand is kept. Tick Only look first.{/tr}</span>
 					<label><input type="radio" name="job" value="epub"{if $job eq 'epub'} checked="checked"{/if} /> {tr}Covers from the Books' Own Epubs{/tr} - {$counts.epub} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}Every book with an epub and no cover yet takes the cover its epub carries - the publisher's own picture, with no ISBN and no online source needed. Run it before the covers jobs below.{/tr}</span>
+					<label><input type="radio" name="job" value="epubisbn"{if $job eq 'epubisbn'} checked="checked"{/if} /> {tr}ISBNs from the Books' Own Epubs{/tr} - {$counts.epubisbn} {tr}to do{/tr}</label>
+					<span class="help-block">{tr}Every book with an epub and no ISBN takes the ISBN its epub carries - in its metadata, or printed on its copyright page or colophon. Where the epub names more than one, the first is taken (the publisher's own). Run it before the details and covers jobs, which need the ISBN. Tick Only look first to see what it would take.{/tr}</span>
 					<label><input type="radio" name="job" value="covers"{if $job eq 'covers'} checked="checked"{/if} /> {tr}Find Missing Covers{/tr} - {$counts.covers} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}The books with no image: Open Library is asked for a cover (then Google Books), and the rest of what it holds is filled in too. A book no source has a cover for is passed over, ready for your own scan.{/tr}</span>
 					<label><input type="radio" name="job" value="shops"{if $job eq 'shops'} checked="checked"{/if} /> {tr}Find Covers at Amazon and AbeBooks{/tr} - {$counts.shops} {tr}to do{/tr}</label>
@@ -111,7 +113,7 @@
 					{if $more}<a class="btn btn-default" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_book_details.php">{tr}Stop{/tr}</a>{/if}
 				</div>
 			{else}
-				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{elseif $job eq 'epub'}{tr}Finished - every book with an epub that carries a cover has one.{/tr}{elseif $job eq 'shops'}{tr}Finished - every book without a cover has been looked for at Amazon and AbeBooks.{/tr}{elseif $job eq 'google'}{tr}Finished - every book with a gap has been looked up on Google Books.{/tr}{elseif $job eq 'classics'}{tr}Finished - every book with a Wikidata work id has been looked at.{/tr}{else}{tr}Finished - every book with an ISBN has been looked at.{/tr}{/if}</p></div>
+				<div class="alert alert-success"><p>{if $job eq 'covers'}{tr}Finished - every book that can have a cover from Open Library or Google Books has one.{/tr}{elseif $job eq 'epub'}{tr}Finished - every book with an epub that carries a cover has one.{/tr}{elseif $job eq 'epubisbn'}{tr}Finished - every book with an epub that carries an ISBN has one.{/tr}{elseif $job eq 'shops'}{tr}Finished - every book without a cover has been looked for at Amazon and AbeBooks.{/tr}{elseif $job eq 'google'}{tr}Finished - every book with a gap has been looked up on Google Books.{/tr}{elseif $job eq 'classics'}{tr}Finished - every book with a Wikidata work id has been looked at.{/tr}{else}{tr}Finished - every book with an ISBN has been looked at.{/tr}{/if}</p></div>
 			{/if}
 		{/form}
 		<script>/* <![CDATA[ */

@@ -57,7 +57,7 @@ class FisheyeSeriesWorkbench {
 		$parsed = FisheyeBookCatalogue::readBooks( $pFile );
 		$st['parsed'] = $parsed['rows'] ?? [];
 		$merge = FisheyeCatalogueMerge::plan( [ 'kind' => 'series', 'name' => $pName, 'path' => $pFile, 'exists' => true ] );
-		$st['catalogue'] = [ 'filled' => count( $merge['filled'] ), 'added' => $merge['added'], 'conflicts' => $merge['conflicts'], 'attach' => $merge['attach'], 'changes' => $merge['changes'], 'error' => $merge['error'] ];
+		$st['catalogue'] = [ 'filled' => count( $merge['filled'] ), 'added' => $merge['added'], 'conflicts' => $merge['conflicts'], 'attach' => $merge['attach'], 'isbnConflicts' => count( array_filter( $merge['conflicts'], fn( $c ) => $c[1] === 'ISBN-13' ) ), 'changes' => $merge['changes'], 'error' => $merge['error'] ];
 		// The series' own gallery under Various Authors, once it exists.
 		$st['seriesUrl'] = '';
 		if( $plan['seriesId'] && ( $seriesGallery = \Bitweaver\Liberty\LibertyContent::getLibertyObject( (int)$plan['seriesId'] ) ) && $seriesGallery->isValid() ) {

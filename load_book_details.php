@@ -47,7 +47,7 @@ const LOAD_BOOK_DETAILS_NOCOVER_SHOWN = 100;
 const LOAD_BOOK_DETAILS_BATCH = 10;
 
 /** Content preference that marks a book already asked about, per job. */
-const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked', 'shops' => 'shop_covers_checked', 'epub' => 'epub_cover_checked', 'classics' => 'wikidata_details_checked' ];
+const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked', 'shops' => 'shop_covers_checked', 'epub' => 'epub_cover_checked', 'epubisbn' => 'epub_isbn_checked', 'classics' => 'wikidata_details_checked' ];
 
 /**
  * The books worth asking Open Library about, in content id order after $pAfter, leaving out those already asked about for this job
@@ -68,6 +68,9 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 	$who = $has( 'isbn' );
 	if( $pJob === 'classics' ) {
 		$who = $has( 'wikidata_work' );
+	} elseif( $pJob === 'epubisbn' ) {
+		// a book with an ebook file and no ISBN (the epub itself may carry one)
+		$who = $has( 'ebook' );
 	} elseif( $pJob === 'epub' ) {
 		// no ISBN needed: any book with an ebook file and no cover yet (the epub itself carries the cover, if it has one)
 		$who = $has( 'ebook' );
@@ -76,11 +79,13 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 		? "( NOT ".$has( 'gutenberg' )." OR NOT ".$has( 'ol_work' )." OR NOT ".$has( 'published' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
 		: ( $pJob === 'google'
 		? "( NOT ".$has( 'genre' )." OR NOT ".$has( 'pages' )." OR NOT ".$has( 'language' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
+		: ( $pJob === 'epubisbn'
+		? "NOT ".$has( 'isbn' )
 		: ( in_array( $pJob, [ 'covers', 'shops', 'epub' ], true )
 		? "NOT ".$has( 'image' )
 		: "( NOT ".$has( 'ol_edition' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0
-		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" ) );
-	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google', 'shops', 'classics' ], true ) ? $pJob : 'details']."' )";
+		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" ) ) );
+	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google', 'shops', 'classics', 'epub', 'epubisbn' ], true ) ? $pJob : 'details']."' )";
 	$rows = $gBitDb->getCol(
 		"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."liberty_content` lc
 		 WHERE lc.`content_type_guid` = 'fisheyebook' AND lc.`content_id` > ? AND $who AND $job$mark
@@ -131,13 +136,13 @@ function load_book_details_shop_cover( FisheyeBook $pBook, bool $pLook ): array 
 $after = max( 0, (int)( $_REQUEST['after'] ?? 0 ) );
 $googleKey = trim( (string)$gBitSystem->getConfig( 'fisheyemedia_google_books_api_key' ) ) !== '';
 $look = !empty( $_REQUEST['look'] );
-$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google', 'shops', 'classics', 'epub' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
+$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google', 'shops', 'classics', 'epub', 'epubisbn' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
 $again = !empty( $_REQUEST['again'] );
 // The classics job: Wikidata's original date replaces a stored one (otherwise it only fills a blank).
 $replaceDate = !empty( $_REQUEST['replace_date'] );
 $pending = load_book_details_pending( $after, $job, $again );
 $counts = [];
-foreach( array_filter( [ 'details', 'classics', 'epub', 'covers', 'shops', $googleKey ? 'google' : '' ] ) as $name ) {
+foreach( array_filter( [ 'details', 'classics', 'epub', 'epubisbn', 'covers', 'shops', $googleKey ? 'google' : '' ] ) as $name ) {
 	$counts[$name] = $name === $job ? count( $pending ) : count( load_book_details_pending( 0, $name, $again ) );
 }
 $doneBefore = (int)( $_REQUEST['done'] ?? 0 );
@@ -180,6 +185,8 @@ if( !empty( $_REQUEST['fetch'] ) ) {
 				$found = load_book_details_shop_cover( $book, $look );
 			} elseif( $job === 'epub' ) {
 				$found = $book->coverFromEpub( $look );
+			} elseif( $job === 'epubisbn' ) {
+				$found = $book->isbnFromEpub( $look );
 			} elseif( $job === 'classics' ) {
 				$found = $book->fillFromWikidata( $look, $replaceDate );
 			} else {
