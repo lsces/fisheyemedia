@@ -634,7 +634,7 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		$files = $this->mDb->getCol( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ebook' AND `end_date` IS NULL ORDER BY `xorder`", [ (int)$this->mContentId ] ) ?: [];
 		if( !array_filter( $files, fn( $f ) => strtolower( pathinfo( (string)$f, PATHINFO_EXTENSION ) ) === 'epub' ) ) {
-			return $out;
+			return $this->coverFromPdf( $files, $pLook );
 		}
 		// the epub reader lives in liberty's epub mime plugin, loaded with the plugins
 		if( !function_exists( '\Bitweaver\Liberty\mime_epub_read' ) ) {
@@ -669,6 +669,46 @@ class FisheyeBook extends FisheyeMediaImage {
 			@unlink( $tmp );
 			return $out;
 		}
+		return $this->coverFromPdf( $files, $pLook );
+	}
+
+	/**
+	 * The cover of a book that has no epub (or whose epub carries none): the first page of its whole-book PDF, drawn as a picture. The whole-book
+	 * PDF is the one named like the book; failing that, the only PDF it has. A book held as chapters alone has none, and is left for a scan.
+	 *
+	 * @param list<string> $pFiles  the book's ebook files, relative to the Library
+	 * @return array{matched:bool,items:list<string>,error:string}
+	 */
+	private function coverFromPdf( array $pFiles, bool $pLook ): array {
+		$out = [ 'matched' => false, 'items' => [], 'error' => '' ];
+		$pdfs = array_values( array_filter( $pFiles, fn( $f ) => strtolower( pathinfo( (string)$f, PATHINFO_EXTENSION ) ) === 'pdf' ) );
+		$key = fn( string $t ): string => preg_replace( '/[^a-z0-9]/', '', mb_strtolower( $t ) );
+		$named = array_values( array_filter( $pdfs, fn( $f ) => $key( pathinfo( (string)$f, PATHINFO_FILENAME ) ) === $key( (string)$this->getTitle() ) ) );
+		$chosen = $named[0] ?? ( count( $pdfs ) === 1 ? $pdfs[0] : null );
+		if( $chosen === null || !( $path = FisheyeBookFiles::pathFor( (string)$chosen ) ) || !is_readable( $path ) || !( $bin = trim( (string)shell_exec( 'command -v pdftoppm' ) ) ) ) {
+			return $out;
+		}
+		$base = tempnam( sys_get_temp_dir(), 'pdfcover_' );
+		shell_exec( escapeshellarg( $bin ).' -f 1 -l 1 -r 110 -jpeg -singlefile '.escapeshellarg( $path ).' '.escapeshellarg( $base ).' 2>/dev/null' );
+		$tmp = $base.'.jpg';
+		@unlink( $base );
+		$bytes = is_file( $tmp ) ? (string)file_get_contents( $tmp ) : '';
+		if( $bytes === '' || !FisheyeBookCovers::isPicture( $bytes ) ) {
+			@unlink( $tmp );
+			return $out;
+		}
+		$out['matched'] = true;
+		$out['items'][] = 'image: first page of '.basename( $path ).' ('.max( 1, (int)round( strlen( $bytes ) / 1024 ) ).' KB)';
+		if( !$pLook ) {
+			if( $this->storeArtworkXref( $tmp, 'pdf-cover', 'pdf:'.basename( $path ), [ 'types' => [ 'Front' ] ] ) === null ) {
+				$out['matched'] = false;
+				$out['items'] = [];
+				$out['error'] = 'The cover picture could not be stored.';
+			} else {
+				$out['items'][] = $this->attachThumbnail( $tmp ) ? 'thumbnail attached' : 'no thumbnail: '.$this->mThumbnailError;
+			}
+		}
+		@unlink( $tmp );
 		return $out;
 	}
 
@@ -1754,7 +1794,9 @@ class FisheyeBook extends FisheyeMediaImage {
 			if( !empty( $data['edition'] ) ) {
 				$label .= ' - '.$data['edition'];
 			}
-			$files[] = [ 'thumb' => $cover, 'url' => $row['item'] === 'audiobook' ? FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] : FisheyeBookFiles::openUrl( (int)$row['xref_id'], basename( rtrim( (string)$row['xkey_ext'], '/' ) ), FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] ), 'title' => basename( rtrim( (string)$row['xkey_ext'], '/' ) ), 'label' => $label ];
+			// a PDF shows its own first page (drawn once, kept in the book's storage folder); anything else the book's cover
+			$fileThumb = $row['item'] !== 'audiobook' && strtolower( pathinfo( (string)$row['xkey_ext'], PATHINFO_EXTENSION ) ) === 'pdf' && self::canDrawPdfThumbs() ? FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'].'&thumb=1' : $cover;
+			$files[] = [ 'thumb' => $fileThumb, 'url' => $row['item'] === 'audiobook' ? FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] : FisheyeBookFiles::openUrl( (int)$row['xref_id'], basename( rtrim( (string)$row['xkey_ext'], '/' ) ), FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] ), 'title' => basename( rtrim( (string)$row['xkey_ext'], '/' ) ), 'label' => $label ];
 		}
 		if( $extras['groups'] ) {
 			$extras['groups'][0]['items'] = array_merge( $files, $extras['groups'][0]['items'] );

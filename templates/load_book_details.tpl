@@ -17,7 +17,7 @@
 							{if $made.error}{$made.error|escape}
 							{elseif $made.items}{foreach from=$made.items item=line name=lines}{$line|escape}{if !$smarty.foreach.lines.last}; {/if}{/foreach}
 							{elseif $made.matched}{tr}nothing missing that Open Library holds{/tr}
-							{elseif $job eq 'shops'}{tr}no cover at Amazon or AbeBooks{/tr}{elseif $job eq 'epub'}{tr}no cover in its epub{/tr}{elseif $job eq 'epubisbn'}{tr}no ISBN in its epub{/tr}{else}{tr}not on Open Library{/tr}{/if}
+							{elseif $job eq 'shops'}{tr}no cover at Amazon or AbeBooks{/tr}{elseif $job eq 'epub'}{tr}no cover in its epub or whole-book PDF{/tr}{elseif $job eq 'epubisbn'}{tr}no ISBN in its epub{/tr}{else}{tr}not on Open Library{/tr}{/if}
 						</li>
 					{/foreach}
 				</ul>
@@ -79,7 +79,7 @@
 					<label><input type="radio" name="job" value="classics"{if $job eq 'classics'} checked="checked"{/if} /> {tr}Classics from Wikidata{/tr} - {$counts.classics} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}For books older than their ISBNs: every book with a Wikidata work id (the catalogue's Wikidata column), with or without an ISBN. Wikidata gives the original publication date, the Gutenberg id and the Open Library work; the work then gives the description, genres and links. Blanks only - an id from the catalogue or entered by hand is kept. Tick Only look first.{/tr}</span>
 					<label><input type="radio" name="job" value="epub"{if $job eq 'epub'} checked="checked"{/if} /> {tr}Covers from the Books' Own Epubs{/tr} - {$counts.epub} {tr}to do{/tr}</label>
-					<span class="help-block">{tr}Every book with an epub and no cover yet takes the cover its epub carries - the publisher's own picture, with no ISBN and no online source needed. Run it before the covers jobs below.{/tr}</span>
+					<span class="help-block">{tr}Every book with an epub and no cover yet takes the cover its epub carries - the publisher's own picture, with no ISBN and no online source needed. A book with no epub cover takes the first page of its whole-book PDF (the one named like the book). Run it before the covers jobs below.{/tr}</span>
 					<label><input type="radio" name="job" value="epubisbn"{if $job eq 'epubisbn'} checked="checked"{/if} /> {tr}ISBNs from the Books' Own Epubs{/tr} - {$counts.epubisbn} {tr}to do{/tr}</label>
 					<span class="help-block">{tr}Every book with an epub and no ISBN takes the ISBN its epub carries - in its metadata, or printed on its copyright page or colophon. Where the epub names more than one, the first is taken (the publisher's own). Run it before the details and covers jobs, which need the ISBN. Tick Only look first to see what it would take.{/tr}</span>
 					<label><input type="radio" name="job" value="covers"{if $job eq 'covers'} checked="checked"{/if} /> {tr}Find Missing Covers{/tr} - {$counts.covers} {tr}to do{/tr}</label>

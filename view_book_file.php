@@ -42,6 +42,20 @@ if( $path === null ) {
 	$gBitSystem->fatalError( KernelTools::tra( 'The file was not found' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
 }
 
+// ?thumb=1: a small picture of the file for the book's Extras panel - the first page of a PDF, drawn once and kept in the book's own storage folder (the file itself
+// is never copied or touched); anything else, or a PDF that cannot be drawn, gets the file type's own icon. Same permission checks as the file itself, above.
+if( !empty( $_REQUEST['thumb'] ) ) {
+	$thumb = $row['item'] === 'audiobook' ? null : $gContent->getFileThumbFile( $xrefId, $path );
+	if( $thumb !== null ) {
+		header( 'Content-Type: image/png' );
+		header( 'Cache-Control: private, max-age=86400' );
+		header( 'Content-Length: '.filesize( $thumb ) );
+		readfile( $thumb );
+		exit;
+	}
+	\Bitweaver\KernelTools::bit_redirect( $gContent->getFileIconUrl( basename( $path ) ) );
+}
+
 $mimeType = FisheyeBookFiles::mimeFor( $path ) ?? $gBitSystem->verifyMimeType( $path );
 header( 'Content-Disposition: '.( $row['item'] === 'audiobook' ? 'inline' : 'attachment' ).'; filename="'.rawurlencode( basename( $path ) ).'"' );
 \Bitweaver\Liberty\liberty_serve_range_file( $path, $mimeType );
