@@ -27,6 +27,10 @@ if( !$gBitSystem->isPackageActive( 'fisheye' ) ) {
 
 if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 
+	// {if 'Films'|library_visible} in this package's menu entries: an entry shows only when the top-level gallery it leads to can be opened by the viewer.
+	global $gBitSmarty;
+	$gBitSmarty->registerPlugin( 'modifier', 'library_visible', [ \Bitweaver\Fisheyemedia\FisheyeLibraryMenu::class, 'visible' ] );
+
 	// Content-type-specific grid variants - same rows*cols grid pagination as fixed_grid, own
 	// gallery_views/ template (still under base fisheye, pure presentation, harmless if unused -
 	// see fisheyemedia.md) so each swaps its floaticon set for the type's own workflow.

@@ -5,13 +5,13 @@
 {strip}
 {if $gBitUser->hasPermission('p_fisheye_view')}
 	<li class="divider"></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Documentation">{biticon ipackage="icons" iname="document" iexplain="Documentation" ilocation=menu}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Films">{biticon ipackage="icons" iname="video-x-generic" iexplain="Films" ilocation=menu}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Library">{biticon ipackage="icons" iname="folder-open" iexplain="Library" ilocation=menu}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Local+Tutorials">{biticon ipackage="icons" iname="applications-education" iexplain="Local Tutorials" ilocation=menu}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Local+Videos">{biticon ipackage="icons" iname="video-x-generic" iexplain="Local Videos" ilocation=menu}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Magazines">{biticon ipackage="icons" iname="x-office-document" iexplain="Magazines" ilocation=menu}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Music">{biticon ipackage="icons" iname="audio-x-generic" iexplain="Music" ilocation=menu}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=TV+Shows">{biticon ipackage="icons" iname="video-display" iexplain="TV Shows" ilocation=menu}</a></li>
+	{if 'Documentation'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Documentation">{biticon ipackage="icons" iname="document" iexplain="Documentation" ilocation=menu}</a></li>{/if}
+	{if 'Films'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Films">{biticon ipackage="icons" iname="video-x-generic" iexplain="Films" ilocation=menu}</a></li>{/if}
+	{if 'Library'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Library">{biticon ipackage="icons" iname="folder-open" iexplain="Library" ilocation=menu}</a></li>{/if}
+	{if 'Local Tutorials'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Local+Tutorials">{biticon ipackage="icons" iname="applications-education" iexplain="Local Tutorials" ilocation=menu}</a></li>{/if}
+	{if 'Local Videos'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Local+Videos">{biticon ipackage="icons" iname="video-x-generic" iexplain="Local Videos" ilocation=menu}</a></li>{/if}
+	{if 'Magazines'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Magazines">{biticon ipackage="icons" iname="x-office-document" iexplain="Magazines" ilocation=menu}</a></li>{/if}
+	{if 'Music'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=Music">{biticon ipackage="icons" iname="audio-x-generic" iexplain="Music" ilocation=menu}</a></li>{/if}
+	{if 'TV Shows'|library_visible}<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}library.php?root=TV+Shows">{biticon ipackage="icons" iname="video-display" iexplain="TV Shows" ilocation=menu}</a></li>{/if}
 {/if}
 {/strip}
