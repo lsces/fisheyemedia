@@ -568,6 +568,10 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * regenerates thumbs/ from the chosen file, as FisheyeAlbum::promoteImageToThumbnail() does.
 	 */
 	public function promoteImageToThumbnail( string $pRelativePath ): bool {
+		// a PDF file row (a chapter held as a PDF): its first page becomes the cover
+		if( $pRelativePath !== basename( $pRelativePath ) && strtolower( pathinfo( $pRelativePath, PATHINFO_EXTENSION ) ) === 'pdf' ) {
+			return $this->coverFromPdfFile( $pRelativePath ) === '';
+		}
 		$branchPath = $this->getImageStorageBranchPath();
 		if( basename( $pRelativePath ) !== $pRelativePath || !is_file( $branchPath.$pRelativePath ) ) {
 			return false;
@@ -688,13 +692,12 @@ class FisheyeBook extends FisheyeMediaImage {
 		if( $chosen === null || !( $path = FisheyeBookFiles::pathFor( (string)$chosen ) ) || !is_readable( $path ) || !( $bin = trim( (string)shell_exec( 'command -v pdftoppm' ) ) ) ) {
 			return $out;
 		}
-		$base = tempnam( sys_get_temp_dir(), 'pdfcover_' );
-		shell_exec( escapeshellarg( $bin ).' -f 1 -l 1 -r 110 -jpeg -singlefile '.escapeshellarg( $path ).' '.escapeshellarg( $base ).' 2>/dev/null' );
-		$tmp = $base.'.jpg';
-		@unlink( $base );
-		$bytes = is_file( $tmp ) ? (string)file_get_contents( $tmp ) : '';
+		$tmp = self::drawPdfFirstPage( $path );
+		$bytes = $tmp !== null ? (string)file_get_contents( $tmp ) : '';
 		if( $bytes === '' || !FisheyeBookCovers::isPicture( $bytes ) ) {
-			@unlink( $tmp );
+			if( $tmp !== null ) {
+				@unlink( $tmp );
+			}
 			return $out;
 		}
 		$out['matched'] = true;
@@ -710,6 +713,41 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		@unlink( $tmp );
 		return $out;
+	}
+
+	/**
+	 * The first page of a PDF drawn as a JPEG file at cover size, in a temporary file the caller removes; null when pdftoppm is missing or fails.
+	 */
+	private static function drawPdfFirstPage( string $pPath ): ?string {
+		if( !( $bin = trim( (string)shell_exec( 'command -v pdftoppm' ) ) ) ) {
+			return null;
+		}
+		$base = tempnam( sys_get_temp_dir(), 'pdfcover_' );
+		shell_exec( 'timeout 30 '.escapeshellarg( $bin ).' -f 1 -l 1 -r 110 -jpeg -singlefile '.escapeshellarg( $pPath ).' '.escapeshellarg( $base ).' 2>/dev/null' );
+		@unlink( $base );
+		return is_file( $base.'.jpg' ) && filesize( $base.'.jpg' ) > 0 ? $base.'.jpg' : null;
+	}
+
+	/**
+	 * Make the first page of one of this book's PDF files its cover, replacing the cover it has: the xref edit grid's Set as Thumbnail on an ebook or extra
+	 * row, for a book whose only pictures are its pages (chapters held as PDFs). The name must be one of this book's own file rows - never a path
+	 * the caller supplies.
+	 *
+	 * @param string $pRelative  the row's file, as stored (relative to the Library)
+	 * @return string  an error, or '' when the cover is stored
+	 */
+	public function coverFromPdfFile( string $pRelative ): string {
+		$listed = $pRelative !== '' && $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ( 'ebook', 'extra' ) AND `xkey_ext` = ? AND `end_date` IS NULL", [ (int)$this->mContentId, $pRelative ] );
+		if( !$listed || strtolower( pathinfo( $pRelative, PATHINFO_EXTENSION ) ) !== 'pdf' || !( $path = FisheyeBookFiles::pathFor( $pRelative ) ) || !is_readable( $path ) ) {
+			return 'That is not one of this book\'s PDF files.';
+		}
+		$tmp = self::drawPdfFirstPage( $path );
+		if( $tmp === null ) {
+			return 'The first page of that file could not be drawn.';
+		}
+		$stored = FisheyeBookCovers::isPicture( (string)file_get_contents( $tmp ) ) ? $this->replaceCover( $tmp, 'pdf:'.basename( $path ) ) : null;
+		@unlink( $tmp );
+		return $stored === null ? 'The picture could not be stored as the cover.' : '';
 	}
 
 	/**
