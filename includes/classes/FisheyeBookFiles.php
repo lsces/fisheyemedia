@@ -153,7 +153,7 @@ class FisheyeBookFiles {
 
 	/** Rebuild the book's ebook / audiobook / extra rows from its folder. A book with no folder keeps what it has. */
 	public static function register( FisheyeBook $pBook ): array {
-		$summary = [ 'folder' => null, 'ebook' => 0, 'audiobook' => 0, 'extra' => 0, 'errors' => [] ];
+		$summary = [ 'folder' => null, 'ebook' => 0, 'audiobook' => 0, 'extra' => 0, 'cover' => false, 'errors' => [] ];
 		if( !( $folder = self::folderFor( $pBook ) ) ) {
 			return $summary;
 		}
@@ -186,6 +186,14 @@ class FisheyeBookFiles {
 				} else {
 					$summary['errors'][] = $file['rel'].': '.implode( '; ', array_map( 'strval', array_values( $pBook->mErrors ) ) );
 				}
+			}
+		}
+		// A book that has an epub but no cover takes the cover the epub carries, so a book loaded without an ISBN is not left with a blank tile.
+		if( $summary['ebook'] > 0 ) {
+			$cover = $pBook->coverFromEpub();
+			$summary['cover'] = $cover['matched'] && !$cover['error'];
+			if( $cover['error'] ) {
+				$summary['errors'][] = $cover['error'];
 			}
 		}
 		return $summary;

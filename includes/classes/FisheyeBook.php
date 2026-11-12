@@ -619,6 +619,60 @@ class FisheyeBook extends FisheyeMediaImage {
 	}
 
 	/**
+	 * Give the book the cover its own epub carries: an epub nearly always embeds the publisher's cover, which needs no ISBN and no online source.
+	 * Only a book with no cover yet is touched (a stored cover, from any source, is left alone). The first epub among the book's ebook files
+	 * that has a usable embedded picture is used; it is stored exactly as a cover fetched from Open Library is (an image row, Front, and the
+	 * tile's thumbnail), with the epub named as its source. $pLook reports what would be used and stores nothing.
+	 *
+	 * @return array{matched:bool,items:list<string>,error:string}
+	 */
+	public function coverFromEpub( bool $pLook = false ): array {
+		global $gLibertySystem;
+		$out = [ 'matched' => false, 'items' => [], 'error' => '' ];
+		if( $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ (int)$this->mContentId ] ) ) {
+			return $out;
+		}
+		$files = $this->mDb->getCol( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ebook' AND `end_date` IS NULL ORDER BY `xorder`", [ (int)$this->mContentId ] ) ?: [];
+		if( !array_filter( $files, fn( $f ) => strtolower( pathinfo( (string)$f, PATHINFO_EXTENSION ) ) === 'epub' ) ) {
+			return $out;
+		}
+		// the epub reader lives in liberty's epub mime plugin, loaded with the plugins
+		if( !function_exists( '\Bitweaver\Liberty\mime_epub_read' ) ) {
+			$gLibertySystem->scanAllPlugins( null, "mime\." );
+		}
+		if( !function_exists( '\Bitweaver\Liberty\mime_epub_read' ) ) {
+			$out['error'] = 'The epub reader is not available.';
+			return $out;
+		}
+		foreach( $files as $rel ) {
+			if( strtolower( pathinfo( (string)$rel, PATHINFO_EXTENSION ) ) !== 'epub' || !( $path = FisheyeBookFiles::pathFor( (string)$rel ) ) ) {
+				continue;
+			}
+			$epub = \Bitweaver\Liberty\mime_epub_read( $path );
+			if( empty( $epub['cover'] ) || !FisheyeBookCovers::isPicture( $epub['cover'] ) ) {
+				continue;
+			}
+			$out['matched'] = true;
+			$out['items'][] = 'image: cover from '.basename( $path ).' ('.max( 1, (int)round( strlen( $epub['cover'] ) / 1024 ) ).' KB)';
+			if( $pLook ) {
+				return $out;
+			}
+			$tmp = tempnam( sys_get_temp_dir(), 'epubcover_' );
+			file_put_contents( $tmp, $epub['cover'] );
+			if( $this->storeArtworkXref( $tmp, 'epub-cover', 'epub:'.basename( $path ), [ 'types' => [ 'Front' ] ] ) === null ) {
+				$out['matched'] = false;
+				$out['items'] = [];
+				$out['error'] = 'The cover picture could not be stored.';
+			} else {
+				$out['items'][] = $this->attachThumbnail( $tmp ) ? 'thumbnail attached' : 'no thumbnail: '.$this->mThumbnailError;
+			}
+			@unlink( $tmp );
+			return $out;
+		}
+		return $out;
+	}
+
+	/**
 	 * Every way an xref row is stored by hand (the Add form, the tab grid's edit) comes through here. An ISBN row is checked and
 	 * normalised first: whichever number was typed - ISBN-10 or ISBN-13, hyphens or not, in the `isbn`, `xkey_ext` or `xkey`
 	 * field - is stored as the ISBN-13 in xkey and the ISBN-10 beside it in xkey_ext, so the row always works for lookups, for
