@@ -199,7 +199,7 @@ class FisheyeAuthorWorkbench {
 				$row['needs'][] = $st['files']['albumFolders'].' Audio folder'.( $st['files']['albumFolders'] === 1 ? '' : 's' ).' to load as '.( $st['files']['albumFolders'] === 1 ? 'an album' : 'albums' ).' ('.$st['files']['albumTodo'].' book'.( $st['files']['albumTodo'] === 1 ? '' : 's' ).')';
 				$row['next'] = $row['next'] === 'done' ? 'files' : $row['next'];
 			}
-			if( $st['catalogue']['changes'] || $st['catalogue']['conflicts'] || $st['catalogue']['attach'] ) {
+			if( $st['catalogue']['changes'] || $st['catalogue']['conflicts'] || $st['catalogue']['attach'] || $st['catalogue']['isbn'] || $st['catalogue']['epubIsbns'] ) {
 				$row['needs'][] = 'catalogue file behind the database'.( $st['catalogue']['conflicts'] ? ' ('.count( $st['catalogue']['conflicts'] ).' disagreements)' : '' ).( $st['catalogue']['attach'] ? ' ('.count( $st['catalogue']['attach'] ).' work ids to attach)' : '' );
 				$row['next'] = $row['next'] === 'done' ? 'catalogue' : $row['next'];
 			}
@@ -356,12 +356,14 @@ class FisheyeAuthorWorkbench {
 	 * it would add, and values the file and the database disagree on (reported, never changed).
 	 */
 	public static function catalogueDrift( ?string $pFolder, string $pPath, bool $pExists ): array {
-		$none = [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'attach' => [], 'changes' => 0, 'error' => null ];
+		$none = [ 'filled' => 0, 'added' => [], 'conflicts' => [], 'attach' => [], 'isbn' => [], 'epubIsbns' => [], 'changes' => 0, 'error' => null ];
 		if( $pFolder === null || !$pExists ) {
 			return $none;
 		}
 		$plan = FisheyeCatalogueMerge::plan( [ 'kind' => 'author', 'name' => $pFolder, 'path' => $pPath, 'exists' => true ] );
-		return [ 'filled' => count( $plan['filled'] ), 'added' => $plan['added'], 'conflicts' => $plan['conflicts'], 'attach' => $plan['attach'], 'changes' => $plan['changes'], 'error' => $plan['error'] ];
+		// rows with no ISBN whose own epub carries one (proposed for the file), and books with no ISBN whose row has one (for the database)
+		return [ 'filled' => count( $plan['filled'] ), 'added' => $plan['added'], 'conflicts' => $plan['conflicts'], 'attach' => $plan['attach'], 'isbn' => $plan['isbn'],
+			'epubIsbns' => FisheyeCatalogueMerge::epubIsbnProposals( dirname( $pPath ), $pPath ), 'changes' => $plan['changes'], 'error' => $plan['error'] ];
 	}
 
 	/**

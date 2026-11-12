@@ -1,6 +1,6 @@
 {* The catalogue file against the database - needs $catalogue (status.catalogue), $actionUrl, $hidden (name => value). Shown only when there is something to say. *}
 {strip}
-{if $catalogue.changes || $catalogue.conflicts || $catalogue.attach}
+{if $catalogue.changes || $catalogue.conflicts || $catalogue.attach || $catalogue.isbn || $catalogue.epubIsbns}
 	<div class="alert alert-info">
 		{if $catalogue.changes}
 			<p>{tr}The catalogue file is behind the database{/tr}: {$catalogue.filled} {tr}empty cells can be filled (ISBN, publisher, year) from books already loaded{/tr}{if $catalogue.added}, {tr}and these books are in the database but not in the file{/tr}: {foreach from=$catalogue.added item=title name=add}{$title|escape}{if !$smarty.foreach.add.last}, {/if}{/foreach}{/if}. {tr}A cell that already has a value is never changed.{/tr}</p>
@@ -17,6 +17,38 @@
 				{foreach from=$hidden key=hname item=hvalue}<input type="hidden" name="{$hname|escape}" value="{$hvalue|escape}" />{/foreach}
 				<div class="form-group submit">
 					<input type="submit" class="btn btn-default" name="attach_work_ids" value="{tr}Attach the file's work identifiers to the books{/tr}" />
+				</div>
+			{/form}
+		{/if}
+		{if $catalogue.epubIsbns}
+			<p>{tr}These books have no ISBN in the catalogue file, but their own epubs carry one{/tr}. {tr}Where an epub names more than one (the print and the ebook edition), choose the one to keep; the ISBN-10 goes with it.{/tr}</p>
+			{form legend="" action=$actionUrl}
+				{foreach from=$hidden key=hname item=hvalue}<input type="hidden" name="{$hname|escape}" value="{$hvalue|escape}" />{/foreach}
+				<table class="table table-condensed">
+					<tbody>
+						{foreach from=$catalogue.epubIsbns item=e}
+							<tr>
+								<td>{$e.title|escape} <small class="text-muted">{$e.file|escape}</small></td>
+								<td>
+									{foreach from=$e.isbns item=isbn name=isbnloop}
+										<label class="radio-inline"><input type="radio" name="epub_isbn[{$e.key}]" value="{$isbn|escape}"{if $smarty.foreach.isbnloop.first} checked="checked"{/if} /> {$isbn|escape}</label>
+									{/foreach}
+								</td>
+							</tr>
+						{/foreach}
+					</tbody>
+				</table>
+				<div class="form-group submit">
+					<input type="submit" class="btn btn-default" name="fill_isbns_from_epubs" value="{tr}Write these ISBNs in the catalogue file{/tr}" />
+				</div>
+			{/form}
+		{/if}
+		{if $catalogue.isbn}
+			<p>{tr}The file gives these books an ISBN that the books do not have yet{/tr}: {foreach from=$catalogue.isbn item=i name=isbnbooks}{$i.0|escape} ({$i.1|escape}){if !$smarty.foreach.isbnbooks.last}, {/if}{/foreach}. {tr}Once they have it the Book Details jobs can look their details and covers up by it.{/tr}</p>
+			{form legend="" action=$actionUrl}
+				{foreach from=$hidden key=hname item=hvalue}<input type="hidden" name="{$hname|escape}" value="{$hvalue|escape}" />{/foreach}
+				<div class="form-group submit">
+					<input type="submit" class="btn btn-default" name="attach_isbns" value="{tr}Attach the file's ISBNs to the books{/tr}" />
 				</div>
 			{/form}
 		{/if}

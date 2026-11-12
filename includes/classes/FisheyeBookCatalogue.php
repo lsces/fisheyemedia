@@ -301,6 +301,41 @@ class FisheyeBookCatalogue {
 	}
 
 	/**
+	 * The ISBN-13s an epub's own metadata carries, in the order it lists them (the publisher's identifier first, then any other ISBN the metadata
+	 * mentions - a book often names its print edition as well as the ebook). Only numbers that pass their check digit are returned, an ISBN-10 as
+	 * its ISBN-13. Nothing is read but the package file; no text and no pictures.
+	 *
+	 * @return list<string>
+	 */
+	public static function epubIsbns( string $pPath ): array {
+		$zip = new \ZipArchive();
+		if( !is_file( $pPath ) || $zip->open( $pPath, \ZipArchive::RDONLY ) !== true ) {
+			return [];
+		}
+		$container = $zip->getFromName( 'META-INF/container.xml' );
+		$opf = $container !== false && preg_match( '/full-path="([^"]+)"/', $container, $m ) ? $zip->getFromName( $m[1] ) : false;
+		$zip->close();
+		if( $opf === false ) {
+			return [];
+		}
+		$raw = [];
+		if( preg_match_all( '#<dc:identifier[^>]*>([^<]*)</dc:identifier>#i', $opf, $ids ) ) {
+			$raw = array_merge( $raw, $ids[1] );
+		}
+		if( preg_match_all( '/isbn[^0-9]{0,12}([0-9][0-9\- ]{8,16}[0-9Xx])/i', $opf, $text ) ) {
+			$raw = array_merge( $raw, $text[1] );
+		}
+		$found = [];
+		foreach( $raw as $value ) {
+			$isbn = FisheyeBook::normaliseIsbn( preg_replace( '/^urn:isbn:/i', '', trim( (string)$value ) ) );
+			if( $isbn['isbn13'] !== '' && !in_array( $isbn['isbn13'], $found, true ) ) {
+				$found[] = $isbn['isbn13'];
+			}
+		}
+		return $found;
+	}
+
+	/**
 	 * The work's own identifiers as a catalogue cell holds them - a Q-id, a Gutenberg number (or its ebook address) and an Open Library work id - each
 	 * kept only if it looks like one.
 	 *

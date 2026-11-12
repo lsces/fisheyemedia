@@ -114,6 +114,29 @@ if( !$st['error'] ) {
 				$messages[] = count( $put['filled'] ).' '.KernelTools::tra( 'Wikidata ids written to the catalogue file' ).( $put['filled'] ? ': '.implode( ', ', array_map( fn( $t ) => $t.' '.$byTitle[$t], $put['filled'] ) ) : '' ).'.';
 			}
 		}
+	} elseif( !empty( $_REQUEST['fill_isbns_from_epubs'] ) && $st['folder'] !== null ) {
+		// Only the ISBNs the page offered are taken: the epubs are read again now and a posted number must be one of the ones they carry for that title.
+		$offered = [];
+		foreach( FisheyeCatalogueMerge::epubIsbnProposals( $st['abs'], $st['abs'].FisheyeAuthorWorkbench::CATALOGUE ) as $p ) {
+			$offered[$p['title']] = $p['isbns'];
+		}
+		$byTitle = [];
+		foreach( (array)( $_REQUEST['epub_isbn'] ?? [] ) as $titleHash => $isbn ) {
+			foreach( $offered as $title => $isbns ) {
+				if( md5( $title ) === (string)$titleHash && in_array( (string)$isbn, $isbns, true ) ) {
+					$byTitle[$title] = (string)$isbn;
+				}
+			}
+		}
+		$put = FisheyeCatalogueMerge::fillIsbnCells( $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, $byTitle );
+		if( $put['error'] ) {
+			$errors[] = $put['error'];
+		} else {
+			$messages[] = count( $put['filled'] ).' '.KernelTools::tra( 'ISBNs from the epubs written to the catalogue file' ).( $put['filled'] ? ': '.implode( ', ', $put['filled'] ) : '' ).'.';
+		}
+	} elseif( !empty( $_REQUEST['attach_isbns'] ) && $st['folder'] !== null ) {
+		$n = FisheyeCatalogueMerge::attachIsbns( [ 'kind' => 'author', 'name' => $st['folder'], 'path' => $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, 'exists' => true ] );
+		$messages[] = $n.' '.KernelTools::tra( 'ISBNs from the catalogue file were attached to their books.' );
 	} elseif( !empty( $_REQUEST['attach_work_ids'] ) && $st['folder'] !== null ) {
 		$n = FisheyeCatalogueMerge::attachWorkIds( [ 'kind' => 'author', 'name' => $st['folder'], 'path' => $st['abs'].FisheyeAuthorWorkbench::CATALOGUE, 'exists' => true ] );
 		$messages[] = $n.' '.KernelTools::tra( 'work identifiers from the catalogue file were attached to their books.' );
