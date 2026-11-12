@@ -23,6 +23,7 @@
 
 		<div class="media-strip">
 		{foreach from=$gContent->mItems item=galItem key=itemContentId}
+			{if $itemContentId|listed_in:$gContent}
 			<div class="media-grid-item">
 				{box class="box `$galItem->mInfo.content_type_guid`"}
 					{assign var="tileThumb" value=$galItem->getThumbnailUri($gContent->getField('thumbnail_size'))}
@@ -38,6 +39,7 @@
 					{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='body' serviceHash=$galItem->mInfo type=mini}
 				{/box}
 			</div>
+			{/if}
 		{foreachelse}
 			<p class="norecords">{tr}This gallery is empty{/tr}.</p>
 		{/foreach}

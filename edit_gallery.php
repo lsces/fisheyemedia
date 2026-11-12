@@ -49,7 +49,10 @@ if( !empty( $_REQUEST['addgallery'] ) ) {
 // what the form shows: the gallery as it is, or what was typed when a save was refused
 $formTitle = $gContent->getTitle();
 $formEdit = (string)$gContent->getField( 'data' );
+$childGalleries = FisheyeGalleryList::childGalleries( (int)$gContent->mContentId );
+$keptOut = FisheyeGalleryList::hiddenIds( $gContent );
 if( !empty( $_REQUEST['savegallery'] ) ) {
+	$keptOut = array_map( 'intval', (array)( $_REQUEST['hide_child'] ?? [] ) );
 	$formTitle = trim( (string)( $_REQUEST['title'] ?? '' ) );
 	$formEdit = (string)( $_REQUEST['edit'] ?? '' );
 	// everything is checked before anything is written, so a refused save changes nothing
@@ -72,6 +75,7 @@ if( !empty( $_REQUEST['savegallery'] ) ) {
 			'thumbnail_size' => $gContent->getField( 'thumbnail_size' ),
 		] );
 		if( $gContent->store( $hash ) ) {
+			FisheyeGalleryList::save( $gContent, $keptOut );
 			$moveErrors = FisheyeManagedGallery::move( $gContent, $checked['moves'] );
 			if( !$moveErrors ) {
 				KernelTools::bit_redirect( $gContent->getDisplayUrl() );
@@ -86,6 +90,8 @@ if( !empty( $_REQUEST['savegallery'] ) ) {
 $gContent->invokeServices( 'content_edit_function' );   // as fisheye's Edit page: lets the services (the access chooser) prepare their own form fields
 $gBitSmarty->assign( 'gContent', $gContent );
 $gBitSmarty->assign( 'placements', FisheyeManagedGallery::placements( $gContent ) );
+$gBitSmarty->assign( 'childGalleries', $childGalleries );
+$gBitSmarty->assign( 'keptOut', $keptOut );
 $gBitSmarty->assign( 'feedback', $feedback );
 $gBitSmarty->assign( 'formTitle', $formTitle );
 $gBitSmarty->assign( 'formEdit', $formEdit );

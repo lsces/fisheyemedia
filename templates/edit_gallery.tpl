@@ -46,6 +46,20 @@
 				{/forminput}
 			</div>
 
+			{if $childGalleries}
+			<div class="form-group">
+				{formlabel label="Kept out of this gallery's list" for="hide-child"}
+				{forminput}
+					<select class="form-control" multiple="multiple" size="{if $childGalleries|@count > 8}8{else}{$childGalleries|@count}{/if}" name="hide_child[]" id="hide-child">
+						{foreach from=$childGalleries key=childId item=childTitle}
+							<option value="{$childId}"{if in_array($childId, $keptOut)} selected="selected"{/if}>{$childTitle|escape}</option>
+						{/foreach}
+					</select>
+					{formhelp note="Select the galleries inside this one that are only a storage location (the pictures of the books, say) to leave them out of this gallery's list; Ctrl-click selects several or clears one. They stay where they are and can still be opened by their own link; this does not restrict who may open them."}
+				{/forminput}
+			</div>
+			{/if}
+
 			{* the services' own fields - for a gallery, the access chooser - exactly where fisheye's own Edit page puts them *}
 			{include file="bitpackage:liberty/edit_services_inc.tpl" serviceFile="content_edit_mini_tpl"}
 
