@@ -62,12 +62,15 @@ if( !empty( $_REQUEST['savegallery'] ) ) {
 	}
 	if( empty( $feedback['error'] ) ) {
 		// the layout and thumbnail size go back in with the title and description so the grid settings are not reset
-		$hash = [
+		// the posted form goes through as fisheye's own Edit page does it, so the services' own fields (the access chooser) reach their store hooks;
+		// the fields this page owns are then set from what was checked above
+		$hash = array_merge( $_REQUEST, [
+			'content_id' => $gContent->mContentId,
 			'title' => $formTitle,
 			'edit' => $formEdit,
 			'gallery_pagination' => $gContent->getLayout(),
 			'thumbnail_size' => $gContent->getField( 'thumbnail_size' ),
-		];
+		] );
 		if( $gContent->store( $hash ) ) {
 			$moveErrors = FisheyeManagedGallery::move( $gContent, $checked['moves'] );
 			if( !$moveErrors ) {
@@ -80,6 +83,7 @@ if( !empty( $_REQUEST['savegallery'] ) ) {
 	}
 }
 
+$gContent->invokeServices( 'content_edit_function' );   // as fisheye's Edit page: lets the services (the access chooser) prepare their own form fields
 $gBitSmarty->assign( 'gContent', $gContent );
 $gBitSmarty->assign( 'placements', FisheyeManagedGallery::placements( $gContent ) );
 $gBitSmarty->assign( 'feedback', $feedback );

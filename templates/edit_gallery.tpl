@@ -46,6 +46,9 @@
 				{/forminput}
 			</div>
 
+			{* the services' own fields - for a gallery, the access chooser - exactly where fisheye's own Edit page puts them *}
+			{include file="bitpackage:liberty/edit_services_inc.tpl" serviceFile="content_edit_mini_tpl"}
+
 			<div class="form-group submit">
 				<input type="submit" class="btn btn-default" name="cancelgallery" value="{tr}Cancel{/tr}" />
 				<input type="submit" class="btn btn-primary" name="savegallery" value="{tr}Save{/tr}" />
@@ -53,6 +56,7 @@
 		{/form}
 
 		{/jstab}
+		{include file="bitpackage:liberty/edit_services_inc.tpl" serviceFile="content_edit_tab_tpl"}
 		{jstab title="{tr}Add Gallery{/tr}"}
 		{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`edit_gallery.php"}
 			<input type="hidden" name="gallery_id" value="{$gContent->mGalleryId}" />
