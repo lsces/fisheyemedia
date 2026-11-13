@@ -34,7 +34,7 @@ $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 
 const LOAD_COLLECTION_EXTENSIONS = [ 'mkv', 'mp4', 'm4v', 'avi' ];
 
-$topGalleryId = FisheyeGallery::getTopGalleryId( 'Films' );
+$topGalleryId = FisheyeMediaBases::galleryId( 'films' );
 $root = \Bitweaver\Liberty\mime_film_get_storage_root();
 $filmsDir = $root.'Films/';
 

@@ -457,6 +457,50 @@ class FisheyeBookFiles {
 	}
 
 	/**
+	 * Promote one of a book's ebook files to an item of its own: a document kept where it is (the PDF or epub handler of the mimeext family, text
+	 * to the search index, first page or cover as its thumbnail), filed in the book's pictures folder, and the book's ebook row pointed at it by
+	 * content_id - the arrangement an audio book has with its album. Each edition, or each chapter held as a PDF, is then a result of its own.
+	 * A row already pointing at an item is left alone.
+	 *
+	 * @param array $pRow  the book's 'ebook' liberty_xref row
+	 * @return array{created?:int,skipped?:bool,error?:string}
+	 */
+	public static function promoteEbook( FisheyeBook $pBook, array $pRow ): array {
+		global $gBitDb;
+		$rel = (string)$pRow['xkey_ext'];
+		$handler = FisheyeDocsWorkbench::HANDLERS[strtolower( pathinfo( $rel, PATHINFO_EXTENSION ) )] ?? null;
+		if( !$handler || self::pathFor( $rel ) === null ) {
+			return [ 'error' => 'No handler, or no file, for '.$rel ];
+		}
+		if( (int)( $pRow['xref'] ?? 0 ) > 0 && $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ (int)$pRow['xref'] ] ) ) {
+			return [ 'skipped' => true ];
+		}
+		$folder = $pBook->ensurePicturesFolder();
+		if( !empty( $folder['error'] ) ) {
+			return [ 'error' => $folder['error'] ];
+		}
+		FisheyeDocsWorkbench::activatePlugin( $handler );
+		$data = json_decode( (string)$pRow['data'], true ) ?: [];
+		$title = trim( (string)( $data['edition'] ?? '' ) ) ?: pathinfo( basename( $rel ), PATHINFO_FILENAME );
+		$image = new \Bitweaver\Fisheye\FisheyeImage();
+		$hash = [ 'title' => $title, 'mimeplugin' => [ $handler => [ 'root' => 'library', 'path' => $rel ] ], 'process_storage' => STORAGE_IMAGE ];
+		// an item filed in a restricted gallery is restricted the same way
+		if( ( $inherit = FisheyeAccess::inheritedFor( (int)$folder['content_id'] ) ) !== null ) {
+			$hash['protector']['role_id'] = $inherit;
+		}
+		if( !$image->store( $hash ) || !$image->mContentId ) {
+			return [ 'error' => $rel.': '.implode( '; ', array_map( 'strval', array_values( $image->mErrors ) ) ) ];
+		}
+		$image->addToGalleries( [ (int)$folder['gallery_id'] ] );
+		$rowHash = [ 'xref_id' => (int)$pRow['xref_id'], 'content_id' => (int)$pBook->mContentId, 'item' => 'ebook', 'xkey' => (string)( $pRow['xkey'] ?? '' ), 'xkey_ext' => $rel,
+			'xref' => (int)$image->mContentId, 'edit' => (string)$pRow['data'], 'xorder' => (int)$pRow['xorder'] ];
+		if( !$pBook->storeXref( $rowHash ) ) {
+			return [ 'error' => 'The item was made (content_id '.$image->mContentId.') but the book\'s ebook row was not pointed at it: '.implode( '; ', array_map( 'strval', array_values( $pBook->mErrors ) ) ) ];
+		}
+		return [ 'created' => (int)$image->mContentId ];
+	}
+
+	/**
 	 * The real file behind a stored row, or null: only a path under the Library root, only a file. A wrapper folder row (a multi-file audio
 	 * book, xkey_ext ending '/') gives its $pTrack'th file (1 = first) in natural order.
 	 */

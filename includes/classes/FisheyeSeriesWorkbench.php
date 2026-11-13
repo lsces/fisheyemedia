@@ -27,7 +27,7 @@ class FisheyeSeriesWorkbench {
 	 */
 	public static function redirectFor( int $pContentId ): ?string {
 		global $gBitDb;
-		$vaId = FisheyeBookCredits::libraryGalleryFor( FisheyeMediaGallery::VARIOUS_AUTHORS );
+		$vaId = FisheyeBookCredits::variousAuthorsId();
 		if( !$vaId ) {
 			return null;
 		}

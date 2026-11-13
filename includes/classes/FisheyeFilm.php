@@ -23,6 +23,10 @@ require_once dirname( __DIR__, 3 ).'/liberty/plugins/mime.film.php';
 define( 'FISHEYEFILM_CONTENT_TYPE_GUID', 'fisheyefilm' );
 
 class FisheyeFilm extends FisheyeMediaImage {
+	public function mediaBaseRole(): ?string {
+		return 'films';
+	}
+
 
 	public function __construct( $pImageId = null, $pContentId = null ) {
 		parent::__construct( $pImageId, $pContentId );
@@ -483,7 +487,7 @@ class FisheyeFilm extends FisheyeMediaImage {
 	 */
 	public static function collectionChoices(): array {
 		global $gBitDb;
-		$topId = FisheyeGallery::getTopGalleryId( 'Films' );
+		$topId = FisheyeMediaBases::galleryId( 'films' );
 		$topContentId = $topId ? $gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topId ] ) : null;
 		if( !$topContentId ) {
 			return [];

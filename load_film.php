@@ -39,7 +39,7 @@ const LOAD_FILM_LIMIT = 20;
 const LOAD_FILM_EXTENSIONS = [ 'mkv', 'mp4', 'm4v', 'avi' ];
 // Resolved by title, not hardcoded - see FisheyeGallery::getTopGalleryId()'s own docblock for
 // why (was a literal, install-order-dependent "1" here until 2026-09-03).
-$topGalleryId = FisheyeGallery::getTopGalleryId( 'Films' );
+$topGalleryId = FisheyeMediaBases::galleryId( 'films' );
 
 $root = \Bitweaver\Liberty\mime_film_get_storage_root();
 $filmsDir = $root.'Films/';

@@ -58,7 +58,7 @@ class FisheyeVariousAuthors {
 				$authors[$name] = true;
 			}
 		}
-		$vaId = FisheyeBookCredits::libraryGalleryFor( FisheyeMediaGallery::VARIOUS_AUTHORS );
+		$vaId = FisheyeBookCredits::variousAuthorsId();
 		$seriesId = $vaId ? $gBitDb->getOne(
 			"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
 			 WHERE m.`gallery_content_id` = ? AND lc.`title` = ?", [ $vaId, $pSeries ] ) : null;
@@ -93,7 +93,7 @@ class FisheyeVariousAuthors {
 	 * @return array{added:int,missing:int,linked:int,made:int,moved:int,error:?string}
 	 */
 	public static function apply( array $pPlan, array $pMoveAuthors = [] ): array {
-		$va = FisheyeBookCredits::findOrCreateLibraryGallery( FisheyeMediaGallery::VARIOUS_AUTHORS );
+		$va = FisheyeBookCredits::findOrCreateVariousAuthors();
 		if( $va['error'] ) {
 			return [ 'added' => 0, 'missing' => 0, 'linked' => 0, 'made' => 0, 'moved' => 0, 'error' => $va['error'] ];
 		}

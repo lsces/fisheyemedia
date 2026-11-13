@@ -277,7 +277,7 @@ class FisheyeCatalogueMerge {
 		global $gBitDb;
 		$ids = [];
 		if( $pKind === 'series' ) {
-			$va = FisheyeBookCredits::libraryGalleryFor( FisheyeMediaGallery::VARIOUS_AUTHORS );
+			$va = FisheyeBookCredits::variousAuthorsId();
 			$series = $va ? $gBitDb->getOne( "SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
 				WHERE m.`gallery_content_id` = ? AND lc.`title` = ?", [ $va, $pName ] ) : null;
 			$galleries = $series ? [ (int)$series ] : [];

@@ -200,6 +200,10 @@ const FISHEYEALBUM_VORBIS_KEY_MAP = [
 ];
 
 class FisheyeAlbum extends FisheyeMediaImage {
+	public function mediaBaseRole(): ?string {
+		return 'music';
+	}
+
 
 	public function __construct( $pImageId = null, $pContentId = null ) {
 		parent::__construct( $pImageId, $pContentId );
@@ -279,6 +283,24 @@ class FisheyeAlbum extends FisheyeMediaImage {
 		}
 		$folder = FisheyeBookFiles::libraryRoot().$rel;
 		return is_dir( $folder ) ? $folder : null;
+	}
+
+	/**
+	 * This album's own track titles, for LibertyContent::verify()/setIndexData()'s shared getExtraIndexWords() hook - the same arrangement as
+	 * FisheyeSeason's episodes. A track is a 'track' xref row on the album (its title in the row's JSON data, the file name when it has none), not a
+	 * content item of its own, so without this a song could never find the album it is on. The artist, composer and the like are links to contacts and
+	 * are found through those, not as text here.
+	 */
+	public function getExtraIndexWords( array $pParamHash ): string {
+		if( !$this->mContentId ) {
+			return '';
+		}
+		$words = [];
+		foreach( $this->mDb->getAll( "SELECT `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'track' AND `end_date` IS NULL ORDER BY `xorder`", [ (int)$this->mContentId ] ) ?: [] as $row ) {
+			$data = !empty( $row['data'] ) ? json_decode( (string)$row['data'], true ) : [];
+			$words[] = (string)( $data['title'] ?? pathinfo( (string)$row['xkey_ext'], PATHINFO_FILENAME ) );
+		}
+		return implode( ' ', $words );
 	}
 
 	/**

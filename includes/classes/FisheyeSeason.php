@@ -29,6 +29,10 @@ require_once dirname( __DIR__, 3 ).'/liberty/plugins/mime.film.php';
 define( 'FISHEYESEASON_CONTENT_TYPE_GUID', 'fisheyeseason' );
 
 class FisheyeSeason extends FisheyeMediaImage {
+	public function mediaBaseRole(): ?string {
+		return 'tv';
+	}
+
 
 	public function __construct( $pImageId = null, $pContentId = null ) {
 		parent::__construct( $pImageId, $pContentId );

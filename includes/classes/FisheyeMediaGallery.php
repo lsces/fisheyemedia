@@ -395,7 +395,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	public function getAuthorLabels(): array {
 		if( !$this->isValid() || !(int)$this->mDb->getOne(
 			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m INNER JOIN `".BIT_DB_PREFIX."liberty_content` v ON v.`content_id` = m.`gallery_content_id`
-			 WHERE m.`item_content_id` = ? AND v.`title` = ?", [ $this->mContentId, self::VARIOUS_AUTHORS ] ) ) {
+			 WHERE m.`item_content_id` = ? AND v.`content_id` = ?", [ $this->mContentId, (int)FisheyeBookCredits::variousAuthorsId() ] ) ) {
 			return [];
 		}
 		return $this->mDb->getAssoc(
@@ -403,8 +403,8 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` c ON c.`content_id` = m.`item_content_id` AND c.`content_type_guid` IN ( 'fisheyeseries', 'fisheyemediagal', 'fisheyegallery' )
 			 INNER JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m2 ON m2.`item_content_id` = c.`content_id`
 			 INNER JOIN `".BIT_DB_PREFIX."liberty_content` a ON a.`content_id` = m2.`gallery_content_id`
-			 WHERE m.`gallery_content_id` = ? AND a.`content_id` <> ? AND a.`title` NOT IN ( ?, 'Library' )",
-			[ $this->mContentId, $this->mContentId, self::VARIOUS_AUTHORS ] ) ?: [];
+			 WHERE m.`gallery_content_id` = ? AND a.`content_id` <> ? AND a.`content_id` NOT IN ( ?, ? )",
+			[ $this->mContentId, $this->mContentId, (int)FisheyeBookCredits::variousAuthorsId(), (int)FisheyeMediaBases::contentId( 'library' ) ] ) ?: [];
 	}
 
 	/**
@@ -423,7 +423,7 @@ class FisheyeMediaGallery extends FisheyeGallery {
 			 JOIN `".BIT_DB_PREFIX."liberty_content` p ON p.`content_id` = m.`gallery_content_id`
 			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m2 ON m2.`item_content_id` = p.`content_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` v ON v.`content_id` = m2.`gallery_content_id`
-			 WHERE m.`item_content_id` = ? AND p.`content_id` <> ? AND v.`title` = ?", [ $this->mContentId, $this->mContentId, static::VARIOUS_AUTHORS ] );
+			 WHERE m.`item_content_id` = ? AND p.`content_id` <> ? AND v.`content_id` = ?", [ $this->mContentId, $this->mContentId, (int)FisheyeBookCredits::variousAuthorsId() ] );
 		if( !$row ) {
 			return null;
 		}

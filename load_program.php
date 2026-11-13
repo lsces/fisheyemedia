@@ -55,7 +55,7 @@ const LOAD_PROGRAM_EXTENSIONS = [ 'mkv', 'mp4', 'm4v', 'avi' ];
 const LOAD_PROGRAM_FLAT_SEASON = '.';
 // Resolved by title, not hardcoded - see FisheyeGallery::getTopGalleryId()'s own docblock for
 // why (was a literal, install-order-dependent "2" here until 2026-09-03).
-$topGalleryId = FisheyeGallery::getTopGalleryId( 'TV Shows' );
+$topGalleryId = FisheyeMediaBases::galleryId( 'tv' );
 
 // ?local=1 lists the series in the Local Videos library instead of the TV library, ?local=tutorials the courses in Local Tutorials -
 // see FisheyeProgram::locateShowFolder().

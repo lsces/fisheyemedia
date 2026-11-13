@@ -126,7 +126,7 @@ class FisheyePhysical {
 		$prefix = BIT_DB_PREFIX;
 		$index = [ 'musicContentId' => null, 'artists' => [], 'albumsByArtist' => [], 'albums' => [], 'films' => [], 'programs' => [], 'titles' => [], 'collections' => [], 'copies' => [] ];
 
-		$musicGalleryId = FisheyeGallery::getTopGalleryId( 'Music' );
+		$musicGalleryId = FisheyeMediaBases::galleryId( 'music' );
 		if( $musicGalleryId ) {
 			$index['musicContentId'] = (int)$gBitDb->getOne( "SELECT `content_id` FROM `{$prefix}fisheye_gallery` WHERE `gallery_id` = ?", [ $musicGalleryId ] );
 			foreach( $gBitDb->getAll(
@@ -172,8 +172,8 @@ class FisheyePhysical {
 		// Collection galleries in Films and TV Shows (Lord of the Rings, Carry On ...) - a boxed set of several
 		// films is one copy of the collection, not of any one film in it.
 		$index['collections'] = [];
-		foreach( [ 'Films', 'TV Shows' ] as $topTitle ) {
-			$topId = FisheyeGallery::getTopGalleryId( $topTitle );
+		foreach( [ 'films', 'tv' ] as $role ) {
+			$topId = FisheyeMediaBases::galleryId( $role );
 			$topContentId = $topId ? (int)$gBitDb->getOne( "SELECT `content_id` FROM `{$prefix}fisheye_gallery` WHERE `gallery_id` = ?", [ $topId ] ) : 0;
 			if( !$topContentId ) {
 				continue;

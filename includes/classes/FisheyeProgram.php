@@ -34,6 +34,10 @@ require_once dirname( __DIR__, 3 ).'/liberty/plugins/mime.film.php';
 define( 'FISHEYEPROGRAM_CONTENT_TYPE_GUID', 'fisheyeprogram' );
 
 class FisheyeProgram extends FisheyeMediaGallery {
+	public function mediaBaseRole(): ?string {
+		return 'tv';
+	}
+
 	// The folder under the film storage root, and the title of the top-level gallery, holding shows that are not in the TV library.
 	public const LOCAL_FOLDER = 'Local Videos';
 	// Likewise for downloaded video courses: a course is a show, a section a season. Its root is the Tutorials Storage Path setting, else the film root.

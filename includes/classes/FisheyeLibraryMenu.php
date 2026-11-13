@@ -16,7 +16,7 @@ class FisheyeLibraryMenu {
 	 * The menu's entries: the site's top-level galleries as the Galleries list gives them (FisheyeGallery::getList() with root_only - so a gallery restricted to
 	 * Registered is not in it for an anonymous visitor, by the same filter as the list page), alphabetically. Nothing is named here.
 	 *
-	 * @return list<array{title:string,url:string,icon:string}>
+	 * @return list<array{content_id:int,title:string,url:string,icon:string}>
 	 */
 	public static function entries(): array {
 		global $gBitDb;
@@ -29,7 +29,7 @@ class FisheyeLibraryMenu {
 			$choices = FisheyeGallery::menuIconChoices();
 			foreach( $rows as $row ) {
 				$icon = (string)( $icons[(int)$row['content_id']] ?? '' );
-				self::$entries[] = [ 'title' => (string)$row['title'], 'url' => FisheyeGallery::getDisplayUrlFromHash( $row ), 'icon' => isset( $choices[$icon] ) ? $icon : 'folder-open' ];
+				self::$entries[] = [ 'content_id' => (int)$row['content_id'], 'title' => (string)$row['title'], 'url' => FisheyeGallery::getDisplayUrlFromHash( $row ), 'icon' => isset( $choices[$icon] ) ? $icon : 'folder-open' ];
 			}
 			usort( self::$entries, fn( $a, $b ) => strcasecmp( $a['title'], $b['title'] ) );
 		}

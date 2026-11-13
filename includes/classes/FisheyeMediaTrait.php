@@ -265,6 +265,32 @@ trait FisheyeMediaTrait {
 		}
 	}
 
+	/** The media base this kind of item belongs to (a FisheyeMediaBases role: library, films, music, tv), or null for one that has none. */
+	public function mediaBaseRole(): ?string {
+		return null;
+	}
+
+	/** An item of a media base roots its pictures at that base's own Images (Library / Images), the content_ids kept under fisheyemedia's own names. */
+	public function picturesFolderRoot(): array {
+		$role = $this->mediaBaseRole();
+		return $role
+			? [ 'key' => 'fisheyemedia_'.$role.'_images_gallery', 'parentKey' => FisheyeMediaBases::configKey( $role ), 'parentTitle' => FisheyeMediaBases::BASES[$role] ]
+			: [ 'key' => 'fisheye_pictures_gallery', 'parentKey' => null, 'parentTitle' => null ];
+	}
+
+	/**
+	 * The first page of a PDF drawn as a JPEG file at cover size, in a temporary file the caller removes; null when pdftoppm is missing or fails.
+	 */
+	public static function drawPdfFirstPage( string $pPath ): ?string {
+		if( !( $bin = trim( (string)shell_exec( 'command -v pdftoppm' ) ) ) ) {
+			return null;
+		}
+		$base = tempnam( sys_get_temp_dir(), 'pdfcover_' );
+		shell_exec( 'timeout 30 '.escapeshellarg( $bin ).' -f 1 -l 1 -r 110 -jpeg -singlefile '.escapeshellarg( $pPath ).' '.escapeshellarg( $base ).' 2>/dev/null' );
+		@unlink( $base );
+		return is_file( $base.'.jpg' ) && filesize( $base.'.jpg' ) > 0 ? $base.'.jpg' : null;
+	}
+
 	/**
 	 * Make one of the pictures folder's images this item's thumbnail: its file is copied into the item's own image
 	 * storage for the moment, handed to the type's promoteImageToThumbnail() (the call the Images tab's Set as
@@ -291,7 +317,20 @@ trait FisheyeMediaTrait {
 		if( !is_dir( dirname( $copy ) ) && !@mkdir( dirname( $copy ), 0775, true ) ) {
 			return false;
 		}
-		if( !@copy( $source, $copy ) ) {
+		if( strtolower( pathinfo( $source, PATHINFO_EXTENSION ) ) === 'pdf' ) {
+			// a document filed in the folder (a chapter held as a PDF): its first page is the picture
+			$page = self::drawPdfFirstPage( $source );
+			if( $page === null || !@rename( $page, $copy ) && !@copy( $page, $copy ) ) {
+				return false;
+			}
+			@unlink( $page );
+		} elseif( strtolower( pathinfo( $source, PATHINFO_EXTENSION ) ) === 'epub' ) {
+			// an epub filed in the folder: the cover its own thumbnails were made from (none when the epub carries no cover)
+			$large = STORAGE_PKG_PATH.\Bitweaver\Liberty\liberty_mime_get_storage_branch( [ 'attachment_id' => $pImageContentId ] ).'thumbs/large.jpg';
+			if( !is_file( $large ) || !@copy( $large, $copy ) ) {
+				return false;
+			}
+		} elseif( !@copy( $source, $copy ) ) {
 			return false;
 		}
 		$ok = $this->promoteImageToThumbnail( $name );

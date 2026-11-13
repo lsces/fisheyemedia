@@ -17,6 +17,8 @@ class FisheyeBookCovers {
 	const TIMEOUT = 12;
 	/** Title of the gallery that holds the scanned cloths a made cover is lettered on. */
 	const SHELF_TITLE = 'Cover Backgrounds';
+	/** The site config entry that keeps the shelf gallery's content_id (a config name is 40 characters at most). */
+	const SHELF_CONFIG = 'fisheyemedia_cover_shelf_gallery';
 	/** Height of a made cover in pixels - stored at no more than FISHEYEBOOK_COVER_MAX, so the lettering is drawn larger and shrunk. */
 	const MADE_HEIGHT = 800;
 	/** Width over height of a made cover, a front board. */
@@ -211,14 +213,21 @@ class FisheyeBookCovers {
 	}
 
 	/**
-	 * The scanned cloths on the shelf - the pictures in the gallery titled SHELF_TITLE. Each: 'content_id', 'title', 'thumb' (small
+	 * The scanned cloths on the shelf - the pictures in the shelf gallery (its content_id kept in the site config; SHELF_TITLE is only what it is adopted by the first time). Each: 'content_id', 'title', 'thumb' (small
 	 * thumbnail address) and 'file' (the stored original). 'gallery' is where more are uploaded.
 	 *
 	 * @return array{gallery:int,items:list<array{content_id:int,title:string,thumb:string,file:string}>}
 	 */
 	public static function shelf(): array {
-		global $gBitDb;
-		$galleryContentId = (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyegallery' AND `title` = ?", [ self::SHELF_TITLE ] );
+		global $gBitDb, $gBitSystem;
+		// the shelf is the gallery whose content_id the site config keeps (SHELF_CONFIG); with none kept, the gallery of that title is adopted once
+		$galleryContentId = (int)$gBitSystem->getConfig( self::SHELF_CONFIG, 0 );
+		if( !$galleryContentId || !$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ $galleryContentId ] ) ) {
+			$galleryContentId = (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyegallery' AND `title` = ?", [ self::SHELF_TITLE ] );
+			if( $galleryContentId ) {
+				$gBitSystem->storeConfig( self::SHELF_CONFIG, $galleryContentId, FISHEYEMEDIA_PKG_NAME );
+			}
+		}
 		$out = [ 'gallery' => $galleryContentId ? (int)$gBitDb->getOne( "SELECT `gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ $galleryContentId ] ) : 0, 'items' => [] ];
 		if( !$galleryContentId ) {
 			return $out;

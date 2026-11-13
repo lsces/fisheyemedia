@@ -380,12 +380,48 @@ class FisheyeBookCredits {
 		}
 	}
 
+	/** The site config entry that keeps the content_id of the Various Authors gallery (a config name is 40 characters at most). */
+	public const VARIOUS_AUTHORS_CONFIG = 'fisheyemedia_library_various_authors';
+
+	/**
+	 * The Various Authors gallery (the series that span several authors), by the content_id the site config keeps - never by its name. With none kept the
+	 * gallery of that name under the Library is adopted once and its id kept; null when the site has none.
+	 */
+	public static function variousAuthorsId(): ?int {
+		global $gBitSystem, $gBitDb;
+		static $answer = false;
+		if( $answer !== false ) {
+			return $answer;
+		}
+		$id = (int)$gBitSystem->getConfig( self::VARIOUS_AUTHORS_CONFIG, 0 );
+		if( !$id || !$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ $id ] ) ) {
+			$id = (int)self::libraryGalleryFor( FisheyeMediaGallery::VARIOUS_AUTHORS );
+			if( $id ) {
+				$gBitSystem->storeConfig( self::VARIOUS_AUTHORS_CONFIG, $id, FISHEYEMEDIA_PKG_NAME );
+			}
+		}
+		return $answer = ( $id ?: null );
+	}
+
+	/** The Various Authors gallery, made under the Library when the site has none; its id is kept. Same answer as findOrCreateLibraryGallery(). */
+	public static function findOrCreateVariousAuthors(): array {
+		global $gBitSystem;
+		if( $id = self::variousAuthorsId() ) {
+			return [ 'content_id' => $id, 'created' => false, 'error' => null ];
+		}
+		$made = self::findOrCreateLibraryGallery( FisheyeMediaGallery::VARIOUS_AUTHORS );
+		if( !empty( $made['content_id'] ) ) {
+			$gBitSystem->storeConfig( self::VARIOUS_AUTHORS_CONFIG, (int)$made['content_id'], FISHEYEMEDIA_PKG_NAME );
+		}
+		return $made;
+	}
+
 	/**
 	 * The author gallery directly under the top-level Library gallery with this title, if there is one.
 	 */
 	public static function libraryGalleryFor( string $pTitle ): ?int {
 		global $gBitDb;
-		$topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
+		$topGalleryId = FisheyeMediaBases::galleryId( 'library' );
 		$topContentId = $topGalleryId ? (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topGalleryId ] ) : 0;
 		if( !$topContentId ) {
 			return null;
@@ -410,7 +446,7 @@ class FisheyeBookCredits {
 		if( $existing ) {
 			return [ 'content_id' => $existing, 'created' => false, 'error' => null ];
 		}
-		$topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
+		$topGalleryId = FisheyeMediaBases::galleryId( 'library' );
 		if( !$topGalleryId ) {
 			return [ 'content_id' => null, 'created' => false, 'error' => \Bitweaver\KernelTools::tra( 'There is no top-level Library gallery to file books under.' ) ];
 		}
@@ -687,7 +723,7 @@ class FisheyeBookCredits {
 	 */
 	public static function leaveCategoryGalleries( int $pBookContentId ): int {
 		global $gBitDb;
-		$topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
+		$topGalleryId = FisheyeMediaBases::galleryId( 'library' );
 		$topContentId = $topGalleryId ? (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topGalleryId ] ) : 0;
 		if( !$topContentId ) {
 			return 0;

@@ -28,8 +28,8 @@ class FisheyeDocsWorkbench {
 	 * the name looked for under the External Disk Storage Path when the setting is blank.
 	 */
 	public const KINDS = [
-		'documentation' => [ 'top' => 'Documentation', 'folder' => 'Documentation', 'noun' => 'topic' ],
-		'magazines'     => [ 'top' => 'Magazines',     'folder' => 'Magazines',     'noun' => 'title' ],
+		'documentation' => [ 'top' => 'Documentation', 'folder' => 'Documentation', 'noun' => 'topic', 'role' => 'docs' ],
+		'magazines'     => [ 'top' => 'Magazines',     'folder' => 'Magazines',     'noun' => 'title', 'role' => 'magazines' ],
 	];
 
 	/** Seconds a keep-going press works before it hands over to the next one (one file may overrun it; nginx allows 60). */
@@ -77,16 +77,16 @@ class FisheyeDocsWorkbench {
 			$disk = function_exists( '\\Bitweaver\\Liberty\\mime_film_get_storage_root' ) ? \Bitweaver\Liberty\mime_film_get_storage_root() : '';
 			$set = $disk !== '' ? $disk.self::KINDS[$pKey]['folder'].'/' : '';
 		}
+		if( $set === '' && $pKey === 'library' ) {
+			$set = FisheyeBookFiles::libraryRoot();   // a book's own files are kept in place under the Library
+		}
 		$root = $set !== '' ? realpath( $set ) : false;
 		return $root && is_dir( $root ) ? $root.'/' : '';
 	}
 
 	/** content_id of the top-level Documentation gallery, or null when there is not one. */
 	public static function topContentId(): ?int {
-		global $gBitDb;
-		$galleryId = FisheyeGallery::getTopGalleryId( self::topTitle() );
-		$id = $galleryId ? $gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $galleryId ] ) : null;
-		return $id ? (int)$id : null;
+		return FisheyeMediaBases::contentId( self::KINDS[self::$sKind]['role'] );
 	}
 
 	/** Make the kind's top-level gallery (Docs Grid layout, no parent) when there is none; returns its content_id, or null on failure. */
@@ -100,6 +100,7 @@ class FisheyeDocsWorkbench {
 			return null;
 		}
 		$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_DOCS_GRID );
+		FisheyeMediaBases::remember( self::KINDS[self::$sKind]['role'], (int)$gallery->mContentId );
 		return (int)$gallery->mContentId;
 	}
 
@@ -384,7 +385,7 @@ class FisheyeDocsWorkbench {
 	}
 
 	/** The plugin is found by the plugin scan on a page that loads no upload first, and a new plugin is switched off until its status is stored. */
-	private static function activatePlugin( string $pGuid ): void {
+	public static function activatePlugin( string $pGuid ): void {
 		global $gLibertySystem, $gBitSystem;
 		$gLibertySystem->scanAllPlugins( null, "mime\." );
 		if( !$gLibertySystem->isPluginActive( $pGuid ) && isset( $gLibertySystem->mPlugins[$pGuid] ) ) {

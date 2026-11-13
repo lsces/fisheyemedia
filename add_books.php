@@ -33,7 +33,7 @@ const ADD_BOOKS_MAX = 20;
 // Rows of the form for books with no ISBN.
 const ADD_BOOKS_NOISBN_ROWS = 6;
 
-$topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
+$topGalleryId = FisheyeMediaBases::galleryId( 'library' );
 
 // detoxify() HTML-escapes every $_REQUEST value; undone for the free text.
 $decode = fn( $pValue ) => htmlspecialchars_decode( trim( (string)$pValue ), ENT_NOQUOTES );

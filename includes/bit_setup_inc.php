@@ -178,6 +178,8 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 	// 'fisheye_gallery_layout' above would overwrite that registration.
 	$gLibertySystem->registerService( FISHEYEMEDIA_PKG_NAME, FISHEYEMEDIA_PKG_NAME, [
 		'fisheye_menu_tpl' => 'bitpackage:fisheyemedia/fisheye_menu_inc.tpl',
+		// what the Search in list offers for the library: its top-level galleries (FisheyeSearchScopes)
+		'search_scopes_class' => 'Bitweaver\\Fisheyemedia\\FisheyeSearchScopes',
 		'content_display_function' => 'fisheyemedia_content_display',
 		'content_post_upload_function' => 'fisheyemedia_content_post_upload',
 		'content_list_sql_function' => 'fisheyemedia_content_list_sql',

@@ -67,6 +67,10 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * @param array|null $pMixed  extra query params to append (content_id itself is skipped)
 	 * @return string
 	 */
+	public function mediaBaseRole(): ?string {
+		return 'library';
+	}
+
 	public function getEditUrl( $pContentId = null, $pMixed = null ) {
 		$contentId = \Bitweaver\BitBase::verifyId( $pContentId ) ? $pContentId : $this->mContentId;
 		$ret = FISHEYEMEDIA_PKG_URL.'edit_book.php?content_id='.$contentId;
@@ -713,19 +717,6 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		@unlink( $tmp );
 		return $out;
-	}
-
-	/**
-	 * The first page of a PDF drawn as a JPEG file at cover size, in a temporary file the caller removes; null when pdftoppm is missing or fails.
-	 */
-	private static function drawPdfFirstPage( string $pPath ): ?string {
-		if( !( $bin = trim( (string)shell_exec( 'command -v pdftoppm' ) ) ) ) {
-			return null;
-		}
-		$base = tempnam( sys_get_temp_dir(), 'pdfcover_' );
-		shell_exec( 'timeout 30 '.escapeshellarg( $bin ).' -f 1 -l 1 -r 110 -jpeg -singlefile '.escapeshellarg( $pPath ).' '.escapeshellarg( $base ).' 2>/dev/null' );
-		@unlink( $base );
-		return is_file( $base.'.jpg' ) && filesize( $base.'.jpg' ) > 0 ? $base.'.jpg' : null;
 	}
 
 	/**

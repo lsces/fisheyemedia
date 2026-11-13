@@ -99,7 +99,7 @@ if( $series !== '' ) {
 
 // The Various Authors gallery the title line links to, so what already exists can be seen.
 $vaUrl = '';
-if( ( $vaId = FisheyeBookCredits::libraryGalleryFor( FisheyeMediaGallery::VARIOUS_AUTHORS ) ) && ( $vaGallery = \Bitweaver\Liberty\LibertyContent::getLibertyObject( (int)$vaId ) ) && $vaGallery->isValid() ) {
+if( ( $vaId = FisheyeBookCredits::variousAuthorsId() ) && ( $vaGallery = \Bitweaver\Liberty\LibertyContent::getLibertyObject( (int)$vaId ) ) && $vaGallery->isValid() ) {
 	$vaUrl = (string)$vaGallery->getDisplayUrl();
 }
 $gBitSmarty->assign( 'vaUrl', $vaUrl );

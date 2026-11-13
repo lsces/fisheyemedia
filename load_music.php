@@ -106,7 +106,7 @@ function load_music_unit_count( string $pDir ): int {
 	return $units;
 }
 
-$topGalleryId = FisheyeGallery::getTopGalleryId( 'Music' );
+$topGalleryId = FisheyeMediaBases::galleryId( 'music' );
 $root = \Bitweaver\Liberty\mime_film_get_storage_root();
 $musicDir = $root.'Music/';
 

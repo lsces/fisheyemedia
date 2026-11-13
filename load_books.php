@@ -35,7 +35,7 @@ $gBitSystem->verifyPermission( 'p_fisheye_admin' );
 const LOAD_BOOKS_BATCH = 10;
 const LOAD_BOOKS_GROUPS_SHOWN = 30;
 
-$topGalleryId = FisheyeGallery::getTopGalleryId( 'Library' );
+$topGalleryId = FisheyeMediaBases::galleryId( 'library' );
 $topContentId = $topGalleryId ? (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $topGalleryId ] ) : 0;
 
 $import = FisheyeBookCatalogue::importUploaded();
