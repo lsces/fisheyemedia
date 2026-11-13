@@ -74,7 +74,13 @@ if( !empty( $_REQUEST['savegallery'] ) ) {
 			'gallery_pagination' => $gContent->getLayout(),
 			'thumbnail_size' => $gContent->getField( 'thumbnail_size' ),
 		] );
+		$rolesBefore = FisheyeAccess::rolesOf( (int)$gContent->mContentId );
 		if( $gContent->store( $hash ) ) {
+			// A change to this gallery's own access goes down to everything inside it (the box on the form, ticked unless cleared): protector keeps access
+			// per item, so otherwise only the gallery's page would change. Items already carrying the access are left as they are.
+			if( !empty( $_REQUEST['apply_inside'] ) && FisheyeAccess::rolesOf( (int)$gContent->mContentId ) !== $rolesBefore ) {
+				FisheyeAccess::applyInside( (int)$gContent->mContentId );
+			}
 			FisheyeGalleryList::save( $gContent, $keptOut );
 			$moveErrors = FisheyeManagedGallery::move( $gContent, $checked['moves'] );
 			if( !$moveErrors ) {
@@ -89,6 +95,7 @@ if( !empty( $_REQUEST['savegallery'] ) ) {
 
 $gContent->invokeServices( 'content_edit_function' );   // as fisheye's Edit page: lets the services (the access chooser) prepare their own form fields
 $gBitSmarty->assign( 'gContent', $gContent );
+$gBitSmarty->assign( 'insideCount', count( FisheyeAccess::contentsInside( (int)$gContent->mContentId ) ) );
 $gBitSmarty->assign( 'placements', FisheyeManagedGallery::placements( $gContent ) );
 $gBitSmarty->assign( 'childGalleries', $childGalleries );
 $gBitSmarty->assign( 'keptOut', $keptOut );

@@ -74,28 +74,22 @@ class FisheyeAccess {
 	}
 
 	/**
-	 * Give everything inside a gallery the gallery's own roles (none when it has none), through protector's store call, in one transaction.
+	 * Give everything inside a gallery the gallery's own roles (none when it has none): protector's bulk store, one delete and one insert per role for each
+	 * block of items, in one transaction.
 	 *
 	 * @return array{changed:int,errors:list<string>}
 	 */
 	public static function applyInside( int $pGalleryContentId ): array {
 		global $gBitDb, $gBitSystem, $gProtector;
 		$ret = [ 'changed' => 0, 'errors' => [] ];
-		if( !$gBitSystem->isPackageActive( 'protector' ) || !is_object( $gProtector ) ) {
+		if( !$gBitSystem->isPackageActive( 'protector' ) || !is_object( $gProtector ) || !method_exists( $gProtector, 'storeProtectionMany' ) ) {
 			$ret['errors'][] = 'The protector package is not active, so there is no access to apply.';
 			return $ret;
 		}
 		@set_time_limit( 300 );
 		$value = self::storeValue( self::rolesOf( $pGalleryContentId ) );
 		$gBitDb->StartTrans();
-		foreach( self::differing( $pGalleryContentId ) as $cid ) {
-			$hash = [ 'content_id' => $cid, 'protector' => [ 'role_id' => $value ] ];
-			if( $gProtector->storeProtection( $hash ) ) {
-				$ret['changed']++;
-			} else {
-				$ret['errors'][] = 'Content '.$cid.' could not be changed.';
-			}
-		}
+		$ret['changed'] = $gProtector->storeProtectionMany( self::differing( $pGalleryContentId ), $value );
 		$gBitDb->CompleteTrans();
 		return $ret;
 	}

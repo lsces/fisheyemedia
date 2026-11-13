@@ -62,6 +62,14 @@
 
 			{* the services' own fields - for a gallery, the access chooser - exactly where fisheye's own Edit page puts them *}
 			{include file="bitpackage:liberty/edit_services_inc.tpl" serviceFile="content_edit_mini_tpl"}
+			{if $insideCount}
+			<div class="form-group">
+				{forminput label="checkbox"}
+					<input type="checkbox" name="apply_inside" value="1"{if !$smarty.request.savegallery || $smarty.request.apply_inside} checked="checked"{/if} /> {tr}If the access above changes, apply it to everything inside this gallery{/tr} ({$insideCount} {tr}items{/tr})
+					{formhelp note="Access is kept per item, so without this only this gallery's own page changes. Clear it to give just this gallery the new access and leave what is inside as it is."}
+				{/forminput}
+			</div>
+			{/if}
 
 			<div class="form-group submit">
 				<input type="submit" class="btn btn-default" name="cancelgallery" value="{tr}Cancel{/tr}" />
