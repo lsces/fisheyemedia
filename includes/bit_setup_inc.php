@@ -27,9 +27,9 @@ if( !$gBitSystem->isPackageActive( 'fisheye' ) ) {
 
 if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 
-	// {if 'Films'|library_visible} in this package's menu entries: an entry shows only when the top-level gallery it leads to can be opened by the viewer.
 	global $gBitSmarty;
-	$gBitSmarty->registerPlugin( 'modifier', 'library_visible', [ \Bitweaver\Fisheyemedia\FisheyeLibraryMenu::class, 'visible' ] );
+	// {foreach ''|library_entries as $entry} in the menu: the top-level galleries the viewer can open, alphabetically ('title', 'url').
+	$gBitSmarty->registerPlugin( 'modifier', 'library_entries', [ \Bitweaver\Fisheyemedia\FisheyeLibraryMenu::class, 'entries' ] );
 	// {if $itemContentId|listed_in:$gContent} in the Library and Docs grids: a sub-gallery its parent keeps out of its list is left out (FisheyeGalleryList).
 	$gBitSmarty->registerPlugin( 'modifier', 'listed_in', [ \Bitweaver\Fisheyemedia\FisheyeGalleryList::class, 'listed' ] );
 

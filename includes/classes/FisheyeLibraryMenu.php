@@ -1,8 +1,6 @@
 <?php
 /**
- * Whether a top-level gallery of the media library (Films, Magazines, ...) is one the current user may open, for the menu entry that leads to it.
- * The entry is judged by the gallery's own access - the permission and the protector settings that decide whether its page opens - so the menu and
- * the page can never disagree; a gallery that does not exist on this site simply has no entry.
+ * The entries of the media library's section of fisheye's menu: the site's top-level galleries, as the Galleries list gives them.
  *
  * @package fisheyemedia
  */
@@ -11,22 +9,30 @@ namespace Bitweaver\Fisheyemedia;
 use Bitweaver\Fisheye\FisheyeGallery;
 
 class FisheyeLibraryMenu {
-	/** @var array<string,bool> answers kept for the request: the menu asks once per entry on every page */
-	private static array $answers = [];
+	/** @var list<array{title:string,url:string}>|null the entries kept for the request: the menu is drawn on every page */
+	private static ?array $entries = null;
 
-	/** Smarty modifier library_visible: {if 'Films'|library_visible} - true when the top-level gallery of that title can be opened by the user. */
-	public static function visible( $pTitle ): bool {
-		$title = (string)$pTitle;
-		if( !isset( self::$answers[$title] ) ) {
-			$galleryId = $title === '' ? null : FisheyeGallery::getTopGalleryId( $title );
-			$visible = false;
-			if( $galleryId ) {
-				$gallery = new FisheyeGallery( $galleryId );
-				// load() is what refuses a gallery the viewer's roles are not allowed to see (isValid() stays true: the object already has its id)
-				$visible = $gallery->load() && $gallery->isValid() && $gallery->hasViewPermission();
+	/**
+	 * The menu's entries: the site's top-level galleries as the Galleries list gives them (FisheyeGallery::getList() with root_only - so a gallery restricted to
+	 * Registered is not in it for an anonymous visitor, by the same filter as the list page), alphabetically. Nothing is named here.
+	 *
+	 * @return list<array{title:string,url:string,icon:string}>
+	 */
+	public static function entries(): array {
+		global $gBitDb;
+		if( self::$entries === null ) {
+			self::$entries = [];
+			$hash = [ 'root_only' => true, 'no_thumbnails' => true, 'sort_mode' => 'title_asc', 'max_records' => 200 ];
+			$rows = ( new FisheyeGallery() )->getList( $hash );
+			// each gallery's own menu icon (a gallery preference, set on its Edit page), in one query
+			$icons = $rows ? ( $gBitDb->getAssoc( "SELECT `content_id`, `pref_value` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `pref_name` = ? AND `content_id` IN (".implode( ',', array_map( fn( $r ) => (int)$r['content_id'], $rows ) ).")", [ FisheyeGallery::MENU_ICON_PREFERENCE ] ) ?: [] ) : [];
+			$choices = FisheyeGallery::menuIconChoices();
+			foreach( $rows as $row ) {
+				$icon = (string)( $icons[(int)$row['content_id']] ?? '' );
+				self::$entries[] = [ 'title' => (string)$row['title'], 'url' => FisheyeGallery::getDisplayUrlFromHash( $row ), 'icon' => isset( $choices[$icon] ) ? $icon : 'folder-open' ];
 			}
-			self::$answers[$title] = $visible;
+			usort( self::$entries, fn( $a, $b ) => strcasecmp( $a['title'], $b['title'] ) );
 		}
-		return self::$answers[$title];
+		return self::$entries;
 	}
 }

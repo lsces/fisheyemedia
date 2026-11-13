@@ -60,6 +60,8 @@
 			</div>
 			{/if}
 
+			{include file="bitpackage:fisheye/edit_gallery_menu_icon_inc.tpl"}
+
 			{* the services' own fields - for a gallery, the access chooser - exactly where fisheye's own Edit page puts them *}
 			{include file="bitpackage:liberty/edit_services_inc.tpl" serviceFile="content_edit_mini_tpl"}
 

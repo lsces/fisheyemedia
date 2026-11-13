@@ -75,6 +75,7 @@ if( !empty( $_REQUEST['savegallery'] ) ) {
 			'thumbnail_size' => $gContent->getField( 'thumbnail_size' ),
 		] );
 		if( $gContent->store( $hash ) ) {
+			FisheyeGallery::storeMenuIcon( $gContent, $_REQUEST['menu_icon'] ?? '' );
 			FisheyeGalleryList::save( $gContent, $keptOut );
 			$moveErrors = FisheyeManagedGallery::move( $gContent, $checked['moves'] );
 			if( !$moveErrors ) {
