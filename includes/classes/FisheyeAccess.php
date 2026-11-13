@@ -30,25 +30,9 @@ class FisheyeAccess {
 		return $roles ? self::storeValue( $roles ) : null;
 	}
 
-	/** Content ids of everything inside a gallery at any depth (galleries and items), without the gallery itself. */
+	/** Content ids of everything inside a gallery at any depth (galleries and items), without the gallery itself - fisheye's own answer. */
 	public static function contentsInside( int $pGalleryContentId ): array {
-		global $gBitDb;
-		$seen = [ $pGalleryContentId => true ];
-		$queue = [ $pGalleryContentId ];
-		$found = [];
-		while( $queue ) {
-			$batch = array_splice( $queue, 0, 400 );
-			$rows = $gBitDb->getCol( "SELECT `item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `gallery_content_id` IN (".implode( ',', array_fill( 0, count( $batch ), '?' ) ).")", $batch ) ?: [];
-			foreach( $rows as $cid ) {
-				$cid = (int)$cid;
-				if( !isset( $seen[$cid] ) ) {
-					$seen[$cid] = true;
-					$found[] = $cid;
-					$queue[] = $cid;
-				}
-			}
-		}
-		return $found;
+		return \Bitweaver\Fisheye\FisheyeGallery::containedContentIds( $pGalleryContentId );
 	}
 
 	/** Of everything inside a gallery, the content ids whose own roles differ from the gallery's. */
