@@ -25,7 +25,7 @@ $pluginParams = [
 	'help_function'       => 'mime_extdoc_help',
 	'title'               => 'Epubs kept in place',
 	'description'         => 'Epubs in a named root such as Documentation, served through a link in storage/ instead of being copied. Text goes to liberty_content_data, the cover is the thumbnail.',
-	'view_tpl'            => 'bitpackage:liberty/mime/default/view.tpl',
+	'view_tpl'            => 'bitpackage:fisheyemedia/mime_epub_view.tpl',
 	'plugin_type'         => MIME_PLUGIN,
 	'auto_activate'       => true,
 	// no mimetypes: only a loader that names the plugin gets it
