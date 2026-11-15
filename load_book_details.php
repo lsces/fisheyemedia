@@ -11,7 +11,7 @@
  * again and again: once asked, a book is marked (the 'ol_details_checked' / 'ol_covers_checked' / 'google_books_checked' content
  * preferences), so a book Open Library has no description, genre or cover for does not stay on the list for ever; 'ask again' lifts the mark.
  *
- * Four jobs, chosen on the page: 'details' - every book with an ISBN, with a cover or without, gets its blanks filled in (covers are
+ * Jobs chosen on the page ('editions' - every ebook file of a book made an item of its own, its text stored and indexed - is described in the page's help): 'details' - every book with an ISBN, with a cover or without, gets its blanks filled in (covers are
  * left alone); 'covers' - the books with no image yet are looked up for a cover as well (Open Library, then Google Books), a book no
  * source has a cover for waiting for a photograph or scan; 'google' - what Open Library left blank is asked of Google Books (needs its
  * API key); 'shops' - the books still with no image after the covers job are looked for at Amazon and AbeBooks by ISBN (the same
@@ -47,7 +47,7 @@ const LOAD_BOOK_DETAILS_NOCOVER_SHOWN = 100;
 const LOAD_BOOK_DETAILS_BATCH = 10;
 
 /** Content preference that marks a book already asked about, per job. */
-const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked', 'shops' => 'shop_covers_checked', 'epub' => 'epub_cover_checked', 'epubisbn' => 'epub_isbn_checked', 'classics' => 'wikidata_details_checked' ];
+const LOAD_BOOK_DETAILS_MARK = [ 'details' => 'ol_details_checked', 'covers' => 'ol_covers_checked', 'google' => 'google_books_checked', 'shops' => 'shop_covers_checked', 'epub' => 'epub_cover_checked', 'epubisbn' => 'epub_isbn_checked', 'classics' => 'wikidata_details_checked', 'editions' => 'editions_checked' ];
 
 /**
  * The books worth asking Open Library about, in content id order after $pAfter, leaving out those already asked about for this job
@@ -71,11 +71,16 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 	} elseif( $pJob === 'epubisbn' ) {
 		// a book with an ebook file and no ISBN (the epub itself may carry one)
 		$who = $has( 'ebook' );
+	} elseif( $pJob === 'editions' ) {
+		// a book with an ebook row that does not point at an item yet
+		$who = "EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` x WHERE x.`content_id` = lc.`content_id` AND x.`item` = 'ebook' AND $live AND ( x.`xref` IS NULL OR x.`xref` = 0 ) )";
 	} elseif( $pJob === 'epub' ) {
 		// no ISBN needed: any book with an ebook file and no cover yet (the epub itself carries the cover, if it has one)
 		$who = $has( 'ebook' );
 	}
-	$job = $pJob === 'classics'
+	$job = $pJob === 'editions'
+		? "1 = 1"
+		: ( $pJob === 'classics'
 		? "( NOT ".$has( 'gutenberg' )." OR NOT ".$has( 'ol_work' )." OR NOT ".$has( 'published' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
 		: ( $pJob === 'google'
 		? "( NOT ".$has( 'genre' )." OR NOT ".$has( 'pages' )." OR NOT ".$has( 'language' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0 )"
@@ -84,8 +89,8 @@ function load_book_details_pending( int $pAfter = 0, string $pJob = 'details', b
 		: ( in_array( $pJob, [ 'covers', 'shops', 'epub' ], true )
 		? "NOT ".$has( 'image' )
 		: "( NOT ".$has( 'ol_edition' )." OR NOT ".$has( 'genre' )." OR lc.`data` IS NULL OR CHAR_LENGTH( lc.`data` ) = 0
-		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" ) ) );
-	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google', 'shops', 'classics', 'epub', 'epubisbn' ], true ) ? $pJob : 'details']."' )";
+		    OR ( ".$has( 'image' )." AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachments` a WHERE a.`content_id` = lc.`content_id` ) ) )" ) ) ) );
+	$mark = $pAgain ? '' : " AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_content_prefs` p WHERE p.`content_id` = lc.`content_id` AND p.`pref_name` = '".LOAD_BOOK_DETAILS_MARK[in_array( $pJob, [ 'covers', 'google', 'shops', 'classics', 'epub', 'epubisbn', 'editions' ], true ) ? $pJob : 'details']."' )";
 	$rows = $gBitDb->getCol(
 		"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."liberty_content` lc
 		 WHERE lc.`content_type_guid` = 'fisheyebook' AND lc.`content_id` > ? AND $who AND $job$mark
@@ -136,13 +141,13 @@ function load_book_details_shop_cover( FisheyeBook $pBook, bool $pLook ): array 
 $after = max( 0, (int)( $_REQUEST['after'] ?? 0 ) );
 $googleKey = trim( (string)$gBitSystem->getConfig( 'fisheyemedia_google_books_api_key' ) ) !== '';
 $look = !empty( $_REQUEST['look'] );
-$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google', 'shops', 'classics', 'epub', 'epubisbn' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
+$job = in_array( $_REQUEST['job'] ?? '', [ 'covers', 'google', 'shops', 'classics', 'epub', 'epubisbn', 'editions' ], true ) && ( $_REQUEST['job'] !== 'google' || $googleKey ) ? $_REQUEST['job'] : 'details';
 $again = !empty( $_REQUEST['again'] );
 // The classics job: Wikidata's original date replaces a stored one (otherwise it only fills a blank).
 $replaceDate = !empty( $_REQUEST['replace_date'] );
 $pending = load_book_details_pending( $after, $job, $again );
 $counts = [];
-foreach( array_filter( [ 'details', 'classics', 'epub', 'epubisbn', 'covers', 'shops', $googleKey ? 'google' : '' ] ) as $name ) {
+foreach( array_filter( [ 'details', 'classics', 'epub', 'epubisbn', 'editions', 'covers', 'shops', $googleKey ? 'google' : '' ] ) as $name ) {
 	$counts[$name] = $name === $job ? count( $pending ) : count( load_book_details_pending( 0, $name, $again ) );
 }
 $doneBefore = (int)( $_REQUEST['done'] ?? 0 );
@@ -183,6 +188,8 @@ if( !empty( $_REQUEST['fetch'] ) ) {
 				}
 			} elseif( $job === 'shops' ) {
 				$found = load_book_details_shop_cover( $book, $look );
+			} elseif( $job === 'editions' ) {
+				$found = $book->promoteEditions( $look );
 			} elseif( $job === 'epub' ) {
 				$found = $book->coverFromEpub( $look );
 			} elseif( $job === 'epubisbn' ) {

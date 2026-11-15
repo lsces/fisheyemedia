@@ -627,6 +627,40 @@ class FisheyeBook extends FisheyeMediaImage {
 	}
 
 	/**
+	 * The "Editions from the Books' Own Files" job for one book: each of its ebook rows that does not yet point at an item is promoted to one
+	 * (FisheyeBookFiles::promoteEbook() - the in-place PDF or epub item in the book's pictures folder, its text stored and indexed), so each
+	 * edition, or each chapter held as a PDF, is a search result of its own. A row with no file on disk, or of a kind with no handler, is
+	 * reported and left. $pLook lists what would be made and stores nothing.
+	 *
+	 * @return array{matched:bool,items:list<string>,error:string}
+	 */
+	public function promoteEditions( bool $pLook = false ): array {
+		$out = [ 'matched' => false, 'items' => [], 'error' => '' ];
+		$rows = $this->mDb->getAll( "SELECT `xref_id`, `xkey`, `xkey_ext`, `xref`, `data`, `xorder` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ebook' AND `end_date` IS NULL AND ( `xref` IS NULL OR `xref` = 0 ) ORDER BY `xorder`, `xref_id`", [ (int)$this->mContentId ] ) ?: [];
+		foreach( $rows as $row ) {
+			$rel = (string)$row['xkey_ext'];
+			if( !isset( FisheyeDocsWorkbench::HANDLERS[strtolower( pathinfo( $rel, PATHINFO_EXTENSION ) )] ) || FisheyeBookFiles::pathFor( $rel ) === null ) {
+				$out['items'][] = 'left: no file or no handler for '.basename( $rel );
+				continue;
+			}
+			$out['matched'] = true;
+			if( $pLook ) {
+				$out['items'][] = 'would make an item for '.basename( $rel );
+				continue;
+			}
+			$made = FisheyeBookFiles::promoteEbook( $this, $row );
+			if( !empty( $made['error'] ) ) {
+				$out['error'] = $made['error'];
+				break;
+			}
+			if( !empty( $made['created'] ) ) {
+				$out['items'][] = 'item '.$made['created'].' for '.basename( $rel );
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * Give the book the cover its own epub carries: an epub nearly always embeds the publisher's cover, which needs no ISBN and no online source.
 	 * Only a book with no cover yet is touched (a stored cover, from any source, is left alone). The first epub among the book's ebook files
 	 * that has a usable embedded picture is used; it is stored exactly as a cover fetched from Open Library is (an image row, Front, and the
