@@ -1,5 +1,5 @@
 {* Floaticon set for the docs_grid layout (the Documentation gallery and its topic galleries): Edit, Image Order and Upload documents, and for an admin the Docs workbench
-   (the front page from the top gallery, that topic's page from a topic gallery - the topic is the gallery's title). Loading files from the Documentation folder is the workbench's job; the Upload icon
+   (the front page from the top gallery, that topic's page from a topic gallery - the topic is the gallery's title); {$docsArchive}, set by fisheyemedia_content_display(), names the archive and topic of any registered archive's gallery. Loading files from the Documentation folder is the workbench's job; the Upload icon
    is for adding documents by hand. *}
 <div class="floaticon">
 	{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
@@ -11,6 +11,8 @@
 			{if $docsTrail|@count}{assign var=docsTop value=$docsTrail[0].title}{/if}
 			{assign var=docsKind value=$docsTop|lower}
 			{if $docsTrail|@count > 1}{assign var=docsFolder value=$docsTrail[1].title}{elseif $docsTrail|@count}{assign var=docsFolder value=$gContent->getTitle()}{else}{assign var=docsFolder value=''}{/if}
+			{* a gallery known to belong to an archive says so itself (by the top gallery's kept id, not its title): that archive's kind and folder win *}
+			{if !empty($docsArchive)}{assign var=docsKind value=$docsArchive.kind}{assign var=docsFolder value=$docsArchive.topic}{/if}
 			{if $docsFolder eq ''}
 				<a title="{tr}Workbench: every folder and what is left to load{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?kind={$docsKind|escape:'url'}">{biticon ipackage="icons" iname="document-properties" iexplain="Docs workbench"}</a>
 			{else}

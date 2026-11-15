@@ -18,6 +18,12 @@ function fisheyemedia_content_display( $pObject, &$pParamHash ) {
 		global $gBitSmarty;
 		$gBitSmarty->assign( 'folderOwner', FisheyeMediaGallery::getPicturesFolderOwner( $pObject ) );
 	}
+	// A gallery filed with the Docs Grid layout may belong to an archive (Documentation, Magazines or a registered folder): {$docsArchive} says which and which
+	// of its folders, so the icon set offers that archive's workbench. A gallery that is in none gets nothing assigned.
+	if( $pObject->isValid() && method_exists( $pObject, 'getLayout' ) && $pObject->getLayout() === FISHEYE_PAGINATION_DOCS_GRID ) {
+		global $gBitSmarty;
+		$gBitSmarty->assign( 'docsArchive', \Bitweaver\Fisheyemedia\FisheyeArchives::forGallery( $pObject ) );
+	}
 	// A gallery filed with the Library Grid layout is an author or series whatever its content type - galleries made by hand are plain
 	// 'fisheyegallery' - so the layout, not the class, decides. {$libraryGallery} is that gallery as a FisheyeMediaGallery, which carries
 	// the author's contact, the Full Series link and the categorized strips.

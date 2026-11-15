@@ -23,7 +23,7 @@ FisheyeDocsWorkbench::setKind( $kind );
 $kind = FisheyeDocsWorkbench::kind();
 $gBitSmarty->assign( 'kind', $kind );
 $gBitSmarty->assign( 'noun', FisheyeDocsWorkbench::noun() );
-$gBitSmarty->assign( 'pageTitle', $kind === 'magazines' ? 'Magazines workbench' : 'Docs workbench' );
+$gBitSmarty->assign( 'pageTitle', $kind === 'documentation' ? 'Docs workbench' : FisheyeDocsWorkbench::topTitle().' workbench' );
 
 $messages = [];
 $errors = [];

@@ -23,23 +23,22 @@ class FisheyeDocsWorkbench {
 	public const TOP_TITLE = 'Documentation';
 
 	/**
-	 * The collections this workbench loads, each a source folder, a top-level gallery and a root key for the mimeext* plugins: Documentation (one folder
-	 * per topic) and Magazines (one folder per title, then year or volume folders). 'setting' is the kernel_config entry holding the folder, 'folder'
-	 * the name looked for under the External Disk Storage Path when the setting is blank.
+	 * The collections this workbench loads, each a source folder, a top-level gallery and a root key for the mimeext* plugins - Documentation (one folder per
+	 * topic), Magazines (one folder per title, then year or volume folders) and any folder registered as an archive (FisheyeArchives, from the archive scan
+	 * page). 'folder' is the name looked for under the External Disk Storage Path when the kind's setting (mimeext_root_<kind>) is blank.
 	 */
-	public const KINDS = [
-		'documentation' => [ 'top' => 'Documentation', 'folder' => 'Documentation', 'noun' => 'topic', 'role' => 'docs' ],
-		'magazines'     => [ 'top' => 'Magazines',     'folder' => 'Magazines',     'noun' => 'title', 'role' => 'magazines' ],
-	];
+	public static function kinds(): array {
+		return FisheyeArchives::all();
+	}
 
 	/** Seconds a keep-going press works before it hands over to the next one (one file may overrun it; nginx allows 60). */
 	public const KEEP_GOING_SECONDS = 40;
 
-	/** The kind in use for this request: one of the KINDS keys. */
+	/** The kind in use for this request: one of the keys of kinds(). */
 	private static string $sKind = 'documentation';
 
 	public static function setKind( string $pKind ): void {
-		self::$sKind = isset( self::KINDS[$pKind] ) ? $pKind : 'documentation';
+		self::$sKind = isset( self::kinds()[$pKind] ) ? $pKind : 'documentation';
 	}
 
 	public static function kind(): string {
@@ -47,16 +46,25 @@ class FisheyeDocsWorkbench {
 	}
 
 	public static function topTitle(): string {
-		return self::KINDS[self::$sKind]['top'];
+		return self::kinds()[self::$sKind]['top'];
 	}
 
 	/** Word for one folder of the kind, for the pages ("topic" or "title"). */
 	public static function noun(): string {
-		return self::KINDS[self::$sKind]['noun'];
+		return self::kinds()[self::$sKind]['noun'];
 	}
 
 	/** The mime plugin for each file extension; a file of any other kind is listed but not loaded until its type has a plugin (mimeextmobi ...). */
 	public const HANDLERS = [ 'pdf' => 'mimeextpdf', 'epub' => 'mimeextepub' ];
+
+	/** The pictures a registered archive loads in place (mimeextimage); the built-in kinds still list them without loading, as they always have. */
+	public const IMAGE_HANDLERS = [ 'jpg' => 'mimeextimage', 'jpeg' => 'mimeextimage', 'png' => 'mimeextimage', 'gif' => 'mimeextimage', 'webp' => 'mimeextimage', 'bmp' => 'mimeextimage' ];
+
+	/** The mime plugin that loads a file of the kind in use, or null when none does yet. */
+	public static function handlerFor( string $pPath ): ?string {
+		$ext = strtolower( pathinfo( $pPath, PATHINFO_EXTENSION ) );
+		return self::HANDLERS[$ext] ?? ( empty( self::kinds()[self::$sKind]['builtin'] ) ? ( self::IMAGE_HANDLERS[$ext] ?? null ) : null );
+	}
 
 	/** The preference value is a VARCHAR(250). */
 	private const SPEC_MAX = 250;
@@ -73,9 +81,9 @@ class FisheyeDocsWorkbench {
 	public static function rootFor( string $pKey ): string {
 		global $gBitSystem;
 		$set = trim( (string)$gBitSystem->getConfig( 'mimeext_root_'.$pKey, '' ) );
-		if( $set === '' && isset( self::KINDS[$pKey] ) ) {
+		if( $set === '' && isset( self::kinds()[$pKey] ) ) {
 			$disk = function_exists( '\\Bitweaver\\Liberty\\mime_film_get_storage_root' ) ? \Bitweaver\Liberty\mime_film_get_storage_root() : '';
-			$set = $disk !== '' ? $disk.self::KINDS[$pKey]['folder'].'/' : '';
+			$set = $disk !== '' ? $disk.self::kinds()[$pKey]['folder'].'/' : '';
 		}
 		if( $set === '' && $pKey === 'library' ) {
 			$set = FisheyeBookFiles::libraryRoot();   // a book's own files are kept in place under the Library
@@ -86,7 +94,7 @@ class FisheyeDocsWorkbench {
 
 	/** content_id of the top-level Documentation gallery, or null when there is not one. */
 	public static function topContentId(): ?int {
-		return FisheyeMediaBases::contentId( self::KINDS[self::$sKind]['role'] );
+		return FisheyeMediaBases::contentId( self::kinds()[self::$sKind]['role'] );
 	}
 
 	/** Make the kind's top-level gallery (Docs Grid layout, no parent) when there is none; returns its content_id, or null on failure. */
@@ -100,7 +108,7 @@ class FisheyeDocsWorkbench {
 			return null;
 		}
 		$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_DOCS_GRID );
-		FisheyeMediaBases::remember( self::KINDS[self::$sKind]['role'], (int)$gallery->mContentId );
+		FisheyeMediaBases::remember( self::kinds()[self::$sKind]['role'], (int)$gallery->mContentId );
 		return (int)$gallery->mContentId;
 	}
 
@@ -154,7 +162,7 @@ class FisheyeDocsWorkbench {
 		$loaded = self::loaded();
 		foreach( self::filesIn( $pTopic ) as $path ) {
 			$cid = $loaded[self::$sKind.'|'.$path] ?? null;
-			$handler = self::HANDLERS[strtolower( pathinfo( $path, PATHINFO_EXTENSION ) )] ?? null;
+			$handler = self::handlerFor( $path );
 			$folder = strlen( dirname( $path ) ) > strlen( $pTopic ) ? substr( dirname( $path ), strlen( $pTopic ) + 1 ) : '(top level)';
 			$st['folders'][$folder] = $st['folders'][$folder] ?? [ 'total' => 0, 'loaded' => 0 ];
 			$st['folders'][$folder]['total']++;
@@ -343,11 +351,13 @@ class FisheyeDocsWorkbench {
 	/** content_id of the gallery for a folder path under Documentation (Architecture, Architecture/Sub), each level made when missing. */
 	private static function galleryFor( string $pDir, int $pTop ): ?int {
 		$parent = $pTop;
+		$walked = '';
 		foreach( explode( '/', $pDir ) as $part ) {
 			if( $part === '' || $part === '.' ) {
 				continue;
 			}
-			$parent = self::findOrMakeGallery( $part, $parent );
+			$walked = ltrim( $walked.'/'.$part, '/' );
+			$parent = self::findOrMakeGallery( $part, $parent, self::styleFor( $walked ) );
 			if( !$parent ) {
 				return null;
 			}
@@ -361,7 +371,25 @@ class FisheyeDocsWorkbench {
 		return $id ? (int)$id : null;
 	}
 
-	private static function findOrMakeGallery( string $pTitle, int $pParentContentId ): ?int {
+	/**
+	 * The gallery style for a folder (path under the root) a gallery is made for: a registered archive's folder holding more pictures than documents is an Images Grid,
+	 * anything else - and every folder of a built-in kind - a Docs Grid. Decided once, when the gallery is made.
+	 */
+	private static function styleFor( string $pRel ): string {
+		if( !empty( self::kinds()[self::$sKind]['builtin'] ) || ( $root = self::root() ) === '' || !is_dir( $root.$pRel ) ) {
+			return FISHEYE_PAGINATION_DOCS_GRID;
+		}
+		$pictures = $documents = 0;
+		foreach( array_diff( scandir( $root.$pRel ) ?: [], [ '.', '..' ] ) as $name ) {
+			$ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
+			if( is_file( $root.$pRel.'/'.$name ) ) {
+				isset( self::IMAGE_HANDLERS[$ext] ) ? $pictures++ : ( isset( self::HANDLERS[$ext] ) ? $documents++ : null );
+			}
+		}
+		return $pictures > $documents ? FISHEYE_PAGINATION_IMAGES_GRID : FISHEYE_PAGINATION_DOCS_GRID;
+	}
+
+	private static function findOrMakeGallery( string $pTitle, int $pParentContentId, string $pStyle = FISHEYE_PAGINATION_DOCS_GRID ): ?int {
 		global $gBitDb;
 		$found = $gBitDb->getOne(
 			"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
@@ -371,7 +399,7 @@ class FisheyeDocsWorkbench {
 			return (int)$found;
 		}
 		$gallery = new FisheyeGallery();
-		$storeHash = [ 'title' => $pTitle, 'gallery_pagination' => FISHEYE_PAGINATION_DOCS_GRID ];   // store() takes it by reference
+		$storeHash = [ 'title' => $pTitle, 'gallery_pagination' => $pStyle ];   // store() takes it by reference
 		// a gallery made inside a restricted gallery is restricted the same way
 		if( ( $inherit = FisheyeAccess::inheritedFor( $pParentContentId ) ) !== null ) {
 			$storeHash['protector']['role_id'] = $inherit;
@@ -379,7 +407,7 @@ class FisheyeDocsWorkbench {
 		if( !$gallery->store( $storeHash ) ) {
 			return null;
 		}
-		$gallery->storePreference( 'gallery_pagination', FISHEYE_PAGINATION_DOCS_GRID );
+		$gallery->storePreference( 'gallery_pagination', $pStyle );
 		$gallery->addToGalleries( [ self::galleryIdOf( $pParentContentId ) ] );
 		return (int)$gallery->mContentId;
 	}

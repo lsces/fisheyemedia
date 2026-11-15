@@ -274,7 +274,7 @@ trait FisheyeMediaTrait {
 	public function picturesFolderRoot(): array {
 		$role = $this->mediaBaseRole();
 		return $role
-			? [ 'key' => 'fisheyemedia_'.$role.'_images_gallery', 'parentKey' => FisheyeMediaBases::configKey( $role ), 'parentTitle' => FisheyeMediaBases::BASES[$role] ]
+			? [ 'key' => 'fisheyemedia_'.$role.'_images_gallery', 'parentKey' => FisheyeMediaBases::configKey( $role ), 'parentTitle' => FisheyeMediaBases::bases()[$role] ]
 			: [ 'key' => 'fisheye_pictures_gallery', 'parentKey' => null, 'parentTitle' => null ];
 	}
 

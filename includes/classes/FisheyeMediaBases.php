@@ -15,6 +15,11 @@ class FisheyeMediaBases {
 	/** The roles and the title a base is first adopted by. */
 	public const BASES = [ 'library' => 'Library', 'films' => 'Films', 'music' => 'Music', 'tv' => 'TV Shows', 'magazines' => 'Magazines', 'docs' => 'Documentation' ];
 
+	/** The roles and the title each base is kept under: the fixed list and the registered archives (FisheyeArchives). @return array<string,string> */
+	public static function bases(): array {
+		return self::BASES + FisheyeArchives::roleTitles();
+	}
+
 	/** @var array<string,?int> answers kept for the request */
 	private static array $kept = [];
 
@@ -26,7 +31,7 @@ class FisheyeMediaBases {
 	/** content_id of the base gallery, or null when this site has none. */
 	public static function contentId( string $pRole ): ?int {
 		global $gBitSystem, $gBitDb;
-		if( !isset( self::BASES[$pRole] ) ) {
+		if( !isset( self::bases()[$pRole] ) ) {
 			return null;
 		}
 		if( array_key_exists( $pRole, self::$kept ) ) {
@@ -35,7 +40,7 @@ class FisheyeMediaBases {
 		$id = (int)$gBitSystem->getConfig( self::configKey( $pRole ), 0 );
 		if( !$id || !$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `content_id` = ?", [ $id ] ) ) {
 			$id = 0;
-			if( $galleryId = FisheyeGallery::getTopGalleryId( self::BASES[$pRole] ) ) {
+			if( $galleryId = FisheyeGallery::getTopGalleryId( self::bases()[$pRole] ) ) {
 				$id = (int)$gBitDb->getOne( "SELECT `content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery` WHERE `gallery_id` = ?", [ $galleryId ] );
 				if( $id ) {
 					$gBitSystem->storeConfig( self::configKey( $pRole ), $id, FISHEYEMEDIA_PKG_NAME );
@@ -61,7 +66,7 @@ class FisheyeMediaBases {
 	/** Keep the id of a base gallery just made. */
 	public static function remember( string $pRole, int $pContentId ): void {
 		global $gBitSystem;
-		if( isset( self::BASES[$pRole] ) && $pContentId > 0 ) {
+		if( isset( self::bases()[$pRole] ) && $pContentId > 0 ) {
 			$gBitSystem->storeConfig( self::configKey( $pRole ), $pContentId, FISHEYEMEDIA_PKG_NAME );
 			self::$kept[$pRole] = $pContentId;
 		}
