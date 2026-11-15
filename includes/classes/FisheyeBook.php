@@ -1821,6 +1821,8 @@ class FisheyeBook extends FisheyeMediaImage {
 	public function getExtrasCounts(): array {
 		$counts = parent::getExtrasCounts();
 		$counts['extras'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ('ebook','audiobook','extra') AND `end_date` IS NULL", [ $this->mContentId ] );
+		// a file promoted to an item sits in the pictures folder as well as in its row: counted once, as its row
+		$counts['extras'] -= count( $this->promotedFileItemIds() );
 		return $counts;
 	}
 
@@ -1828,8 +1830,31 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * The book's files lead the plain Extras strip: an ebook is simply another item on it, shown with the book's cover and a label saying what it
 	 * is, and opens (downloads) through view_book_file.php; an audio book plays in the browser. Not a tab of its own.
 	 */
+	/**
+	 * The content ids of this book's files that have been promoted to items of their own (an 'ebook' or 'extra' row whose xref names an item in the
+	 * pictures folder). The row is what the Extras strip lists for such a file, so the folder's copy of it is left out of the pictures.
+	 *
+	 * @return list<int>
+	 */
+	private function promotedFileItemIds(): array {
+		$folder = $this->getPicturesFolder();
+		if( !$folder ) {
+			return [];
+		}
+		return array_map( 'intval', $this->mDb->getCol(
+			"SELECT DISTINCT x.`xref` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."fisheye_gallery_image_map` m ON m.`item_content_id` = x.`xref` AND m.`gallery_content_id` = ?
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`xref` AND lc.`content_type_guid` <> 'fisheyegallery'
+			 WHERE x.`content_id` = ? AND x.`item` IN ('ebook','extra') AND x.`end_date` IS NULL AND x.`xref` > 0", [ $folder['content_id'], $this->mContentId ]
+		) ?: [] );
+	}
+
 	public function getExtrasGroups(): array {
 		$extras = parent::getExtrasGroups();
+		// the folder's copy of a promoted file is left out: its own row, below, lists it
+		if( $extras['groups'] && ( $promoted = $this->promotedFileItemIds() ) ) {
+			$extras['groups'][0]['items'] = array_values( array_filter( $extras['groups'][0]['items'], fn( $i ) => !in_array( $i['content_id'] ?? 0, $promoted, true ) ) );
+		}
 		$rows = $this->mDb->getAll( "SELECT `xref_id`, `item`, `xkey`, `xkey_ext`, `xref`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ('ebook','audiobook','extra') AND `end_date` IS NULL ORDER BY `item`, `xorder`", [ $this->mContentId ] ) ?: [];
 		// An Audio folder not yet made into an album: editors get Load Audio Book on the strip.
 		$loadLinks = [];
@@ -1859,6 +1884,10 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 			// a PDF shows its own first page (drawn once, kept in the book's storage folder); anything else the book's cover
 			$fileThumb = $row['item'] !== 'audiobook' && strtolower( pathinfo( (string)$row['xkey_ext'], PATHINFO_EXTENSION ) ) === 'pdf' && self::canDrawPdfThumbs() ? FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'].'&thumb=1' : $cover;
+			// a file promoted to an item shows that item's own thumbnail (its epub cover, its first page)
+			if( $row['item'] !== 'audiobook' && (int)$row['xref'] > 0 && ( $promotedItem = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => (int)$row['xref'] ] ) ) && $promotedItem->isValid() && ( $own = $promotedItem->getThumbnailUrl( 'small' ) ) ) {
+				$fileThumb = $own;
+			}
 			$files[] = [ 'thumb' => $fileThumb, 'url' => $row['item'] === 'audiobook' ? FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] : FisheyeBookFiles::openUrl( (int)$row['xref_id'], basename( rtrim( (string)$row['xkey_ext'], '/' ) ), FISHEYEMEDIA_PKG_URL.'view_book_file.php?xref_id='.(int)$row['xref_id'] ), 'title' => basename( rtrim( (string)$row['xkey_ext'], '/' ) ), 'label' => $label ];
 		}
 		if( $extras['groups'] ) {

@@ -426,7 +426,7 @@ trait FisheyeMediaTrait {
 			];
 		}
 		foreach( $this->getPicturesFolderImages( 200 ) as $image ) {
-			$pictures[] = [ 'thumb' => $image['thumb'], 'url' => $image['url'], 'title' => $image['title'] ];
+			$pictures[] = [ 'thumb' => $image['thumb'], 'url' => $image['url'], 'title' => $image['title'], 'content_id' => $image['content_id'] ];
 		}
 		$links = [];
 		if( $this->hasUpdatePermission() && $gBitUser->hasPermission( 'p_fisheye_upload' ) ) {
