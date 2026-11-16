@@ -50,10 +50,11 @@ function fisheyemedia_content_list_sql( $pObject, $pParamHash = null ) {
 		|| !\Bitweaver\Fisheyemedia\FisheyeManagedGallery::isManaged( $gContent ) ) {
 		return [];
 	}
-	// loadImages() asks the same service for the gallery's own items, which must all stay - only the gallery picker (getList) is narrowed.
+	// loadImages() asks the same service for the gallery's own items, which must all stay - only the gallery picker is narrowed: the getList() that image_order.php
+	// itself calls. Any other getList() made while that page is drawn (the Media menu's list of top-level galleries, FisheyeLibraryMenu) must stay whole.
 	$picker = false;
 	foreach( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 6 ) as $frame ) {
-		if( ( $frame['function'] ?? '' ) === 'getList' ) {
+		if( ( $frame['function'] ?? '' ) === 'getList' && basename( (string)( $frame['file'] ?? '' ) ) === 'image_order.php' ) {
 			$picker = true;
 			break;
 		}
