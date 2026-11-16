@@ -73,6 +73,14 @@ $viewerSrc = $kind === 'pdf'
 	: THEMES_PKG_URL.'js/epubjs-0.3.93/reader.html?file='.rawurlencode( $fileUrl ).( $highlight !== '' ? '&search='.rawurlencode( $highlight ) : '' );
 
 $gBitSmarty->assign( 'gContent', $gContent );
+if( $gContent instanceof FisheyeBook ) {   // a book's file: its details beside it, the same data as the book's own page (read only; the edit page changes them)
+	$bookDetails = FisheyeBookDetails::collect( $gContent );
+	foreach( $bookDetails as $key => $value ) {
+		$gBitSmarty->assign( $key, $value );
+	}
+	$gBitSmarty->assign( 'hasDetails', $bookDetails['creditGroups'] || $bookDetails['isbn'] || $bookDetails['details'] || $bookDetails['externalLinks'] );
+	$gBitSmarty->assign( 'hideDescription', true );   // a file-only book's description is its extracted text; the file is right below
+}
 $gBitSmarty->assign( 'fileName', $name );
 $gBitSmarty->assign( 'fileUrl', $fileUrl );
 $gBitSmarty->assign( 'viewerSrc', $viewerSrc );
