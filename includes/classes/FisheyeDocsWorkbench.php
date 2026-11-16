@@ -66,6 +66,9 @@ class FisheyeDocsWorkbench {
 		return self::HANDLERS[$ext] ?? ( empty( self::kinds()[self::$sKind]['builtin'] ) ? ( self::IMAGE_HANDLERS[$ext] ?? null ) : null );
 	}
 
+	/** The handlers whose files are Books (a PDF or epub, which can carry an ISBN); the pictures a registered archive loads stay plain Images. */
+	public const DOCUMENT_HANDLERS = [ 'mimeextpdf', 'mimeextepub' ];
+
 	/** The preference value is a VARCHAR(250). */
 	private const SPEC_MAX = 250;
 
@@ -285,15 +288,15 @@ class FisheyeDocsWorkbench {
 			if( $pSeconds > 0 && ( microtime( true ) - $started ) >= $pSeconds ) {
 				break;
 			}
-			$galleryContentId = self::galleryFor( dirname( $file['path'] ), $top );
+			$galleryContentId = self::galleryFor( self::galleryDirFor( $file['path'] ), $top );
 			$galleryId = $galleryContentId ? self::galleryIdOf( $galleryContentId ) : null;
 			if( !$galleryId ) {
 				$result['errors'][] = $file['path'].': the gallery could not be made.';
 				continue;
 			}
 			self::activatePlugin( $file['handler'] );
-			// a magazine file is a Magazine Issue; a document stays a plain Image
-			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : new FisheyeImage();
+			// a magazine file is a Magazine Issue, any other PDF or epub a Book (which holds the file itself, as an attachment kept in place), a picture a plain Image
+			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : ( in_array( $file['handler'], self::DOCUMENT_HANDLERS, true ) ? new FisheyeBook() : new FisheyeImage() );
 			$hash = [
 				'title' => pathinfo( $file['name'], PATHINFO_FILENAME ),
 				'mimeplugin' => [ $file['handler'] => [ 'root' => self::$sKind, 'path' => $file['path'] ] ],
@@ -344,6 +347,135 @@ class FisheyeDocsWorkbench {
 		// getLibertyObject() looks a content item's type up through a query cached for an hour: without this flush a converted issue keeps coming back as an Image.
 		if( !empty( $gBitDb->mDb ) && method_exists( $gBitDb->mDb, 'CacheFlush' ) ) {
 			$gBitDb->mDb->CacheFlush();
+		}
+		return $ret;
+	}
+
+	/**
+	 * PDFs and epubs loaded as plain Images: the content_ids of those in the archive in use (not Magazines, which have issues). convertLoadedBooks() changes them
+	 * to Books, the way convertLoadedIssues() does for issues.
+	 *
+	 * @return list<int>
+	 */
+	public static function plainImageBooks(): array {
+		global $gBitDb;
+		if( self::$sKind === 'magazines' ) {
+			return [];
+		}
+		$rows = $gBitDb->getCol(
+			"SELECT DISTINCT a.`content_id` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
+			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id`
+			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ? AND a.`attachment_plugin_guid` IN ( 'mimeextpdf', 'mimeextepub' )
+			   AND lc.`content_type_guid` = 'fisheyeimage'", [ self::$sKind.'|%' ] ) ?: [];
+		return array_map( 'intval', $rows );
+	}
+
+	/** @return array{converted:int,errors:list<string>} */
+	public static function convertLoadedBooks(): array {
+		global $gBitDb;
+		$ret = [ 'converted' => 0, 'errors' => [] ];
+		$ids = self::plainImageBooks();
+		if( !$ids ) {
+			return $ret;
+		}
+		$gBitDb->StartTrans();
+		foreach( $ids as $cid ) {
+			$gBitDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `content_type_guid` = 'fisheyebook' WHERE `content_id` = ? AND `content_type_guid` = 'fisheyeimage'", [ $cid ] );
+			$ret['converted']++;
+		}
+		$gBitDb->CompleteTrans();
+		// the content type of an item is looked up through a query cached for an hour: flush it so a converted item stops coming back as an Image
+		if( !empty( $gBitDb->mDb ) && method_exists( $gBitDb->mDb, 'CacheFlush' ) ) {
+			$gBitDb->mDb->CacheFlush();
+		}
+		return $ret;
+	}
+
+	/**
+	 * Whether a folder is ONE book: in a registered archive, a folder that holds exactly one PDF or epub and nothing else that could be loaded below it. Such a
+	 * folder is not made a gallery; its document goes straight into the gallery above (several documents in a folder are editions of one book and keep their
+	 * gallery; a folder called Extras always stays a gallery). The built-in kinds keep a gallery for every folder, as they always have.
+	 */
+	public static function isSingleDocumentFolder( string $pDir ): bool {
+		$root = self::root();
+		if( $pDir === '' || $pDir === '.' || strcasecmp( basename( $pDir ), 'Extras' ) === 0 || $root === '' || !empty( self::kinds()[self::$sKind]['builtin'] ) || !is_dir( $root.$pDir ) ) {
+			return false;
+		}
+		$count = 0;
+		$direct = false;
+		foreach( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root.$pDir, \FilesystemIterator::SKIP_DOTS ) ) as $f ) {
+			if( $f->isFile() && ( $handler = self::handlerFor( $f->getFilename() ) ) ) {
+				$count++;
+				$direct = in_array( $handler, self::DOCUMENT_HANDLERS, true ) && $f->getPath() === rtrim( $root.$pDir, '/' );
+				if( $count > 1 ) {
+					return false;
+				}
+			}
+		}
+		return $count === 1 && $direct;
+	}
+
+	/** The folder whose gallery a file is filed in: its own folder, or the one above when its folder is a single-document folder. */
+	public static function galleryDirFor( string $pPath ): string {
+		$dir = dirname( $pPath );
+		return self::isSingleDocumentFolder( $dir ) ? dirname( $dir ) : $dir;
+	}
+
+	/**
+	 * Loaded documents sitting alone in a gallery made for their own folder, where the folder is a single-document folder: [ item content_id => [ gallery content_id,
+	 * parent gallery content_id ] ]. Only a gallery that holds just that item, has a single parent and carries the folder's name is listed.
+	 *
+	 * @return array<int,array{0:int,1:int}>
+	 */
+	public static function singleDocumentGalleries(): array {
+		global $gBitDb;
+		$out = [];
+		$rows = $gBitDb->getAll(
+			"SELECT a.`content_id`, p.`pref_value` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
+			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
+			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ? AND a.`attachment_plugin_guid` IN ( 'mimeextpdf', 'mimeextepub' )", [ self::$sKind.'|%' ] ) ?: [];
+		foreach( $rows as $row ) {
+			$path = substr( (string)$row['pref_value'], strlen( self::$sKind ) + 1 );
+			$dir = dirname( $path );
+			if( !self::isSingleDocumentFolder( $dir ) ) {
+				continue;
+			}
+			$cid = (int)$row['content_id'];
+			$in = $gBitDb->getCol( "SELECT `gallery_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` = ?", [ $cid ] ) ?: [];
+			if( count( $in ) !== 1 ) {
+				continue;
+			}
+			$gallery = (int)$in[0];
+			$parents = $gBitDb->getCol( "SELECT `gallery_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` = ?", [ $gallery ] ) ?: [];
+			$held = (int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `gallery_content_id` = ?", [ $gallery ] );
+			$title = (string)$gBitDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $gallery ] );
+			if( $held === 1 && count( $parents ) === 1 && $title === basename( $dir ) ) {
+				$out[$cid] = [ $gallery, (int)$parents[0] ];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * File each such document straight into the gallery above and remove the empty gallery left behind (the document itself, its thumbnails and its link are not touched).
+	 *
+	 * @return array{moved:int,errors:list<string>}
+	 */
+	public static function flattenSingleDocuments(): array {
+		$ret = [ 'moved' => 0, 'errors' => [] ];
+		foreach( self::singleDocumentGalleries() as $cid => [ $gallery, $parent ] ) {
+			$item = \Bitweaver\Liberty\LibertyBase::getLibertyObject( $cid );
+			$old = \Bitweaver\Liberty\LibertyBase::getLibertyObject( $gallery );
+			$parentId = self::galleryIdOf( $parent );
+			if( !$item || !$old || !$parentId ) {
+				$ret['errors'][] = 'Item '.$cid.': the galleries could not be found.';
+				continue;
+			}
+			$item->addToGalleries( [ $parentId ] );
+			$old->removeItem( $cid );
+			$old->expunge();
+			$ret['moved']++;
 		}
 		return $ret;
 	}

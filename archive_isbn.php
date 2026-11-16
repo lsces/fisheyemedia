@@ -34,6 +34,7 @@ if( !empty( $_REQUEST['tag_isbn'] ) ) {
 $gBitSmarty->assign( 'kind', $kind );
 $gBitSmarty->assign( 'topTitle', FisheyeDocsWorkbench::topTitle() );
 $gBitSmarty->assign( 'st', FisheyeArchiveIsbn::status( $kind ) );
+$gBitSmarty->assign( 'plainBooks', count( FisheyeDocsWorkbench::plainImageBooks() ) );
 $gBitSmarty->assign( 'batch', FisheyeArchiveIsbn::BATCH );
 $gBitSmarty->assign( 'keepSeconds', FisheyeDocsWorkbench::KEEP_GOING_SECONDS );
 $gBitSmarty->assign( 'keepGoingChecked', !empty( $_REQUEST['keep_going'] ) );

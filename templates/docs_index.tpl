@@ -19,6 +19,20 @@
 				<input type="submit" class="btn btn-default" name="convert_issues" value="{tr}Make them Magazine Issues{/tr}" />
 			{/form}
 		{/if}
+		{if $singleDocuments}
+			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php"}
+				<input type="hidden" name="kind" value="{$kind}" />
+				<p>{$singleDocuments} {tr}documents sit alone in a gallery made for their folder. File each straight into the gallery above and remove the empty one (the document itself is not touched).{/tr}</p>
+				<input type="submit" class="btn btn-default" name="flatten_singles" value="{tr}File them into the gallery above{/tr}" />
+			{/form}
+		{/if}
+		{if $plainBooks}
+			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php"}
+				<input type="hidden" name="kind" value="{$kind}" />
+				<p>{$plainBooks} {tr}loaded PDFs and epubs are still plain Images. Make them Books (every row, thumbnail and file reference is kept); a Book can carry an ISBN, authors and links.{/tr}</p>
+				<input type="submit" class="btn btn-default" name="convert_books" value="{tr}Make them Books{/tr}" />
+			{/form}
+		{/if}
 		{if !$root}
 			<div class="alert alert-warning"><p>{tr}No {$topTitle|escape} folder was found: set the {$topTitle|escape} Storage Path in Media Library Settings.{/tr}</p></div>
 		{else}

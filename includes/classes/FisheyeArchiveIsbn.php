@@ -1,6 +1,6 @@
 <?php
 /**
- * Tags the documents a folder archive has loaded with their ISBN. Each loaded PDF or epub is read where it is kept (an epub by FisheyeBookCatalogue::epubIsbns(),
+ * Tags the Books (the PDFs and epubs) a folder archive has loaded with their ISBN; plain Images are left alone until the workbench has made them Books. Each loaded PDF or epub is read where it is kept (an epub by FisheyeBookCatalogue::epubIsbns(),
  * a PDF from the text of its first pages) and the first valid number found becomes the item's 'isbn' row - the ISBN-13 in xkey and the ISBN-10 in xkey_ext, as a
  * book's is - for later use (looking up the book's other details). Nothing else about the item is touched. Whether a file has been looked at is kept in the
  * attachment preference extdoc_isbn (the ISBN-13 found, or '-' when there is none), so a press only reads files it has not read yet, a file with an ISBN
@@ -65,7 +65,10 @@ class FisheyeArchiveIsbn {
 	 */
 	public static function status( string $pKind ): array {
 		global $gBitDb;
-		$base = "FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ?";
+		$base = "FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
+			JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
+			JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id` AND lc.`content_type_guid` = 'fisheyebook'
+			WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ?";
 		$like = $pKind.'|%';
 		$loaded = (int)$gBitDb->getOne( "SELECT COUNT(*) $base", [ $like ] );
 		$read = (int)$gBitDb->getOne( "SELECT COUNT(*) $base AND EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` q WHERE q.`attachment_id` = p.`attachment_id` AND q.`pref_name` = '".self::PREF."' )", [ $like ] );
@@ -90,6 +93,7 @@ class FisheyeArchiveIsbn {
 		$rows = $gBitDb->getAll(
 			"SELECT p.`attachment_id`, a.`content_id`, p.`pref_value` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
 			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id` AND lc.`content_type_guid` = 'fisheyebook'
 			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ?
 			   AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` q WHERE q.`attachment_id` = p.`attachment_id` AND q.`pref_name` = '".self::PREF."' )
 			 ORDER BY p.`attachment_id`", [ $pKind.'|%' ] ) ?: [];

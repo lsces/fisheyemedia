@@ -39,6 +39,18 @@ if( $topic === '' ) {
 		$conv['converted'] ? $messages[] = $conv['converted'].' '.KernelTools::tra( 'loaded issues are now Magazine Issues.' ) : null;
 		$errors = array_merge( $errors, $conv['errors'] );
 	}
+	if( $kind !== 'magazines' && !empty( $_REQUEST['convert_books'] ) ) {
+		$conv = FisheyeDocsWorkbench::convertLoadedBooks();
+		$conv['converted'] ? $messages[] = $conv['converted'].' '.KernelTools::tra( 'loaded files are now Books.' ) : null;
+		$errors = array_merge( $errors, $conv['errors'] );
+	}
+	if( $kind !== 'magazines' && !empty( $_REQUEST['flatten_singles'] ) ) {
+		$flat = FisheyeDocsWorkbench::flattenSingleDocuments();
+		$flat['moved'] ? $messages[] = $flat['moved'].' '.KernelTools::tra( 'documents were filed straight into the gallery above.' ) : null;
+		$errors = array_merge( $errors, $flat['errors'] );
+	}
+	$gBitSmarty->assign( 'singleDocuments', $kind !== 'magazines' ? count( FisheyeDocsWorkbench::singleDocumentGalleries() ) : 0 );
+	$gBitSmarty->assign( 'plainBooks', $kind !== 'magazines' ? count( FisheyeDocsWorkbench::plainImageBooks() ) : 0 );
 	$gBitSmarty->assign( 'plainIssues', $kind === 'magazines' ? count( FisheyeDocsWorkbench::plainImageIssues() ) : 0 );
 	$gBitSmarty->assign( 'messages', $messages );
 	$gBitSmarty->assign( 'errors', $errors );

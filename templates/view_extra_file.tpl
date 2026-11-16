@@ -1,6 +1,9 @@
 {strip}
 <div class="display fisheye">
 	<header>
+		{if $isItem && $gContent->hasUpdatePermission()}{* a book that is an item of its own (Documentation, a rulebook archive): its Edit icon - the book's edit page has its details (ISBN, authors, links) and the delete *}
+			<div class="floaticon"><a title="{tr}Edit{/tr}" href="{$gContent->getEditUrl()|escape}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a></div>
+		{/if}
 		{* Library - <author> - Extras - <file>: the owner's title line, then the file. *}
 		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}<a href="{$galleryUrl|escape}">{$gContent->getTitle()|escape}</a> - {$fileName|escape}</h1>
 	</header>

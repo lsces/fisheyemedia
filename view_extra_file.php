@@ -5,7 +5,7 @@
  * (&highlight=term, the same hash as liberty's pdf view). The file itself is still served from where it is by view_season_file.php (view_book_file.php for a book), which does the
  * permission and path checks; anything that is not a PDF is handed straight to it (a download).
  *
- * &content_id=N instead of an xref_id opens a PDF or an epub that is itself a fisheye image (the Documentation galleries): the same viewers, fed by liberty's
+ * &content_id=N instead of an xref_id opens a PDF or an epub that is itself a fisheye image (the Documentation galleries): the same viewers, with the item's own Edit icon, fed by liberty's
  * download_file.php for the image's attachment, which does the permission check and serves a mimeextpdf file from where it is.
  *
  * @package fisheyemedia
@@ -39,6 +39,7 @@ if( $contentId ) {
 	// back to the gallery the document is in, not the image's own generic page
 	$galleryId = $gBitDb->getOne( "SELECT g.`gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."fisheye_gallery` g ON g.`content_id` = m.`gallery_content_id` WHERE m.`item_content_id` = ?", [ $contentId ] );
 	$galleryUrl = $galleryId ? FISHEYE_PKG_URL.'view.php?gallery_id='.$galleryId : $gContent->getDisplayUrl();
+	$gBitSmarty->assign( 'isItem', true );   // the file is an item of its own: its Edit icon goes on the header
 } else {
 	$xrefId = (int)( $_REQUEST['xref_id'] ?? 0 );
 	$row = $xrefId ? $gBitDb->getRow(

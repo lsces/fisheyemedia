@@ -1,9 +1,8 @@
 <?php
 /**
- * Edit page for a book (FisheyeBook) - title, description and the generic xref tabs (the same
- * list/add/edit controls every media type gets), plus delete. 'Reload from Open Library' looks the
- * ISBN up (FisheyeBook::reloadFromOpenLibrary()) and fills in what is blank, cover included.
- * Skeleton of edit_album.php.
+Edit page for a book (FisheyeBook) - title, description and the generic xref tabs (the same
+ * list/add/edit controls every media type gets), plus delete. Finding out more about the book (its ISBN, Open Library, Wikidata, a cover) is the
+ * Look up details page (look_up_details.php), one button away. Skeleton of edit_album.php.
  *
  * @package fisheyemedia
  */
@@ -32,40 +31,6 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 		KernelTools::bit_redirect( $gContent->getDisplayUrl() );
 	}
 	$gContent->load();
-} elseif( !empty( $_REQUEST['fReloadOpenLibrary'] ) ) {
-	$olResult = $gContent->fillDetails();
-	if( !empty( $olResult['error'] ) ) {
-		$gContent->mErrors['open_library'] = $olResult['error'];
-	} elseif( $olResult['items'] ) {
-		$olMessage = KernelTools::tra( 'Added from Open Library' );
-	} else {
-		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Open Library has this edition, but nothing it holds is missing here.' ) : KernelTools::tra( 'Open Library has no edition with this ISBN.' );
-	}
-} elseif( !empty( $_REQUEST['fCheckIsbn'] ) ) {
-	// The ISBN was changed to another edition: what Open Library holds for it beside what is stored (nothing is written).
-	$isbnCheck = $gContent->checkOpenLibraryIsbn();
-	if( $isbnCheck['error'] !== '' ) {
-		$gContent->mErrors['open_library'] = $isbnCheck['error'];
-	} elseif( !$isbnCheck['found'] ) {
-		$olMessage = KernelTools::tra( 'Open Library has no edition with this ISBN.' );
-	}
-} elseif( !empty( $_REQUEST['fReplaceIsbn'] ) ) {
-	$olResult = $gContent->replaceFromOpenLibrary( !empty( $_REQUEST['replace_description'] ) );
-	if( !empty( $olResult['error'] ) ) {
-		$gContent->mErrors['open_library'] = $olResult['error'];
-	} else {
-		$olMessage = KernelTools::tra( 'Replaced from Open Library' );
-	}
-	$gContent->load();
-} elseif( !empty( $_REQUEST['fReloadWikidata'] ) ) {
-	$olResult = $gContent->reloadFromWikidata();
-	if( !empty( $olResult['error'] ) ) {
-		$gContent->mErrors['wikidata'] = $olResult['error'];
-	} elseif( $olResult['items'] ) {
-		$olMessage = KernelTools::tra( 'Added from Wikidata' );
-	} else {
-		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Wikidata has this book in its series, but nothing it holds is missing here.' ) : KernelTools::tra( 'Wikidata does not list this book in a series.' );
-	}
 } elseif( !empty( $_REQUEST['delete'] ) ) {
 	$gContent->hasUserPermission( 'p_fisheye_admin', true );
 
@@ -90,10 +55,6 @@ if( !empty( $_REQUEST['fCancel'] ) ) {
 
 $gContent->loadXrefInfo();
 $gBitSmarty->assign( 'errors', $gContent->mErrors );
-$gBitSmarty->assign( 'olResult', $olResult ?? null );
-$gBitSmarty->assign( 'isbnCheck', $isbnCheck ?? null );
-$gBitSmarty->assign( 'isbnHint', $gContent->isbnChangedHint() );
-$gBitSmarty->assign( 'olMessage', $olMessage ?? '' );
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gBitSmarty->assign( 'gContent', $gContent );
 
