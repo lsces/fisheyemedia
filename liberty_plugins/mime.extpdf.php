@@ -49,6 +49,21 @@ function mime_extpdf_derive( &$pStoreRow, string $pLink ) {
 			mime_extdoc_store_text( $pStoreRow, $text, null );
 		}
 	}
+	// a first page too large for ImageMagick's policy at the thumbnailer's 150 dpi (a map sheet 4000 points across): drawn smaller by poppler, then the same
+	// thumbnails are made from that picture, which is removed again
+	if( \Bitweaver\Fisheyemedia\FisheyePictureShrink::pdfTooBig( $pStoreRow['real_file'] ) ) {
+		$page = \Bitweaver\Fisheyemedia\FisheyePictureShrink::pdfPage( $pStoreRow['real_file'], dirname( $pLink ).'/shrunk-page.jpg' );
+		if( $page ) {
+			liberty_generate_thumbnails( [
+				'attachment_id' => $pStoreRow['attachment_id'],
+				'dest_branch'   => rtrim( str_replace( STORAGE_PKG_PATH, '', dirname( $pLink ) ), '/' ).'/',
+				'source_file'   => $page,
+				'type'          => 'image/jpeg',
+			] );
+			@unlink( $page );
+			return;
+		}
+	}
 	if( function_exists( '\Bitweaver\Liberty\mime_pdf_thumbnail' ) ) {
 		$thumbRow = [ 'attachment_id' => $pStoreRow['attachment_id'], 'source_file' => $pLink, 'log' => [] ];
 		mime_pdf_thumbnail( $thumbRow );
