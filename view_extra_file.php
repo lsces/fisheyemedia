@@ -78,8 +78,7 @@ if( $gContent instanceof FisheyeBook ) {   // a book's file: its details beside 
 	foreach( $bookDetails as $key => $value ) {
 		$gBitSmarty->assign( $key, $value );
 	}
-	$gBitSmarty->assign( 'hasDetails', $bookDetails['creditGroups'] || $bookDetails['isbn'] || $bookDetails['details'] || $bookDetails['externalLinks'] );
-	$gBitSmarty->assign( 'hideDescription', true );   // a file-only book's description is its extracted text; the file is right below
+	$gBitSmarty->assign( 'hasDetails', $bookDetails['creditGroups'] || $bookDetails['isbn'] || $bookDetails['details'] || $bookDetails['externalLinks'] || !empty( $gContent->mInfo['data'] ) );
 }
 $gBitSmarty->assign( 'fileName', $name );
 $gBitSmarty->assign( 'fileUrl', $fileUrl );

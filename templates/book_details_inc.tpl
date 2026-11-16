@@ -16,7 +16,7 @@
 	<p><strong>{$line.label|escape}:</strong> {$line.value|escape}</p>
 {/foreach}
 
-{if !$hideDescription && $gContent->mInfo.data}{if strpos( $gContent->mInfo.data, '<' ) !== false}<div class="book-description">{$gContent->mInfo.data}</div>{else}<p>{$gContent->mInfo.data|escape|nl2br}</p>{/if}{/if}
+{if $gContent->mInfo.data}{if strpos( $gContent->mInfo.data, '<' ) !== false}<div class="book-description">{$gContent->mInfo.data}</div>{else}<p>{$gContent->mInfo.data|escape|nl2br}</p>{/if}{/if}
 
 {if $externalLinks|@count}
 	<p class="book-external-links"><strong>{tr}Links{/tr}:</strong>

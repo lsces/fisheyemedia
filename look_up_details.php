@@ -2,7 +2,7 @@
 /**
  * Look up details for one Book: what the thing is, so its ISBN can be found and stored. It shows the title, the ISBN row if there is one, text links to search for the
  * edition by its title and any extra words typed (AbeBooks lists every edition with its ISBN, Open Library, Wikidata), a box to add the ISBN found (checked and stored as any Book's ISBN is), and the
- * lookups on what Open Library and Wikidata hold for the book: Check ISBN, Reload from Open Library, Reload from Wikidata. The cover picker is a button away. Reached from the
+ * box for the book's Wikidata item, and a button to the Available information page (what the sources hold, to choose from). The cover picker is a button away. Reached from the
  * Book's edit page, whose only lookup button this is.
  *
  * @package fisheyemedia
@@ -57,42 +57,6 @@ if( !empty( $_REQUEST['save_wikidata'] ) ) {
 	}
 }
 
-// The lookups on what Open Library and Wikidata hold for the book (they were the edit page's buttons): each reports what it found, or says so.
-if( !empty( $_REQUEST['fReloadOpenLibrary'] ) ) {
-	$olResult = $gContent->fillDetails();
-	if( !empty( $olResult['error'] ) ) {
-		$gContent->mErrors['open_library'] = $olResult['error'];
-	} elseif( $olResult['items'] ) {
-		$olMessage = KernelTools::tra( 'Added from Open Library' );
-	} else {
-		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Open Library has this edition, but nothing it holds is missing here.' ) : KernelTools::tra( 'Open Library has no edition with this ISBN.' );
-	}
-} elseif( !empty( $_REQUEST['fCheckIsbn'] ) ) {
-	// The ISBN was changed to another edition: what Open Library holds for it beside what is stored (nothing is written).
-	$isbnCheck = $gContent->checkOpenLibraryIsbn();
-	if( $isbnCheck['error'] !== '' ) {
-		$gContent->mErrors['open_library'] = $isbnCheck['error'];
-	} elseif( !$isbnCheck['found'] ) {
-		$olMessage = KernelTools::tra( 'Open Library has no edition with this ISBN.' );
-	}
-} elseif( !empty( $_REQUEST['fReplaceIsbn'] ) ) {
-	$olResult = $gContent->replaceFromOpenLibrary( !empty( $_REQUEST['replace_description'] ) );
-	if( !empty( $olResult['error'] ) ) {
-		$gContent->mErrors['open_library'] = $olResult['error'];
-	} else {
-		$olMessage = KernelTools::tra( 'Replaced from Open Library' );
-	}
-	$gContent->load();
-} elseif( !empty( $_REQUEST['fReloadWikidata'] ) ) {
-	$olResult = $gContent->reloadFromWikidata();
-	if( !empty( $olResult['error'] ) ) {
-		$gContent->mErrors['wikidata'] = $olResult['error'];
-	} elseif( $olResult['items'] ) {
-		$olMessage = KernelTools::tra( 'Added from Wikidata' );
-	} else {
-		$olMessage = $olResult['matched'] ? KernelTools::tra( 'Wikidata has this book in its series, but nothing it holds is missing here.' ) : KernelTools::tra( 'Wikidata does not list this book in a series.' );
-	}
-}
 $errors = array_merge( $errors, array_values( $gContent->mErrors ) );
 
 // extra words for the searches (D&D 4th, an author ...): what was typed, else the book's first author
@@ -107,10 +71,7 @@ $gBitSmarty->assign( 'isbn13', (string)( $row['xkey'] ?? '' ) );
 $gBitSmarty->assign( 'isbn10', (string)( $row['xkey_ext'] ?? '' ) );
 $gBitSmarty->assign( 'extra', $extra );
 $gBitSmarty->assign( 'wikidata', (string)$gContent->mDb->getOne( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'wikidata_work' AND `end_date` IS NULL", [ $gContent->mContentId ] ) );
-$gBitSmarty->assign( 'olResult', $olResult ?? null );
-$gBitSmarty->assign( 'isbnCheck', $isbnCheck ?? null );
 $gBitSmarty->assign( 'isbnHint', $gContent->isbnChangedHint() );
-$gBitSmarty->assign( 'olMessage', $olMessage ?? '' );
 $gBitSmarty->assign( 'titleTerm', rawurlencode( $gContent->getTitle() ) );
 $gBitSmarty->assign( 'extraTerm', rawurlencode( $extra ) );
 $gBitSmarty->assign( 'searchTerm', rawurlencode( trim( $gContent->getTitle().' '.$extra ) ) );

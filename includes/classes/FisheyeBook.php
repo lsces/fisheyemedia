@@ -550,6 +550,53 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 	}
 
+	/** Whether the book holds its own file in place (a PDF or epub of an archive, the mimeext* attachment): that attachment is the file, so a cover must never be stored over it. */
+	public function holdsOwnFile(): bool {
+		return $this->isValid() && (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` LIKE 'mimeext%'", [ $this->mContentId ] );
+	}
+
+	/** The real file of a book that holds its own (the mimeext* attachment's extdoc_path), or null. */
+	public function ownFilePath(): ?string {
+		$spec = $this->isValid() ? (string)$this->mDb->getOne( "SELECT p.`pref_value` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id` WHERE a.`content_id` = ? AND p.`pref_name` = 'extdoc_path'", [ $this->mContentId ] ) : '';
+		if( !str_contains( $spec, '|' ) ) {
+			return null;
+		}
+		[ $key, $rel ] = explode( '|', $spec, 2 );   // the same rule as mime_extdoc_resolve(): under the archive's root, no '..', a real file
+		$root = preg_match( '/^[a-z]+$/', $key ) ? realpath( FisheyeDocsWorkbench::rootFor( $key ) ?: '/nonexistent' ) : false;
+		$real = $root && $rel !== '' && !str_contains( $rel, '..' ) ? realpath( $root.'/'.ltrim( $rel, '/' ) ) : false;
+		return $real && is_file( $real ) && str_starts_with( $real, $root.'/' ) ? $real : null;
+	}
+
+	/**
+	 * The tile of a book that holds its own file: only its thumbs/ are rebuilt from the picture, beside the link to the file. The base attachThumbnail()
+	 * stores the picture as the content's attachment, which for this book would replace the file itself.
+	 */
+	protected function attachThumbnail( string $pSourcePathOrUrl ): bool {
+		if( !$this->holdsOwnFile() ) {
+			return parent::attachThumbnail( $pSourcePathOrUrl );
+		}
+		$local = $pSourcePathOrUrl;
+		$temp = null;
+		if( !is_file( $pSourcePathOrUrl ) ) {
+			$data = @file_get_contents( $pSourcePathOrUrl );
+			if( empty( $data ) ) {
+				$this->mThumbnailError = 'the cover image could not be read';
+				return false;
+			}
+			$local = $temp = tempnam( sys_get_temp_dir(), 'fisheye_thumb_' );
+			file_put_contents( $temp, $data );
+		}
+		$branchPath = $this->getImageStorageBranchPath();
+		foreach( glob( $branchPath.'thumbs/*' ) ?: [] as $oldThumb ) {
+			@unlink( $oldThumb );
+		}
+		$ok = \Bitweaver\Liberty\liberty_generate_thumbnails( [ 'type' => 'image/jpeg', 'source_file' => $local, 'dest_branch' => \Bitweaver\Liberty\liberty_mime_get_storage_branch( [ 'attachment_id' => $this->mContentId ] ) ] );
+		if( $temp ) {
+			@unlink( $temp );
+		}
+		return (bool)$ok;
+	}
+
 	/** A book's tile is its thumbs/ files; an attachment row without them (a failed or never-made tile) counts as none. */
 	public function hasThumbnail(): bool {
 		return (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ?", [ $this->mContentId ] )
@@ -605,6 +652,12 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * @return string|null the stored file name, null when the picture could not be stored
 	 */
 	public function replaceCover( string $pSourceFile, string $pSource, int $pMax = FISHEYEBOOK_COVER_MAX ): ?string {
+		if( $this->holdsOwnFile() ) {   // the cover is only the tile: no picture row, so it does not turn up among the extras
+			$temp = tempnam( sys_get_temp_dir(), 'fisheye_cover_' ).'.jpg';
+			$ok = self::storeArtworkImage( $pSourceFile, $temp, $pMax ) && $this->attachThumbnail( $temp );
+			@unlink( $temp );
+			return $ok ? 'front-cover.jpg' : null;
+		}
 		$old = $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`", [ $this->mContentId ] ) ?: [];
 		$fileName = $this->storeArtworkXref( $pSourceFile, 'front-cover', $pSource, [ 'types' => [ 'Front' ] ], $pMax );
 		if( $fileName === null ) {
@@ -887,7 +940,7 @@ class FisheyeBook extends FisheyeMediaImage {
 	 * different size at each zoom - so each answer is checked (isBlankCover()) and a stand-in passed over for the next
 	 * size. Zoom 3 is not asked for: it answers with a plain blank-book picture. Null when there is no real cover.
 	 */
-	private static function fetchGoogleCover( string $pWiki, string $pIsbn ): ?string {
+	public static function fetchGoogleCover( string $pWiki, string $pIsbn ): ?string {
 		foreach( [ 0, 2, 1 ] as $zoom ) {
 			$bytes = $pWiki::fetchOpenLibraryImage( 'https://books.google.com/books/content?vid=ISBN'.rawurlencode( $pIsbn ).'&printsec=frontcover&img=1&zoom='.$zoom );
 			if( $bytes !== null && !self::isBlankCover( $bytes ) ) {
@@ -1020,7 +1073,7 @@ class FisheyeBook extends FisheyeMediaImage {
 	}
 
 	/** The book's ISBNs (13 then 10) and Open Library's edition for the first that has one. @return array{isbns:list<string>,edition:?array,error:string} */
-	private function openLibraryEditionForIsbns(): array {
+	public function openLibraryEditionForIsbns(): array {
 		$ret = [ 'isbns' => [], 'edition' => null, 'error' => '' ];
 		$wiki = '\\Bitweaver\\Contactwiki\\ContactWikiIndividual';
 		if( !class_exists( $wiki ) ) {
@@ -1798,7 +1851,7 @@ class FisheyeBook extends FisheyeMediaImage {
 	/**
 	 * The name of an Open Library tag (/tags/OL169T -> "Fantasy"), remembered for a day - a handful of tags cover every book.
 	 */
-	private static function openLibraryTagName( string $pTagKey ): string {
+	public static function openLibraryTagName( string $pTagKey ): string {
 		static $names = [];
 		if( isset( $names[$pTagKey] ) ) {
 			return $names[$pTagKey];
@@ -1823,6 +1876,7 @@ class FisheyeBook extends FisheyeMediaImage {
 		$counts['extras'] += (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ('ebook','audiobook','extra') AND `end_date` IS NULL", [ $this->mContentId ] );
 		// a file promoted to an item sits in the pictures folder as well as in its row: counted once, as its row
 		$counts['extras'] -= count( $this->promotedFileItemIds() );
+		$counts['extras'] += $this->ownFileExtra() ? 1 : 0;
 		return $counts;
 	}
 
@@ -1849,6 +1903,19 @@ class FisheyeBook extends FisheyeMediaImage {
 		) ?: [] );
 	}
 
+	/**
+	 * The book's own file (a PDF or epub it holds in place) as an Extras entry that opens the viewer: not a row of its own, so it cannot drift from the attachment
+	 * it comes from. Null for a book with no file of its own, or one of a kind the viewer does not open.
+	 *
+	 * @return array{thumb:string,url:string,title:string,label:string}|null
+	 */
+	public function ownFileExtra(): ?array {
+		if( !$this->holdsOwnFile() || !( $path = $this->ownFilePath() ) || !in_array( $format = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) ), [ 'pdf', 'epub' ], true ) ) {
+			return null;
+		}
+		return [ 'thumb' => (string)$this->getThumbnailUrl( 'small' ), 'url' => FISHEYEMEDIA_PKG_URL.'view_extra_file.php?content_id='.(int)$this->mContentId, 'title' => basename( $path ), 'label' => 'Ebook '.strtoupper( $format ) ];
+	}
+
 	public function getExtrasGroups(): array {
 		$extras = parent::getExtrasGroups();
 		// the folder's copy of a promoted file is left out: its own row, below, lists it
@@ -1861,11 +1928,12 @@ class FisheyeBook extends FisheyeMediaImage {
 		if( $this->hasUpdatePermission() && array_filter( FisheyeBookFiles::audioFolders( $this ), fn( $f ) => !$f['linked'] ) ) {
 			$loadLinks[] = [ 'title' => 'Load Audio Book', 'url' => FISHEYEMEDIA_PKG_URL.'load_audio_book.php?content_id='.$this->mContentId, 'icon' => 'audio-x-generic' ];
 		}
-		if( !$rows && !$loadLinks ) {
+		$own = $this->ownFileExtra();
+		if( !$rows && !$loadLinks && !$own ) {
 			return $extras;
 		}
 		$cover = (string)$this->getThumbnailUrl( 'small' );
-		$files = [];
+		$files = $own ? [ $own ] : [];
 		foreach( $rows as $row ) {
 			if( $row['item'] === 'audiobook' && $row['xref'] ) {
 				// an audio book that is an album: one entry, the album's own page
