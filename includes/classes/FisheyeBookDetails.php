@@ -32,6 +32,9 @@ class FisheyeBookDetails {
 				$linkValue = $xref['xkey'] ?: ( $xref['xkey_ext'] ?? null );
 				if( !empty( $xref['cross_ref_href'] ) && !empty( $linkValue ) && $item !== 'isbn' ) {
 					$externalLinks[] = [ 'title' => $xref['xref_title'] ?? strtoupper( $item ), 'url' => $xref['cross_ref_href'].$linkValue ];
+				} elseif( ( $xref['template'] ?? '' ) === 'href' && empty( $xref['cross_ref_href'] ) && preg_match( '#^https?://#i', (string)( $xref['xkey_ext'] ?? '' ) ) ) {
+					// an item with no prefix holds the whole web address (the project Book's Extra Information): its link text, when given, stands for the title
+					$externalLinks[] = [ 'title' => $xref['xkey'] ?: ( $xref['xref_title'] ?? strtoupper( $item ) ), 'url' => $xref['xkey_ext'] ];
 				}
 
 				if( $item === 'isbn' ) {
