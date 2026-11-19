@@ -17,7 +17,7 @@
 		{if $st.error}
 			<div class="alert alert-danger"><p>{$st.error|escape}</p></div>
 		{else}
-			<p class="help-block"><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?kind={$kind}">{tr}All{/tr} {$noun|escape}s</a>{if $st.done} - <strong>{tr}Finished{/tr}</strong>: {tr}every file is loaded.{/tr}{/if}</p>
+			<p class="help-block"><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?kind={$kind}">{tr}All{/tr} {$noun|escape}s</a>{if $st.done && !$st.awaitingBook} - <strong>{tr}Finished{/tr}</strong>: {tr}every file is loaded.{/tr}{/if}</p>
 
 			<h3>{tr}Files{/tr} <small>{$st.loaded} {tr}of{/tr} {$st.total} {tr}loaded{/tr}</small></h3>
 			{if $st.todo}
@@ -37,6 +37,25 @@
 			{if $st.noHandler}<p class="help-block">{$st.noHandler} {tr}files are of a kind with no loader yet (PDFs and epubs only so far) and are listed but not loaded.{/tr}</p>{/if}
 			{if $st.tooLong}
 				<div class="alert alert-warning"><p>{tr}These paths are too long to be stored and are skipped:{/tr}</p><ul>{foreach from=$st.tooLong item=path}<li>{$path|escape}</li>{/foreach}</ul></div>
+			{/if}
+			{if $projects}
+			<h3>{tr}Folders that can be one Book{/tr}</h3>
+			<p class="help-block">{tr}A folder of differently named documents is either a series of separate books or one project (a model's manual and instructions). Make Book makes the folder one Book with a labelled ebook row for each document; Load files, on the other hand, makes each document a Book of its own.{/tr}</p>
+			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php" id="docsProjectForm"}
+				<input type="hidden" name="kind" value="{$kind}" />
+				<input type="hidden" name="topic" value="{$st.name|escape}" />
+				<table class="table table-condensed">
+					<tbody>
+						{foreach from=$projects item=pr}
+							<tr>
+								<td>{$pr.dir|escape}</td>
+								<td>{$pr.files|@count} {tr}documents{/tr}</td>
+								<td>{if $pr.contentId}<a href="{$pr.url|escape}">{tr}Book made{/tr}</a>{else}<button type="submit" class="btn btn-default btn-xs" name="make_book" value="{$pr.dir|escape}">{tr}Make Book{/tr}</button>{/if}</td>
+							</tr>
+						{/foreach}
+					</tbody>
+				</table>
+			{/form}
 			{/if}
 			{if $st.folders|@count > 1}
 			<table class="table table-condensed">

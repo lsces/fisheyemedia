@@ -56,9 +56,9 @@ if( $topic === '' ) {
 	$gBitSmarty->assign( 'errors', $errors );
 	$all = FisheyeDocsWorkbench::overview();
 	$showAll = !empty( $_REQUEST['all'] );
-	// the front page lists only what has files left to load (or an error to show); finished folders and folders with no files of their own
+	// the front page lists only what has files left to load (or an error to show, or a folder waiting for its Make Book); finished folders and folders with no files of their own
 	// (galleries made from uploads) are behind "Show the finished ones"
-	$hasWork = fn( $r ) => $r['error'] || $r['todo'] > 0;
+	$hasWork = fn( $r ) => $r['error'] || $r['todo'] > 0 || !empty( $r['awaitingBook'] );
 	$gBitSmarty->assign( 'overview', $showAll ? $all : array_filter( $all, $hasWork ) );
 	$gBitSmarty->assign( 'finished', count( array_filter( $all, fn( $r ) => !$hasWork( $r ) ) ) );
 	$gBitSmarty->assign( 'showAll', $showAll );
@@ -80,6 +80,12 @@ if( !empty( $_REQUEST['load_files'] ) ) {
 	// a file that fails does not stop the run (it is retried each press and listed); only a press that loads nothing does, so a bad PDF cannot stall an overnight load
 	$gBitSmarty->assign( 'continue', $keepGoing && $done['loaded'] > 0 );
 }
+if( !empty( $_REQUEST['make_book'] ) ) {
+	$made = FisheyeDocsWorkbench::makeProjectBook( htmlspecialchars_decode( trim( (string)$_REQUEST['make_book'] ), ENT_NOQUOTES ) );
+	( $made['created'] ?? 0 ) ? $messages[] = KernelTools::tra( 'The Book was made' ).' (content_id '.$made['created'].'), '.$made['rows'].' '.KernelTools::tra( 'ebook rows.' ) : ( $made['rows'] ? $messages[] = $made['rows'].' '.KernelTools::tra( 'ebook rows were added to the existing Book.' ) : null );
+	$errors = array_merge( $errors, $made['errors'] );
+}
+$gBitSmarty->assign( 'projects', FisheyeDocsWorkbench::projectFolders( $topic ) );
 $gBitSmarty->assign( 'keepGoingChecked', !empty( $_REQUEST['keep_going'] ) );
 $gBitSmarty->assign( 'keepSeconds', FisheyeDocsWorkbench::KEEP_GOING_SECONDS );
 

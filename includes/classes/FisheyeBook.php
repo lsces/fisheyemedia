@@ -519,20 +519,38 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $this->getImageStorageBranchPath().$pRelativePath;
 	}
 
+	/** A book's picture files are grouped in images/ in its branch (rows made earlier hold them at the top and still resolve). */
+	public function imageSubfolder(): string {
+		return 'images/';
+	}
+
+	/** Pictures go in the book's own branch, as for a film: no separate pictures-folder gallery is made for "Add Pictures". */
+	public function picturesUseFolder(): bool {
+		return false;
+	}
+
+	/** Whether $pRelativePath names a picture file of this book: a plain file name (the earlier layout) or one directly inside images/. */
+	private function isImageFileRef( string $pRelativePath ): bool {
+		if( $pRelativePath === '' || str_contains( $pRelativePath, '..' ) || str_starts_with( $pRelativePath, '/' ) ) {
+			return false;
+		}
+		return basename( $pRelativePath ) === $pRelativePath || dirname( $pRelativePath ).'/' === $this->imageSubfolder();
+	}
+
 	/** Its existence is what turns on the Images tab's upload (supportsAddImage()). */
 	public function getImageStorageRoot(): string {
 		return $this->getImageStorageBranchPath();
 	}
 
 	public function replaceXrefFile( string $pItem, string $pXkeyExt, string $pTmpPath ): bool {
-		if( $pItem !== 'image' || $pXkeyExt === '' || basename( $pXkeyExt ) !== $pXkeyExt ) {
+		if( $pItem !== 'image' || !$this->isImageFileRef( $pXkeyExt ) ) {
 			return false;
 		}
 		return move_uploaded_file( $pTmpPath, $this->getImageStorageBranchPath().$pXkeyExt );
 	}
 
 	public function deleteXrefFile( string $pItem, string $pXkeyExt ): bool {
-		if( $pItem !== 'image' || $pXkeyExt === '' || basename( $pXkeyExt ) !== $pXkeyExt ) {
+		if( $pItem !== 'image' || !$this->isImageFileRef( $pXkeyExt ) ) {
 			return false;
 		}
 		$path = $this->getImageStorageBranchPath().$pXkeyExt;
@@ -552,14 +570,16 @@ class FisheyeBook extends FisheyeMediaImage {
 
 	/** Whether the book holds its own file in place (a PDF or epub of an archive, the mimeext* attachment): that attachment is the file, so a cover must never be stored over it. */
 	public function holdsOwnFile(): bool {
-		return $this->isValid() && (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` LIKE 'mimeext%'", [ $this->mContentId ] );
+		return $this->isValid() && (bool)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND ( `attachment_plugin_guid` LIKE 'mimeext%' OR `attachment_plugin_guid` IN ( 'mimepdf', 'mimeepub' ) )", [ $this->mContentId ] );
 	}
 
-	/** The real file of a book that holds its own (the mimeext* attachment's extdoc_path), or null. */
+	/** The real file of a book that holds its own (the mimeext* attachment's extdoc_path, or the stored PDF/epub's own file), or null. */
 	public function ownFilePath(): ?string {
 		$spec = $this->isValid() ? (string)$this->mDb->getOne( "SELECT p.`pref_value` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id` WHERE a.`content_id` = ? AND p.`pref_name` = 'extdoc_path'", [ $this->mContentId ] ) : '';
-		if( !str_contains( $spec, '|' ) ) {
-			return null;
+		if( !str_contains( $spec, '|' ) ) {   // not held in place: a PDF or epub uploaded into the gallery is stored with the book, beside its thumbs/
+			$stored = $this->isValid() && $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` IN ( 'mimepdf', 'mimeepub' )", [ $this->mContentId ] );
+			$file = $stored ? $this->getSourceFile() : null;
+			return $file && is_file( $file ) ? $file : null;
 		}
 		[ $key, $rel ] = explode( '|', $spec, 2 );   // the same rule as mime_extdoc_resolve(): under the archive's root, no '..', a real file
 		$root = preg_match( '/^[a-z]+$/', $key ) ? realpath( FisheyeDocsWorkbench::rootFor( $key ) ?: '/nonexistent' ) : false;
@@ -620,11 +640,11 @@ class FisheyeBook extends FisheyeMediaImage {
 	 */
 	public function promoteImageToThumbnail( string $pRelativePath ): bool {
 		// a PDF file row (a chapter held as a PDF): its first page becomes the cover
-		if( $pRelativePath !== basename( $pRelativePath ) && strtolower( pathinfo( $pRelativePath, PATHINFO_EXTENSION ) ) === 'pdf' ) {
+		if( $pRelativePath !== basename( $pRelativePath ) && !$this->isImageFileRef( $pRelativePath ) && strtolower( pathinfo( $pRelativePath, PATHINFO_EXTENSION ) ) === 'pdf' ) {
 			return $this->coverFromPdfFile( $pRelativePath ) === '';
 		}
 		$branchPath = $this->getImageStorageBranchPath();
-		if( basename( $pRelativePath ) !== $pRelativePath || !is_file( $branchPath.$pRelativePath ) ) {
+		if( !$this->isImageFileRef( $pRelativePath ) || !is_file( $branchPath.$pRelativePath ) ) {
 			return false;
 		}
 		// No thumbnail attachment yet (a first attempt that failed, or a book with no Open Library cover): there is nothing

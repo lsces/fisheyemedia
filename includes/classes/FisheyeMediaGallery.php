@@ -366,18 +366,23 @@ class FisheyeMediaGallery extends FisheyeGallery {
 	 * @return array{title:string,url:string}|null
 	 */
 	public static function getPicturesFolderOwner( FisheyeGallery $pFolder ): ?array {
-		$values = $pFolder->mDb->getCol(
-			"SELECT `pref_value` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `content_id` = ? AND `pref_name` LIKE '%!_content!_id' ESCAPE '!'",
-			[ $pFolder->mContentId ]
-		) ?: [];
-		foreach( $values as $value ) {
-			if( !ctype_digit( (string)$value ) || (int)$value === (int)$pFolder->mContentId ) {
-				continue;
+		// the folder itself, or - for a gallery inside it (a zip's sub-folders) - the nearest gallery above that is a pictures folder
+		$contentId = (int)$pFolder->mContentId;
+		for( $depth = 0; $contentId && $depth < 6; $depth++ ) {
+			$values = $pFolder->mDb->getCol(
+				"SELECT `pref_value` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `content_id` = ? AND `pref_name` LIKE '%!_content!_id' ESCAPE '!'",
+				[ $contentId ]
+			) ?: [];
+			foreach( $values as $value ) {
+				if( !ctype_digit( (string)$value ) || (int)$value === $contentId ) {
+					continue;
+				}
+				$owner = LibertyContent::getLibertyObject( (int)$value );
+				if( $owner && $owner->isValid() && $owner->getContentType() !== 'fisheyegallery' && $owner->hasViewPermission( false ) ) {
+					return [ 'title' => (string)$owner->getTitle(), 'url' => $owner->getDisplayUrl() ];
+				}
 			}
-			$owner = LibertyContent::getLibertyObject( (int)$value );
-			if( $owner && $owner->isValid() && $owner->getContentType() !== 'fisheyegallery' && $owner->hasViewPermission( false ) ) {
-				return [ 'title' => (string)$owner->getTitle(), 'url' => $owner->getDisplayUrl() ];
-			}
+			$contentId = (int)$pFolder->mDb->getOne( "SELECT m.`gallery_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m WHERE m.`item_content_id` = ?", [ $contentId ] );
 		}
 		return null;
 	}

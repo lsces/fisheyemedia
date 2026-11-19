@@ -50,6 +50,27 @@ trait FisheyeMediaTrait {
 		return $html;
 	}
 
+	/**
+	 * The folder, inside the item's own storage branch, that holds the files of its 'image' rows - '' for the branch itself (films, TV, albums keep them
+	 * there), 'images/' for a type that groups them. The row's xkey_ext is the path under the branch, so rows made before a type grouped them still resolve.
+	 */
+	public function imageSubfolder(): string {
+		return '';
+	}
+
+	/** Whether "Add Pictures" files pictures as items in the item's pictures folder (true) or stores them in the item's own branch as 'image' rows (false). */
+	public function picturesUseFolder(): bool {
+		return true;
+	}
+
+	/**
+	 * Whether the gallery controls (load straight into the folder, move to the folder) belong on the item's pictures list: when "Add Pictures" files into the folder
+	 * anyway, or when the item has been given a picture gallery (see the "Add Picture Gallery" link). Nothing makes a gallery for an item that has not asked for one.
+	 */
+	public function hasPicturesGallery(): bool {
+		return $this->picturesUseFolder() || $this->getPicturesFolder() !== null;
+	}
+
 	/** An item's pictures folder uses the Images Grid layout, whose title links back to the item. */
 	public function picturesFolderLayout(): ?string {
 		return FISHEYE_PAGINATION_IMAGES_GRID;
@@ -99,7 +120,8 @@ trait FisheyeMediaTrait {
 		// whichever storage location the calling subclass actually overrides it with (storage/
 		// attachments/<branch>/ for every current fisheye content type - see that method's own
 		// docblock).
-		$imagesDir = $this->getExtraImagePath( '' );
+		$sub = $this->imageSubfolder();
+		$imagesDir = $this->getExtraImagePath( $sub );
 		if( empty( $imagesDir ) ) {
 			return null;
 		}
@@ -393,9 +415,33 @@ trait FisheyeMediaTrait {
 		if( $folder = $this->getPicturesFolder() ) {
 			$counts['extras'] += (int)$this->mDb->getOne(
 				"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
-				 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` <> 'fisheyegallery'", [ $folder['content_id'] ] );
+				 WHERE m.`gallery_content_id` = ?", [ $folder['content_id'] ] );   // loose pictures and the galleries inside the folder
 		}
 		return $counts;
+	}
+
+	/**
+	 * The galleries directly inside this item's pictures folder, each as an Extras entry that opens the gallery.
+	 *
+	 * @return list<array{thumb:string,url:string,title:string,content_id:int,label:string}>
+	 */
+	private function getPicturesFolderGalleries(): array {
+		$folder = $this->getPicturesFolder();
+		if( !$folder ) {
+			return [];
+		}
+		$out = [];
+		$rows = $this->mDb->getCol(
+			"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+			 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` = 'fisheyegallery' ORDER BY m.`item_position`, lc.`content_id`", [ $folder['content_id'] ] ) ?: [];
+		foreach( $rows as $contentId ) {
+			$gallery = new \Bitweaver\Fisheye\FisheyeGallery( null, (int)$contentId );
+			$gallery->load();
+			if( $gallery->isValid() ) {
+				$out[] = [ 'thumb' => (string)$gallery->getThumbnailUrl( 'small' ), 'url' => (string)$gallery->getDisplayUrl(), 'title' => (string)$gallery->getTitle(), 'content_id' => (int)$contentId, 'label' => (string)$gallery->getTitle() ];
+			}
+		}
+		return $out;
 	}
 
 	/** Everything the Extras button has to offer, all kinds together. */
@@ -425,12 +471,20 @@ trait FisheyeMediaTrait {
 				'title' => is_array( $data ) && !empty( $data['types'][0] ) ? (string)$data['types'][0] : pathinfo( (string)$row['xkey_ext'], PATHINFO_FILENAME ),
 			];
 		}
+		// the galleries inside the pictures folder (a zip's sub-folders) are Extras to navigate to, listed before the loose pictures
+		foreach( $this->getPicturesFolderGalleries() as $gallery ) {
+			$pictures[] = $gallery;
+		}
 		foreach( $this->getPicturesFolderImages( 200 ) as $image ) {
 			$pictures[] = [ 'thumb' => $image['thumb'], 'url' => $image['url'], 'title' => $image['title'], 'content_id' => $image['content_id'] ];
 		}
 		$links = [];
 		if( $this->hasUpdatePermission() && $gBitUser->hasPermission( 'p_fisheye_upload' ) ) {
-			$links[] = [ 'title' => 'Add Pictures', 'url' => FISHEYEMEDIA_PKG_URL.'pictures.php?content_id='.$this->mContentId, 'icon' => 'list-add' ];
+			$links[] = [ 'title' => 'Add Pictures', 'url' => $this->picturesUseFolder() ? FISHEYEMEDIA_PKG_URL.'pictures.php?content_id='.$this->mContentId : (string)$this->getAddImageUrl(), 'icon' => 'list-add' ];
+		}
+		if( !$this->picturesUseFolder() && !$this->getPicturesFolder() && $this->hasUpdatePermission() && $gBitUser->hasPermission( 'p_fisheye_upload' ) ) {
+			// pictures held in the item's own branch are the default; a gallery is for a set (a folder's worth, a zip) and is made only when asked for
+			$links[] = [ 'title' => 'Add Picture Gallery', 'url' => FISHEYEMEDIA_PKG_URL.'pictures.php?content_id='.$this->mContentId, 'icon' => 'folder-new' ];
 		}
 		if( $folder = $this->getPicturesFolder() ) {
 			$links[] = [ 'title' => 'Open pictures folder', 'url' => BIT_ROOT_URL.'index.php?content_id='.$folder['content_id'], 'icon' => 'folder-open' ];
@@ -535,7 +589,8 @@ trait FisheyeMediaTrait {
 	 *                       image storage location, or the move itself failed
 	 */
 	public function addImageXrefFile( string $pTmpPath, string $pOriginalName ): ?string {
-		$imagesDir = $this->getExtraImagePath( '' );
+		$sub = $this->imageSubfolder();
+		$imagesDir = $this->getExtraImagePath( $sub );
 		if( empty( $imagesDir ) ) {
 			return null;
 		}
@@ -550,7 +605,7 @@ trait FisheyeMediaTrait {
 		if( !move_uploaded_file( $pTmpPath, $imagesDir.$fileName ) ) {
 			return null;
 		}
-		return $fileName;
+		return $sub.$fileName;
 	}
 
 	/**
@@ -583,22 +638,23 @@ trait FisheyeMediaTrait {
 	 * @param string $pSource      what data.source records ('Artwork/Book 01.jpg', 'caa:12345')
 	 * @param array  $pExtraData   anything else worth keeping in data (Cover Art Archive types)
 	 * @param int    $pMax         longest side kept, FISHEYEMEDIA_ARTWORK_MAX when 0 (a smaller picture is never enlarged)
-	 * @return string|null  the stored file name, or null if the image couldn't be read
+	 * @return string|null  the stored path under the item's branch (its xkey_ext), or null if the image couldn't be read
 	 */
 	protected function storeArtworkXref( string $pSourceFile, string $pNameHint, string $pSource, array $pExtraData = [], int $pMax = 0 ): ?string {
 		$ext = strtolower( pathinfo( $pSourceFile, PATHINFO_EXTENSION ) );
 		$base = trim( preg_replace( '/[^A-Za-z0-9._-]+/', '-', str_replace( '/', ' - ', pathinfo( $pNameHint, PATHINFO_DIRNAME ) !== '.' ? pathinfo( $pNameHint, PATHINFO_DIRNAME ).'/'.pathinfo( $pNameHint, PATHINFO_FILENAME ) : pathinfo( $pNameHint, PATHINFO_FILENAME ) ) ), '-' );
 		$fileName = $base.'.'.( in_array( $ext, [ 'png', 'gif' ], true ) ? $ext : 'jpg' );
-		$branch = $this->getExtraImagePath( '' );
+		$sub = $this->imageSubfolder();
+		$branch = $this->getExtraImagePath( $sub );
 		\Bitweaver\KernelTools::mkdir_p( $branch );
 		if( !self::storeArtworkImage( $pSourceFile, $branch.$fileName, $pMax > 0 ? $pMax : FISHEYEMEDIA_ARTWORK_MAX ) ) {
 			return null;
 		}
 		$nextOrder = (int)$this->mDb->getOne( "SELECT MAX(`xorder`) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] ) + 1;
-		$xrefHash = [ 'content_id' => $this->mContentId, 'item' => 'image', 'xkey_ext' => $fileName, 'xorder' => $nextOrder,
+		$xrefHash = [ 'content_id' => $this->mContentId, 'item' => 'image', 'xkey_ext' => $sub.$fileName, 'xorder' => $nextOrder,
 			'edit' => json_encode( [ 'source' => $pSource ] + $pExtraData ) ];
 		$this->storeXref( $xrefHash );
-		return $fileName;
+		return $sub.$fileName;
 	}
 
 	/**

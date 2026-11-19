@@ -76,6 +76,16 @@ function fisheyemedia_content_list_sql( $pObject, $pParamHash = null ) {
  * FisheyeMediaTrait::folderImageAdded()). Runs for every upload, so a gallery that is not a pictures folder is left alone at once.
  */
 function fisheyemedia_content_post_upload( $pGallery, &$pParamHash ) {
+	// A PDF or epub uploaded into a registered archive's galleries (Documentation, D&D ...) is a Book from the start: fisheye stores every upload as an Image.
+	$documents = [];
+	foreach( $pParamHash['uploaded_objects'] ?? [] as $object ) {
+		if( !empty( $object->mContentId ) && preg_match( '#^application/(pdf|epub\+zip)$#i', (string)$object->getField( 'mime_type' ) ) ) {
+			$documents[] = (int)$object->mContentId;
+		}
+	}
+	if( $documents && \Bitweaver\Fisheyemedia\FisheyeArchives::forGallery( $pGallery ) ) {
+		\Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::makeBooks( $documents );
+	}
 	$uploaded = reset( $pParamHash['uploaded_objects'] );
 	if( !$pGallery->isValid() || $pGallery->getContentType() !== 'fisheyegallery' || !$uploaded || empty( $uploaded->mContentId ) ) {
 		return;

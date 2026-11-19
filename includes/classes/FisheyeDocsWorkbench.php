@@ -60,10 +60,18 @@ class FisheyeDocsWorkbench {
 	/** The pictures a registered archive loads in place (mimeextimage); the built-in kinds still list them without loading, as they always have. */
 	public const IMAGE_HANDLERS = [ 'jpg' => 'mimeextimage', 'jpeg' => 'mimeextimage', 'png' => 'mimeextimage', 'gif' => 'mimeextimage', 'webp' => 'mimeextimage', 'bmp' => 'mimeextimage' ];
 
+	/**
+	 * Whether the kind in use still follows the rules the built-in kinds had before archives were registered: pictures listed but not loaded, a gallery for
+	 * every folder, always a Docs Grid. Documentation follows the same rules as any registered archive now; Magazines keeps the old ones until it is moved to books.
+	 */
+	private static function oldRules(): bool {
+		return self::$sKind === 'magazines';
+	}
+
 	/** The mime plugin that loads a file of the kind in use, or null when none does yet. */
 	public static function handlerFor( string $pPath ): ?string {
 		$ext = strtolower( pathinfo( $pPath, PATHINFO_EXTENSION ) );
-		return self::HANDLERS[$ext] ?? ( empty( self::kinds()[self::$sKind]['builtin'] ) ? ( self::IMAGE_HANDLERS[$ext] ?? null ) : null );
+		return self::HANDLERS[$ext] ?? ( self::oldRules() ? null : ( self::IMAGE_HANDLERS[$ext] ?? null ) );
 	}
 
 	/** The handlers whose files are Books (a PDF or epub, which can carry an ISBN); the pictures a registered archive loads stay plain Images. */
@@ -163,6 +171,8 @@ class FisheyeDocsWorkbench {
 			return $st;
 		}
 		$loaded = self::loaded();
+		// the documents of a folder that can be one Book are loaded only by its Make Book (as rows of that Book), never by Load files
+		$project = array_flip( array_merge( [], ...array_column( self::projectFolders( $pTopic ), 'files' ) ) );
 		foreach( self::filesIn( $pTopic ) as $path ) {
 			$cid = $loaded[self::$sKind.'|'.$path] ?? null;
 			$handler = self::handlerFor( $path );
@@ -170,9 +180,11 @@ class FisheyeDocsWorkbench {
 			$st['folders'][$folder] = $st['folders'][$folder] ?? [ 'total' => 0, 'loaded' => 0 ];
 			$st['folders'][$folder]['total']++;
 			$cid && $st['folders'][$folder]['loaded']++;
-			$st['files'][] = [ 'path' => $path, 'name' => basename( $path ), 'contentId' => $cid ? (int)$cid : null, 'handler' => $handler, 'size' => (int)@filesize( self::root().$path ) ];
+			$st['files'][] = [ 'path' => $path, 'name' => basename( $path ), 'contentId' => $cid ? (int)$cid : null, 'handler' => $handler, 'size' => (int)@filesize( self::root().$path ), 'project' => isset( $project[$path] ) ];
 			if( $cid ) {
 				$st['loaded']++;
+			} elseif( isset( $project[$path] ) ) {
+				$st['awaitingBook'] = ( $st['awaitingBook'] ?? 0 ) + 1;
 			} elseif( !$handler ) {
 				$st['noHandler']++;
 			} elseif( strlen( self::$sKind.'|'.$path ) > self::SPEC_MAX ) {
@@ -182,7 +194,7 @@ class FisheyeDocsWorkbench {
 			}
 		}
 		$st['total'] = count( $st['files'] );
-		$st['done'] = $st['total'] > 0 && $st['todo'] === 0;
+		$st['done'] = $st['total'] > 0 && $st['todo'] === 0 && empty( $st['awaitingBook'] );
 		return $st;
 	}
 
@@ -283,7 +295,7 @@ class FisheyeDocsWorkbench {
 		return $result;
 		}
 				$st = self::status( $pTopic );
-		$todo = array_filter( $st['files'], fn( $f ) => !$f['contentId'] && $f['handler'] && !in_array( $f['path'], $st['tooLong'], true ) );
+		$todo = array_filter( $st['files'], fn( $f ) => !$f['contentId'] && !$f['project'] && $f['handler'] && !in_array( $f['path'], $st['tooLong'], true ) );
 		foreach( $pSeconds > 0 ? $todo : array_slice( $todo, 0, self::BATCH ) as $file ) {
 			if( $pSeconds > 0 && ( microtime( true ) - $started ) >= $pSeconds ) {
 				break;
@@ -368,7 +380,57 @@ class FisheyeDocsWorkbench {
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id`
 			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ? AND a.`attachment_plugin_guid` IN ( 'mimeextpdf', 'mimeextepub' )
 			   AND lc.`content_type_guid` = 'fisheyeimage'", [ self::$sKind.'|%' ] ) ?: [];
-		return array_map( 'intval', $rows );
+		// and the PDFs and epubs uploaded into the archive's galleries (a zip or the upload page store the file with the item, mimepdf/mimeepub): the same Images
+		$galleries = self::galleryTreeContentIds();
+		if( $galleries ) {
+			$marks = implode( ',', array_fill( 0, count( $galleries ), '?' ) );
+			$rows = array_merge( $rows, $gBitDb->getCol(
+				"SELECT DISTINCT m.`item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`content_id` = lc.`content_id`
+				 WHERE m.`gallery_content_id` IN ( $marks ) AND a.`attachment_plugin_guid` IN ( 'mimepdf', 'mimeepub' ) AND lc.`content_type_guid` = 'fisheyeimage'", $galleries ) ?: [] );
+		}
+		return array_values( array_unique( array_map( 'intval', $rows ) ) );
+	}
+
+	/**
+	 * The content_id of the kind's top gallery and of every gallery below it.
+	 *
+	 * @return list<int>
+	 */
+	public static function galleryTreeContentIds(): array {
+		global $gBitDb;
+		$top = self::topContentId();
+		if( !$top ) {
+			return [];
+		}
+		$all = [ $top ];
+		$level = [ $top ];
+		while( $level ) {
+			$marks = implode( ',', array_fill( 0, count( $level ), '?' ) );
+			$level = array_diff( array_map( 'intval', $gBitDb->getCol(
+				"SELECT m.`item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				 WHERE m.`gallery_content_id` IN ( $marks ) AND lc.`content_type_guid` = 'fisheyegallery'", $level ) ?: [] ), $all );
+			$all = array_merge( $all, $level );
+		}
+		return $all;
+	}
+
+	/** Make these Images Books (only the content type changes: every row, thumbnail and file reference is kept). Returns how many were Images. */
+	public static function makeBooks( array $pContentIds ): int {
+		global $gBitDb;
+		$count = 0;
+		$gBitDb->StartTrans();
+		foreach( $pContentIds as $cid ) {
+			$gBitDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `content_type_guid` = 'fisheyebook' WHERE `content_id` = ? AND `content_type_guid` = 'fisheyeimage'", [ (int)$cid ] );
+			$count++;
+		}
+		$gBitDb->CompleteTrans();
+		// the content type of an item is looked up through a query cached for an hour: flush it so a converted item stops coming back as an Image
+		if( !empty( $gBitDb->mDb ) && method_exists( $gBitDb->mDb, 'CacheFlush' ) ) {
+			$gBitDb->mDb->CacheFlush();
+		}
+		return $count;
 	}
 
 	/** @return array{converted:int,errors:list<string>} */
@@ -379,27 +441,18 @@ class FisheyeDocsWorkbench {
 		if( !$ids ) {
 			return $ret;
 		}
-		$gBitDb->StartTrans();
-		foreach( $ids as $cid ) {
-			$gBitDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `content_type_guid` = 'fisheyebook' WHERE `content_id` = ? AND `content_type_guid` = 'fisheyeimage'", [ $cid ] );
-			$ret['converted']++;
-		}
-		$gBitDb->CompleteTrans();
-		// the content type of an item is looked up through a query cached for an hour: flush it so a converted item stops coming back as an Image
-		if( !empty( $gBitDb->mDb ) && method_exists( $gBitDb->mDb, 'CacheFlush' ) ) {
-			$gBitDb->mDb->CacheFlush();
-		}
+		$ret['converted'] = self::makeBooks( $ids );
 		return $ret;
 	}
 
 	/**
 	 * Whether a folder is ONE book: in a registered archive, a folder that holds exactly one PDF or epub and nothing else that could be loaded below it. Such a
 	 * folder is not made a gallery; its document goes straight into the gallery above (several documents in a folder are editions of one book and keep their
-	 * gallery; a folder called Extras always stays a gallery). The built-in kinds keep a gallery for every folder, as they always have.
+	 * gallery; a folder called Extras always stays a gallery). Magazines keeps a gallery for every folder, as it always has.
 	 */
 	public static function isSingleDocumentFolder( string $pDir ): bool {
 		$root = self::root();
-		if( $pDir === '' || $pDir === '.' || strcasecmp( basename( $pDir ), 'Extras' ) === 0 || $root === '' || !empty( self::kinds()[self::$sKind]['builtin'] ) || !is_dir( $root.$pDir ) ) {
+		if( $pDir === '' || $pDir === '.' || strcasecmp( basename( $pDir ), 'Extras' ) === 0 || $root === '' || self::oldRules() || !is_dir( $root.$pDir ) ) {
 			return false;
 		}
 		$count = 0;
@@ -480,6 +533,167 @@ class FisheyeDocsWorkbench {
 		return $ret;
 	}
 
+	/** The preference a project Book carries to say which folder it was made from (<kind>|<folder path>): the folder is its identity, not its title. */
+	public const PROJECT_PREF = 'docs_project_folder';
+
+	/** content_id of the project Book made from a folder (path under the root), or null when there is none yet. */
+	public static function projectBookId( string $pDir ): ?int {
+		global $gBitDb;
+		$id = $gBitDb->getOne( "SELECT p.`content_id` FROM `".BIT_DB_PREFIX."liberty_content_prefs` p JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = p.`content_id` WHERE p.`pref_name` = ? AND p.`pref_value` = ?", [ self::PROJECT_PREF, self::$sKind.'|'.$pDir ] );
+		return $id ? (int)$id : null;
+	}
+
+	/**
+	 * The folders of a topic that can be made ONE Book: a folder that holds two or more differently named documents directly and has no document below it (a folder with
+	 * documents below it is a gallery; a folder under Extras is never a Book). The folder's content decides whether it is a project (a model's manual and instructions)
+	 * or only a series of separate books, so the Book is made by a button, not guessed. Not offered for Magazines.
+	 *
+	 * @return list<array{dir:string,files:list<string>,contentId:?int,url:string}>
+	 */
+	public static function projectFolders( string $pTopic ): array {
+		if( self::oldRules() ) {
+			return [];
+		}
+		$byDir = [];
+		foreach( self::filesIn( $pTopic ) as $path ) {
+			if( in_array( self::handlerFor( $path ), self::DOCUMENT_HANDLERS, true ) ) {
+				$byDir[dirname( $path )][] = $path;
+			}
+		}
+		$out = [];
+		foreach( $byDir as $dir => $paths ) {
+			if( $dir === $pTopic || str_contains( '/'.$dir.'/', '/Extras/' ) || count( array_unique( array_map( fn( $p ) => strtolower( pathinfo( $p, PATHINFO_FILENAME ) ), $paths ) ) ) < 2 ) {
+				continue;
+			}
+			foreach( array_keys( $byDir ) as $other ) {
+				if( str_starts_with( $other, $dir.'/' ) ) {
+					continue 2;
+				}
+			}
+			$bookId = self::projectBookId( $dir );
+			$book = $bookId ? \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => $bookId ] ) : null;
+			$out[] = [ 'dir' => $dir, 'files' => $paths, 'contentId' => $bookId, 'url' => $book && $book->isValid() ? (string)$book->getDisplayUrl() : '' ];
+		}
+		return $out;
+	}
+
+	/** What tells each file of a project apart: its name without the words they all begin with ("Manual", "Instructions"). */
+	private static function editionLabels( array $pPaths ): array {
+		$stems = array_map( fn( $p ) => pathinfo( $p, PATHINFO_FILENAME ), $pPaths );
+		$prefix = $stems[0];
+		foreach( $stems as $stem ) {
+			while( $prefix !== '' && stripos( $stem, $prefix ) !== 0 ) {
+				$prefix = substr( $prefix, 0, -1 );
+			}
+		}
+		$prefix = (string)preg_replace( '/\S*$/', '', $prefix );
+		$labels = [];
+		foreach( $pPaths as $i => $path ) {
+			$label = trim( substr( $stems[$i], strlen( $prefix ) ), " -" );
+			$labels[$path] = $label !== '' ? $label : $stems[$i];
+		}
+		return $labels;
+	}
+
+	/**
+	 * Make a folder ONE Book: a Book with no file of its own, titled for the folder and filed in the gallery above it, with an 'ebook' row for each document, labelled for
+	 * what tells it apart, pointing at that document as an item loaded in place. The item is in no gallery (identity and placement are separate: it is found by search and listed by the Book's row,
+	 * and no per-book pictures folder is made). A document already loaded keeps the item it has and the gallery it is in. Repeatable: a Book already made from the folder only gains rows for documents it lacks.
+	 *
+	 * @return array{created?:int,existing?:int,rows:int,errors:list<string>}
+	 */
+	public static function makeProjectBook( string $pDir ): array {
+		$result = [ 'rows' => 0, 'errors' => [] ];
+		$topic = explode( '/', $pDir )[0];
+		$folder = null;
+		foreach( self::projectFolders( $topic ) as $f ) {
+			if( $f['dir'] === $pDir ) {
+				$folder = $f;
+			}
+		}
+		if( !$folder ) {
+			$result['errors'][] = $pDir.': this folder is not one that can be made a Book.';
+			return $result;
+		}
+		if( !( $top = self::topContentId() ) ) {
+			$result['errors'][] = 'There is no top-level '.self::topTitle().' gallery.';
+			return $result;
+		}
+		$parentContentId = self::galleryFor( dirname( $pDir ), $top );
+		if( !$parentContentId ) {
+			$result['errors'][] = $pDir.': the gallery above could not be made.';
+			return $result;
+		}
+		$bookId = $folder['contentId'];
+		$book = new FisheyeBook();
+		if( $bookId ) {
+			$book = new FisheyeBook( null, $bookId );
+			$book->load();
+			$result['existing'] = $bookId;
+		} else {
+			$hash = [ 'title' => basename( $pDir ) ];
+			if( ( $inherit = FisheyeAccess::inheritedFor( $parentContentId ) ) !== null ) {
+				$hash['protector']['role_id'] = $inherit;
+			}
+			if( !$book->store( $hash ) || !$book->mContentId ) {
+				$result['errors'][] = $pDir.': '.implode( '; ', array_map( 'strval', array_values( $book->mErrors ) ) );
+				return $result;
+			}
+			$book->load();
+			$book->storePreference( self::PROJECT_PREF, self::$sKind.'|'.$pDir );
+			$gallery = new FisheyeGallery( null, $parentContentId );
+			$gallery->load();
+			$gallery->addItem( $book->mContentId );
+			$result['created'] = (int)$book->mContentId;
+		}
+		global $gBitDb;
+		$has = $gBitDb->getCol( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ebook' AND `end_date` IS NULL", [ (int)$book->mContentId ] ) ?: [];
+		$loaded = self::loaded();
+		$labels = self::editionLabels( $folder['files'] );
+		$order = 0;
+		foreach( $folder['files'] as $path ) {
+			$order++;
+			$spec = self::$sKind.'|'.$path;
+			if( in_array( $spec, $has, true ) ) {
+				continue;
+			}
+			$itemId = isset( $loaded[$spec] ) ? (int)$loaded[$spec] : 0;
+			if( !$itemId ) {
+				$handler = self::handlerFor( $path );
+				self::activatePlugin( $handler );
+				$item = new \Bitweaver\Fisheye\FisheyeImage();
+				$itemHash = [ 'title' => pathinfo( $path, PATHINFO_FILENAME ), 'mimeplugin' => [ $handler => [ 'root' => self::$sKind, 'path' => $path ] ], 'process_storage' => STORAGE_IMAGE ];
+				if( ( $inherit = FisheyeAccess::inheritedFor( $parentContentId ) ) !== null ) {
+					$itemHash['protector']['role_id'] = $inherit;
+				}
+				if( !$item->store( $itemHash ) || !$item->mContentId ) {
+					$result['errors'][] = $path.': '.implode( '; ', array_map( 'strval', array_values( $item->mErrors ) ) );
+					continue;
+				}
+				$itemId = (int)$item->mContentId;   // not filed in any gallery: it is identified (searchable, opens in the viewer) and listed only through the Book's ebook row
+			}
+			$data = [ 'format' => strtolower( pathinfo( $path, PATHINFO_EXTENSION ) ), 'size' => number_format( (int)@filesize( self::root().$path ) / 1048576, 1 ).' MB', 'edition' => $labels[$path], 'multi' => true ];
+			$row = [ 'content_id' => (int)$book->mContentId, 'item' => 'ebook', 'xkey_ext' => $spec, 'xref' => $itemId, 'edit' => json_encode( $data ), 'xorder' => $order ];
+			if( $book->storeXref( $row ) ) {
+				$result['rows']++;
+			} else {
+				$result['errors'][] = $path.': the item was made (content_id '.$itemId.') but its ebook row was not stored: '.implode( '; ', array_map( 'strval', array_values( $book->mErrors ) ) );
+			}
+		}
+		// a Book with no file of its own has no thumbnail until it is given one: the first page of the first PDF of the folder (a Book that already has a cover keeps it)
+		if( !$book->hasThumbnail() ) {
+			foreach( $folder['files'] as $path ) {
+				if( strtolower( pathinfo( $path, PATHINFO_EXTENSION ) ) === 'pdf' ) {
+					if( ( $err = $book->coverFromPdfFile( self::$sKind.'|'.$path ) ) !== '' ) {
+						$result['errors'][] = $path.': '.$err;
+					}
+					break;
+				}
+			}
+		}
+		return $result;
+	}
+
 	/** content_id of the gallery for a folder path under Documentation (Architecture, Architecture/Sub), each level made when missing. */
 	private static function galleryFor( string $pDir, int $pTop ): ?int {
 		$parent = $pTop;
@@ -505,10 +719,10 @@ class FisheyeDocsWorkbench {
 
 	/**
 	 * The gallery style for a folder (path under the root) a gallery is made for: a registered archive's folder holding more pictures than documents is an Images Grid,
-	 * anything else - and every folder of a built-in kind - a Docs Grid. Decided once, when the gallery is made.
+	 * anything else - and every folder of Magazines - a Docs Grid. Decided once, when the gallery is made.
 	 */
 	private static function styleFor( string $pRel ): string {
-		if( !empty( self::kinds()[self::$sKind]['builtin'] ) || ( $root = self::root() ) === '' || !is_dir( $root.$pRel ) ) {
+		if( self::oldRules() || ( $root = self::root() ) === '' || !is_dir( $root.$pRel ) ) {
 			return FISHEYE_PAGINATION_DOCS_GRID;
 		}
 		$pictures = $documents = 0;

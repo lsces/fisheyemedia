@@ -59,21 +59,53 @@ class FisheyeArchiveIsbn {
 	}
 
 	/**
+	 * The Books of a kind, each with whether it has been read: those held in place (extdoc_path under the kind) and the PDFs and epubs uploaded into the kind's
+	 * galleries (stored with the item, mimepdf/mimeepub). 'path' is the in-place path under the archive root; empty for a stored file.
+	 *
+	 * @return list<array{attachment_id:int,content_id:int,path:string,mark:?string}>
+	 */
+	private static function books( string $pKind ): array {
+		global $gBitDb;
+		$pref = self::PREF;
+		$mark = "( SELECT MAX( q.`pref_value` ) FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` q WHERE q.`attachment_id` = a.`attachment_id` AND q.`pref_name` = '$pref' )";
+		$rows = $gBitDb->getAll(
+			"SELECT p.`attachment_id`, a.`content_id`, p.`pref_value` AS path, $mark AS mark FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
+			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id` AND lc.`content_type_guid` = 'fisheyebook'
+			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ?
+			 ORDER BY p.`attachment_id`", [ $pKind.'|%' ] ) ?: [];
+		$out = [];
+		foreach( $rows as $row ) {
+			$out[] = [ 'attachment_id' => (int)$row['attachment_id'], 'content_id' => (int)$row['content_id'], 'path' => substr( (string)$row['path'], strlen( $pKind ) + 1 ), 'mark' => $row['mark'] === null ? null : (string)$row['mark'] ];
+		}
+		$kind = FisheyeDocsWorkbench::kind();
+		FisheyeDocsWorkbench::setKind( $pKind );
+		$galleries = FisheyeDocsWorkbench::galleryTreeContentIds();
+		FisheyeDocsWorkbench::setKind( $kind );
+		if( $galleries ) {
+			$marks = implode( ',', array_fill( 0, count( $galleries ), '?' ) );
+			foreach( $gBitDb->getAll(
+				"SELECT DISTINCT a.`attachment_id`, a.`content_id`, $mark AS mark FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id` AND lc.`content_type_guid` = 'fisheyebook'
+				 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`content_id` = lc.`content_id`
+				 WHERE m.`gallery_content_id` IN ( $marks ) AND a.`attachment_plugin_guid` IN ( 'mimepdf', 'mimeepub' )
+				 ORDER BY a.`attachment_id`", $galleries ) ?: [] as $row ) {
+				$out[] = [ 'attachment_id' => (int)$row['attachment_id'], 'content_id' => (int)$row['content_id'], 'path' => '', 'mark' => $row['mark'] === null ? null : (string)$row['mark'] ];
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * What is loaded for a kind and how much of it has been read: loaded, read, tagged (a file with an ISBN), todo.
 	 *
 	 * @return array{loaded:int,read:int,tagged:int,todo:int}
 	 */
 	public static function status( string $pKind ): array {
-		global $gBitDb;
-		$base = "FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
-			JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
-			JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id` AND lc.`content_type_guid` = 'fisheyebook'
-			WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ?";
-		$like = $pKind.'|%';
-		$loaded = (int)$gBitDb->getOne( "SELECT COUNT(*) $base", [ $like ] );
-		$read = (int)$gBitDb->getOne( "SELECT COUNT(*) $base AND EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` q WHERE q.`attachment_id` = p.`attachment_id` AND q.`pref_name` = '".self::PREF."' )", [ $like ] );
-		$tagged = (int)$gBitDb->getOne( "SELECT COUNT(*) $base AND EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` q WHERE q.`attachment_id` = p.`attachment_id` AND q.`pref_name` = '".self::PREF."' AND q.`pref_value` <> '-' )", [ $like ] );
-		return [ 'loaded' => $loaded, 'read' => $read, 'tagged' => $tagged, 'todo' => $loaded - $read ];
+		$books = self::books( $pKind );
+		$read = array_filter( $books, fn( $b ) => $b['mark'] !== null );
+		$tagged = array_filter( $read, fn( $b ) => $b['mark'] !== '-' );
+		return [ 'loaded' => count( $books ), 'read' => count( $read ), 'tagged' => count( $tagged ), 'todo' => count( $books ) - count( $read ) ];
 	}
 
 	/**
@@ -90,19 +122,19 @@ class FisheyeArchiveIsbn {
 			$out['errors'][] = 'The archive folder was not found.';
 			return $out;
 		}
-		$rows = $gBitDb->getAll(
-			"SELECT p.`attachment_id`, a.`content_id`, p.`pref_value` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
-			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
-			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id` AND lc.`content_type_guid` = 'fisheyebook'
-			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ?
-			   AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` q WHERE q.`attachment_id` = p.`attachment_id` AND q.`pref_name` = '".self::PREF."' )
-			 ORDER BY p.`attachment_id`", [ $pKind.'|%' ] ) ?: [];
+		$rows = array_values( array_filter( self::books( $pKind ), fn( $b ) => $b['mark'] === null ) );
 		foreach( $pSeconds > 0 ? $rows : array_slice( $rows, 0, self::BATCH ) as $row ) {
 			if( $pSeconds > 0 && ( microtime( true ) - $started ) >= $pSeconds ) {
 				break;
 			}
-			$path = substr( (string)$row['pref_value'], strlen( $pKind ) + 1 );
-			$found = self::fileIsbns( $root.$path );
+			$path = $row['path'];
+			$file = $path !== '' ? $root.$path : (string)FisheyeBook::lookup( [ 'content_id' => $row['content_id'] ] )?->ownFilePath();
+			if( $file === '' ) {
+				$out['errors'][] = 'Book '.$row['content_id'].': its file was not found.';
+				continue;   // not marked read: tried again next press
+			}
+			$found = self::fileIsbns( $file );
+			$path = $path !== '' ? $path : basename( $file );
 			$out['read']++;
 			$mark = '-';
 			if( $found ) {

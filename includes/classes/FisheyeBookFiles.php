@@ -501,10 +501,15 @@ class FisheyeBookFiles {
 	}
 
 	/**
-	 * The real file behind a stored row, or null: only a path under the Library root, only a file. A wrapper folder row (a multi-file audio
+	 * The real file behind a stored row, or null: only a path under the Library root (or, for a '<root key>|<path>' row, under that archive's root), only a file. A wrapper folder row (a multi-file audio
 	 * book, xkey_ext ending '/') gives its $pTrack'th file (1 = first) in natural order.
 	 */
 	public static function pathFor( string $pXkeyExt, int $pTrack = 1 ): ?string {
+		// a file of a Documentation project is stored as <root key>|<path under that root> (see FisheyeDocsWorkbench::makeProjectBook()): the same checks, under that root
+		if( preg_match( '/^([a-z]{3,13})\|(.+)$/', $pXkeyExt, $m ) && ( $archiveRoot = FisheyeDocsWorkbench::rootFor( $m[1] ) ) !== '' && ( $archiveReal = realpath( $archiveRoot ) ) && !str_contains( $m[2], '..' ) ) {
+			$real = realpath( $archiveRoot.$m[2] );
+			return $real && is_file( $real ) && str_starts_with( $real, $archiveReal.'/' ) ? $real : null;
+		}
 		$root = realpath( self::libraryRoot() );
 		if( !$root || $pXkeyExt === '' || str_contains( $pXkeyExt, '..' ) ) {
 			return null;
