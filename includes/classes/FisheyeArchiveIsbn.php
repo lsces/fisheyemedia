@@ -25,22 +25,23 @@ class FisheyeArchiveIsbn {
 	private const PREF = 'extdoc_isbn';
 
 	/** @return list<string> the valid ISBN-13s a PDF's first pages give, in the order found */
-	public static function pdfIsbns( string $pPath ): array {
+	public static function pdfIsbns( string $pPath, ?bool &$pUnsure = null ): array {
 		$text = (string)shell_exec( 'pdftotext -q -f 1 -l '.self::PDF_PAGES.' '.escapeshellarg( $pPath ).' - 2>/dev/null' );
-		return self::textIsbns( $text );
+		return self::textIsbns( $text, $pUnsure );
 	}
 
 	/** A page naming this many different ISBNs is a list of other titles (a publisher's catalogue or series list), not the copyright page. */
 	private const ADVERT_PAGE_ISBNS = 4;
 
 	/**
-	 * The ISBN-13s that belong to the book the text is from. Every valid number is found first; those on a page of other titles (four or more different numbers
-	 * on one page, taken from the form feeds pdftotext leaves between pages) are dropped. When what is left carries labels ("(pdf)", "(ebook)", "(paperback)" ...) the print edition is chosen (then an unlabelled number, then a digital edition) and that alone is returned. When nothing settles it, all the remaining numbers are returned, in the order found, so a caller sees
-	 * the doubt (more than one) and the first is as good a guess as it was before.
+	 * The ISBN-13s of the book the text is from, one for each edition it names. Every valid number is found first; those on a page of other titles (four or
+	 * more different numbers on one page, taken from the form feeds pdftotext leaves between pages) are dropped, and the rest are the numbers on the page that
+	 * carries the best-labelled one - the copyright page - with the print edition's first, then any unlabelled, then the digital editions. $pUnsure is set when
+	 * every number found sat on such a page of other titles: they are returned, but nothing says they are this book's.
 	 *
 	 * @return list<string>
 	 */
-	public static function textIsbns( string $pText ): array {
+	public static function textIsbns( string $pText, ?bool &$pUnsure = null ): array {
 		$found = [];   // isbn13 => [ 'page' => n, 'label' => rank ]
 		$pages = [];   // page => list of isbn13 on it
 		foreach( explode( "\f", $pText ) as $page => $text ) {
@@ -71,35 +72,41 @@ class FisheyeArchiveIsbn {
 						break;
 					}
 				}
-				$pages[$page][$isbn['isbn13']] = true;
+				$pages[$page][$isbn['isbn13']] = ( $pages[$page][$isbn['isbn13']] ?? 2 ) !== 2 ? $pages[$page][$isbn['isbn13']] : $rank;   // page => isbn13 => label rank (1 print, 3 digital, 2 none); a label seen anywhere on the page stays
 				if( !isset( $found[$isbn['isbn13']] ) || ( $found[$isbn['isbn13']]['rank'] === 2 && $rank !== 2 ) ) {   // a number keeps the label it has anywhere (a DOI repeats it bare)
 					$found[$isbn['isbn13']] = [ 'page' => $page, 'rank' => $rank, 'order' => $found[$isbn['isbn13']]['order'] ?? count( $found ) ];
 				}
 			}
 		}
+		$pUnsure = false;
 		if( !$found ) {
 			return [];
 		}
-		$book = array_filter( $found, fn( $f ) => count( $pages[$f['page']] ) < self::ADVERT_PAGE_ISBNS );
-		$book = $book ?: $found;   // every page is a list: nothing to choose by, keep the doubt
-		uasort( $book, fn( $x, $y ) => $x['order'] <=> $y['order'] );
-		// the editions named together on one page (the copyright page) are one book: the print edition's number is the one to look a book up by, so a number
-		// labelled print comes first, then one with no label at all (the main edition is normally printed unlabelled before its "(eBook)"), then the digital ones
-		if( count( $book ) > 1 && count( array_unique( array_column( $book, 'page' ) ) ) === 1 ) {
-			$best = min( array_column( $book, 'rank' ) );
-			$top = array_filter( $book, fn( $f ) => $f['rank'] === $best );
-			if( $best !== 2 || count( $top ) === 1 ) {
-				return [ (string)array_key_first( $top ) ];   // the earliest of the best rank
-			}
+		// a page of other titles: many numbers and most of them without a format label ("(pdf)", "(paperback)" ...) - a copyright page names its editions
+		$advert = fn( int $pPage ): bool => count( $pages[$pPage] ) >= self::ADVERT_PAGE_ISBNS
+			&& count( array_filter( $pages[$pPage], fn( $r ) => $r !== 2 ) ) * 2 < count( $pages[$pPage] );
+		$book = array_filter( $found, fn( $f ) => !$advert( $f['page'] ) );
+		if( !$book ) {
+			$pUnsure = true;   // every number sits on a page of other titles: whatever they are, they are not known to be this book's
+			return array_map( 'strval', array_keys( $found ) );
 		}
-		return array_map( 'strval', array_keys( $book ) );
+		// The book's own numbers are those on the page that carries its best-labelled one - the copyright page, naming the book's editions (print, ebook ...).
+		// Print first, then unlabelled, then digital: a book is looked up by the numbers in this order.
+		uasort( $book, fn( $x, $y ) => [ $x['rank'], $x['order'] ] <=> [ $y['rank'], $y['order'] ] );
+		$anchor = reset( $book )['page'];
+		$own = array_filter( $book, fn( $f ) => $f['page'] === $anchor );
+		if( count( $own ) > 1 && !array_filter( $own, fn( $f ) => $f['rank'] !== 2 ) ) {
+			$pUnsure = true;   // several numbers and not one labelled as an edition: a list of titles as likely as a book's editions
+		}
+		return array_map( 'strval', array_keys( $own ) );
 	}
 
 	/** @return list<string> the valid ISBN-13s a file gives; none for a type that is not read */
-	public static function fileIsbns( string $pPath ): array {
+	public static function fileIsbns( string $pPath, ?bool &$pUnsure = null ): array {
+		$pUnsure = false;
 		return match( strtolower( pathinfo( $pPath, PATHINFO_EXTENSION ) ) ) {
 			'epub' => FisheyeBookCatalogue::epubIsbns( $pPath ),
-			'pdf'  => self::pdfIsbns( $pPath ),
+			'pdf'  => self::pdfIsbns( $pPath, $pUnsure ),
 			default => [],
 		};
 	}
@@ -149,8 +156,8 @@ class FisheyeArchiveIsbn {
 	 */
 	public static function status( string $pKind ): array {
 		$books = self::books( $pKind );
-		$read = array_filter( $books, fn( $b ) => $b['mark'] !== null && $b['mark'] !== '*' );
-		$tagged = array_filter( $read, fn( $b ) => !in_array( $b['mark'], [ '-', '~' ], true ) );
+		$read = array_filter( $books, fn( $b ) => $b['mark'] !== null && !in_array( $b['mark'], [ '*', '~' ], true ) );
+		$tagged = array_filter( $read, fn( $b ) => !in_array( $b['mark'], [ '-', '?' ], true ) );
 		return [ 'loaded' => count( $books ), 'read' => count( $read ), 'tagged' => count( $tagged ), 'todo' => count( $books ) - count( $read ) ];
 	}
 
@@ -167,7 +174,8 @@ class FisheyeArchiveIsbn {
 			$out['errors'][] = 'The archive folder was not found.';
 			return $out;
 		}
-		$rows = array_values( array_filter( self::books( $pKind ), fn( $b ) => $b['mark'] === null || $b['mark'] === '*' ) );
+		// '*' and '~' were the marks of readers that left files naming several ISBNs unread: they are read again
+		$rows = array_values( array_filter( self::books( $pKind ), fn( $b ) => $b['mark'] === null || in_array( $b['mark'], [ '*', '~' ], true ) ) );
 		foreach( $pSeconds > 0 ? $rows : array_slice( $rows, 0, self::BATCH ) as $row ) {
 			if( $pSeconds > 0 && ( microtime( true ) - $started ) >= $pSeconds ) {
 				break;
@@ -179,38 +187,51 @@ class FisheyeArchiveIsbn {
 				continue;   // not marked read: tried again next press
 			}
 			$path = $path !== '' ? $path : basename( $file );
-			$mark = self::tagFile( (int)$row['content_id'], (int)$row['attachment_id'], $file, null, true );
+			$mark = self::tagFile( (int)$row['content_id'], (int)$row['attachment_id'], $file );
 			if( $mark === null ) {
 				$out['errors'][] = $path.': the ISBN could not be stored.';
 				continue;   // not marked read: tried again next press
 			}
 			$out['read']++;
-			match( $mark ) { '-' => $out['none']++, '=' => $out['kept']++, '~' => $out['several']++, default => $out['tagged']++ };
+			match( $mark ) { '-' => $out['none']++, '=' => $out['kept']++, '?' => $out['several']++, default => $out['tagged']++ };
 		}
 		return $out;
 	}
 
 	/**
 	 * Read one file and tag its Book with the ISBN it carries, then mark the file read (the attachment preference). Used by the tag pass and, at the moment a
-	 * Book is made from an archive file, by the workbench's load, so the record starts with its ISBN. A number already on the Book (set by hand) is not replaced.
+	 * Book is made from an archive file, by the workbench's load, so the record starts with its ISBN. A number already on the Book (set by hand) is not replaced, and nothing is added beside it.
 	 *
-	 * @return ?string  the ISBN-13 stored, '=' when the Book already had one, '-' when the file gives none, null when the number could not be stored (the file is not marked read)
+	 * @return ?string  the first ISBN-13 stored, '=' when the Book already had one, '-' when the file gives none, '?' when it gives only numbers that may not be the book's, null when the number could not be stored (the file is not marked read)
 	 */
-	public static function tagFile( int $pContentId, int $pAttachmentId, string $pFile, ?array $pFound = null, bool $pSkipSeveral = false ): ?string {
+	public static function tagFile( int $pContentId, int $pAttachmentId, string $pFile, ?array $pFound = null, bool $pUnsure = false ): ?string {
 		global $gBitDb;
-		$found = $pFound ?? self::fileIsbns( $pFile );   // a caller that has already read the file passes what it found
+		$unsure = $pUnsure;
+		$found = $pFound ?? self::fileIsbns( $pFile, $unsure );   // a caller that has already read the file passes what it found
 		$mark = '-';
-		if( $found && $pSkipSeveral && count( $found ) > 1 ) {
-			$mark = '~';   // several different ISBNs the reader could not choose between: left for a person ('*' was the mark of a reader that did not rank them, so it is read again)
+		if( $found && $unsure ) {
+			$mark = '?';   // numbers were found, but only among other titles' (a catalogue page): nothing says they are this book's, so a person looks
 		} elseif( $found ) {
 			if( $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $pContentId ] ) ) {
 				$mark = '=';
 			} else {
-				$isbn = FisheyeBook::normaliseIsbn( $found[0] );
-				if( !LibertyContent::upsertXrefByContentId( $pContentId, 'isbn', [ 'xkey' => $isbn['isbn13'], 'xkey_ext' => $isbn['isbn10'], 'edit' => '' ] ) ) {
+				// a row for each edition the file names, the print edition's first; the Book is the reference, its numbers are what it is looked up by
+				$wanted = [];
+				foreach( $found as $i => $number ) {
+					$isbn = FisheyeBook::normaliseIsbn( $number );
+					if( $isbn['isbn13'] !== '' ) {
+						$wanted[] = [ 'key' => $isbn['isbn13'], 'xorder' => $i, 'xkey' => $isbn['isbn13'], 'xkey_ext' => $isbn['isbn10'] ];
+					}
+				}
+				$book = $wanted ? FisheyeBook::lookup( [ 'content_id' => $pContentId ] ) : null;
+				if( !$book || !$book->isValid() ) {
 					return null;
 				}
-				$mark = $isbn['isbn13'];
+				$done = $book->reconcileXrefItem( 'isbn', $wanted, fn( array $pXrefRow ) => trim( (string)$pXrefRow['xkey'] ) );
+				if( !empty( $done['failed'] ) || $book->mErrors ) {
+					return null;
+				}
+				$mark = $wanted[0]['xkey'];
 			}
 		}
 		LibertyMime::storeAttachmentPreference( $pAttachmentId, self::PREF, $mark );

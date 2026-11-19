@@ -407,7 +407,8 @@ class FisheyeDocsWorkbench {
 			// a magazine file is a Magazine Issue, any other PDF or epub a Book (which holds the file itself, as an attachment kept in place), a picture a plain Image
 			// every PDF or epub is a Book (with or without an ISBN) except in a Pictures, Models or Extras folder, which hold plain Images
 			$document = self::$sKind !== 'magazines' && in_array( $file['handler'], self::DOCUMENT_HANDLERS, true ) && !self::isPlainPath( $file['path'] );
-			$found = $document ? FisheyeArchiveIsbn::fileIsbns( self::root().$file['path'] ) : [];
+			$unsure = false;
+			$found = $document ? FisheyeArchiveIsbn::fileIsbns( self::root().$file['path'], $unsure ) : [];
 			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : ( $document ? new FisheyeBook() : new FisheyeImage() );
 			$hash = [
 				'title' => pathinfo( $file['name'], PATHINFO_FILENAME ),
@@ -426,7 +427,7 @@ class FisheyeDocsWorkbench {
 					global $gBitDb;
 					$attId = (int)$gBitDb->getOne( "SELECT MAX(`attachment_id`) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` LIKE 'mimeext%'", [ (int)$image->mContentId ] );
 					if( $attId ) {
-						FisheyeArchiveIsbn::tagFile( (int)$image->mContentId, $attId, self::root().$file['path'], $found );
+						FisheyeArchiveIsbn::tagFile( (int)$image->mContentId, $attId, self::root().$file['path'], $found, $unsure );
 					}
 				}
 			} else {

@@ -64,7 +64,9 @@ class FisheyeSeriesWorkbench {
 			$st['seriesUrl'] = (string)$seriesGallery->getDisplayUrl();
 		}
 		foreach( $plan['rows'] as $i => $row ) {
-			$dbIsbn = $row['book'] ? (string)$gBitDb->getOne( "SELECT MIN( `xkey` ) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ (int)$row['book'] ] ) : '';
+			// a book holds a number for each edition: the sheet's agrees when it is any of them, and the book's first stands in when it is none
+			$dbIsbns = $row['book'] ? array_map( 'strval', $gBitDb->getCol( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL AND `xkey` IS NOT NULL ORDER BY `xorder`, `xref_id`", [ (int)$row['book'] ] ) ?: [] ) : [];
+			$dbIsbn = in_array( (string)$row['isbn'], $dbIsbns, true ) ? (string)$row['isbn'] : (string)( $dbIsbns[0] ?? '' );
 			$st['rows'][$i] = $row + [ 'dbIsbn' => $dbIsbn ];
 			$st['total']++;
 			if( $row['book'] ) {

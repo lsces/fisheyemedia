@@ -1,4 +1,4 @@
-{* A book's details, read only: credits, ISBN, label/value lines, description and links. Needs creditGroups, isbn, details, externalLinks (FisheyeBookDetails::collect). Changing them, and looking them up, is the edit page's job. *}
+{* A book's details, read only: credits, ISBN, label/value lines, description and links. Needs creditGroups, isbns (isbn is the first), details, externalLinks (FisheyeBookDetails::collect). Changing them, and looking them up, is the edit page's job. *}
 {strip}
 {foreach from=$creditGroups item=group}
 	<p><strong>{tr}{$group.role|capitalize}{/tr}:</strong>
@@ -8,7 +8,11 @@
 	</p>
 {/foreach}
 
-{if $isbn}
+{if $isbns}
+	<p><strong>{if $isbns|@count gt 1}{tr}ISBNs{/tr}{else}{tr}ISBN{/tr}{/if}:</strong>
+		{foreach from=$isbns item=edition name=editions}{$edition.isbn13|escape}{if $edition.isbn10} ({$edition.isbn10|escape}){/if}{if $edition.note} - {$edition.note|escape}{/if}{if !$smarty.foreach.editions.last}, {/if}{/foreach}
+	</p>
+{elseif $isbn}
 	<p><strong>{tr}ISBN{/tr}:</strong> {$isbn.isbn13|escape}{if $isbn.isbn10} ({$isbn.isbn10|escape}){/if}</p>
 {/if}
 

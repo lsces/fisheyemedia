@@ -14,11 +14,12 @@ use Bitweaver\KernelTools;
 class FisheyeBookDetails {
 
 	/**
-	 * @return array{isbn:?array,creditGroups:list<array>,details:list<array>,externalLinks:list<array>}
+	 * @return array{isbn:?array,isbns:list<array>,creditGroups:list<array>,details:list<array>,externalLinks:list<array>}
 	 */
 	public static function collect( FisheyeBook $pBook ): array {
 		$pBook->loadXrefInfo();
 		$isbn = null;
+		$isbns = [];   // every edition the book carries, in the order they are kept
 		$credits = [];
 		$values = [];
 		$lists = [];
@@ -38,7 +39,8 @@ class FisheyeBookDetails {
 				}
 
 				if( $item === 'isbn' ) {
-					$isbn = [ 'isbn13' => (string)$xref['xkey'], 'isbn10' => (string)$xref['xkey_ext'] ];
+					$isbns[] = [ 'isbn13' => (string)$xref['xkey'], 'isbn10' => (string)$xref['xkey_ext'], 'note' => trim( (string)( $xref['data'] ?? '' ) ) ];
+					$isbn ??= $isbns[0];
 				} elseif( in_array( $item, [ ...FISHEYEBOOK_CREDIT_ITEMS, 'publisher' ], true ) ) {
 					// Linked to the person's contact once there is one - the root index.php?content_id=
 					// dispatcher routes to whatever the contact's own page is.
@@ -88,13 +90,17 @@ class FisheyeBookDetails {
 			}
 		}
 
-		// Bookshop links come from the ISBN and are not stored: Amazon's id for a book is its ISBN-10, AbeBooks searches by ISBN-13.
-		if( !empty( $isbn['isbn10'] ) ) {
-			$externalLinks[] = [ 'title' => 'Amazon', 'url' => 'https://www.amazon.co.uk/dp/'.$isbn['isbn10'] ];
+		// Bookshop links come from the ISBNs and are not stored: Amazon's id for a book is its ISBN-10, AbeBooks searches by ISBN-13. A book with several editions
+		// gets a link for each, named by the number, as a shop may know only one of them.
+		foreach( $isbns as $edition ) {
+			$tag = count( $isbns ) > 1 ? ' ('.( $edition['isbn13'] ?: $edition['isbn10'] ).')' : '';
+			if( !empty( $edition['isbn10'] ) ) {
+				$externalLinks[] = [ 'title' => 'Amazon'.$tag, 'url' => 'https://www.amazon.co.uk/dp/'.$edition['isbn10'] ];
+			}
+			if( !empty( $edition['isbn13'] ) ) {
+				$externalLinks[] = [ 'title' => 'AbeBooks'.$tag, 'url' => 'https://www.abebooks.co.uk/servlet/SearchResults?isbn='.$edition['isbn13'] ];
+			}
 		}
-		if( !empty( $isbn['isbn13'] ) ) {
-			$externalLinks[] = [ 'title' => 'AbeBooks', 'url' => 'https://www.abebooks.co.uk/servlet/SearchResults?isbn='.$isbn['isbn13'] ];
-		}
-		return [ 'isbn' => $isbn, 'creditGroups' => $creditGroups, 'details' => $details, 'externalLinks' => $externalLinks ];
+		return [ 'isbn' => $isbn, 'isbns' => $isbns, 'creditGroups' => $creditGroups, 'details' => $details, 'externalLinks' => $externalLinks ];
 	}
 }

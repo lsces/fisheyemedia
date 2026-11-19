@@ -340,7 +340,7 @@ class FisheyeBookCredits {
 				 WHERE `item` = 'isbn' AND `end_date` IS NULL AND `xkey` IS NOT NULL AND `content_id` IN ( ".implode( ',', array_fill( 0, count( $chunk ), '?' ) )." )",
 				$chunk ) ?: [];
 			foreach( $isbnRows as $isbnRow ) {
-				$isbnByBook[(int)$isbnRow['content_id']] = (string)$isbnRow['xkey'];
+				$isbnByBook[(int)$isbnRow['content_id']][] = (string)$isbnRow['xkey'];   // a number for each edition
 			}
 		}
 		foreach( $people as &$person ) {
@@ -348,8 +348,8 @@ class FisheyeBookCredits {
 			$person['name'] = (string)array_key_first( $person['variants'] );
 			$person['variants'] = array_keys( $person['variants'] );
 			foreach( $person['books'] as $contentId => $title ) {
-				if( !empty( $isbnByBook[$contentId] ) ) {
-					$person['isbns'][$isbnByBook[$contentId]] = $title;
+				foreach( $isbnByBook[$contentId] ?? [] as $isbnOfBook ) {
+					$person['isbns'][$isbnOfBook] = $title;
 				}
 			}
 		}

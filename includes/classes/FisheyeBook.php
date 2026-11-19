@@ -376,12 +376,13 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 		};
 
-		// ISBN: one row, the ISBN-13 as the key (xkey), the ISBN-10 beside it (xkey_ext).
+		// ISBN: a row for each edition, the ISBN-13 as the key (xkey), the ISBN-10 beside it (xkey_ext). The row says what it knows; the editions the book already
+		// carries (read from its files, or added by hand) are not its to remove, so they are listed as wanted as they stand.
 		$isbn13 = (string)( $pRow['isbn13'] ?? '' );
 		$isbn10 = (string)( $pRow['isbn10'] ?? '' );
 		$wantedIsbn = [];
 		if( $isbn13 !== '' || $isbn10 !== '' ) {
-			$wanted = [ 'key' => '', 'xorder' => 0 ];
+			$wanted = [ 'key' => $isbn13 !== '' ? $isbn13 : $isbn10, 'xorder' => 0 ];
 			if( $isbn13 !== '' ) {
 				$wanted['xkey'] = $isbn13;
 			}
@@ -390,7 +391,13 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 			$wantedIsbn[] = $wanted;
 		}
-		$tally( $this->reconcileXrefItem( 'isbn', $wantedIsbn, null ) );
+		foreach( $this->mDb->getAll( "SELECT `xkey`, `xkey_ext`, `xorder` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL ORDER BY `xorder`, `xref_id`", [ $this->mContentId ] ) ?: [] as $held ) {
+			$key = trim( (string)$held['xkey'] ) !== '' ? trim( (string)$held['xkey'] ) : trim( (string)$held['xkey_ext'] );
+			if( $key !== '' && $key !== $isbn13 && $key !== $isbn10 ) {
+				$wantedIsbn[] = [ 'key' => $key, 'xorder' => (int)$held['xorder'], 'xkey' => trim( (string)$held['xkey'] ), 'xkey_ext' => trim( (string)$held['xkey_ext'] ) ];
+			}
+		}
+		$tally( $this->reconcileXrefItem( 'isbn', $wantedIsbn, fn( array $pXrefRow ) => trim( (string)$pXrefRow['xkey'] ) !== '' ? trim( (string)$pXrefRow['xkey'] ) : trim( (string)$pXrefRow['xkey_ext'] ) ) );
 
 		foreach( FISHEYEBOOK_TEXT_ITEMS as $item ) {
 			// A row that says nothing about the edition date leaves one already kept (the old year moved there when a work date was set) alone.
@@ -892,22 +899,39 @@ class FisheyeBook extends FisheyeMediaImage {
 	 */
 	public function storeXref( &$pParamHash ): bool {
 		if( ( $pParamHash['item'] ?? '' ) === 'isbn' ) {
-			$typed = '';
-			foreach( [ 'isbn', 'xkey_ext', 'xkey' ] as $field ) {
-				if( trim( (string)( $pParamHash[$field] ?? '' ) ) !== '' ) {
-					$typed = trim( (string)$pParamHash[$field] );
-					break;
+			// The number can arrive in any of the fields (the generic add form calls them Value and Notes): the first that is a valid ISBN is the number, and
+			// text typed in another field - 'ebook', 'paperback' - is the row's note.
+			$isbn = [ 'isbn13' => '', 'isbn10' => '' ];
+			$notes = [];
+			foreach( [ 'isbn', 'xkey', 'xkey_ext' ] as $field ) {
+				$typed = trim( (string)( $pParamHash[$field] ?? '' ) );
+				if( $typed === '' ) {
+					continue;
+				}
+				$try = $isbn['isbn13'] === '' ? self::normaliseIsbn( $typed ) : [ 'isbn13' => '' ];
+				if( $try['isbn13'] !== '' ) {
+					$isbn = $try;
+				} elseif( !preg_match( '/^[0-9Xx\- ]+$/', $typed ) ) {
+					$notes[] = $typed;   // words, not a number: a note about this edition
 				}
 			}
-			$isbn = self::normaliseIsbn( $typed );
+			$note = trim( (string)( $pParamHash['edit'] ?? '' ) );
+			if( $note === '' ) {
+				$note = implode( ' ', $notes );
+			}
 			if( $isbn['isbn13'] === '' ) {
 				$this->mErrors['isbn'] = \Bitweaver\KernelTools::tra( 'That is not a valid ISBN: it should be an ISBN-10 or ISBN-13 with a correct check digit.' );
+				return false;
+			}
+			// a number the Book already carries (on another row) is not added again
+			if( $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `xkey` = ? AND `end_date` IS NULL AND `xref_id` <> ?", [ (int)$this->mContentId, $isbn['isbn13'], (int)( $pParamHash['xref_id'] ?? 0 ) ] ) ) {
+				$this->mErrors['isbn'] = \Bitweaver\KernelTools::tra( 'This book already has that ISBN.' );
 				return false;
 			}
 			unset( $pParamHash['isbn'] );
 			$pParamHash['xkey'] = $isbn['isbn13'];
 			$pParamHash['xkey_ext'] = $isbn['isbn10'];
-			$pParamHash['edit'] = '';                           // the row carries no data; this also clears a leftover 'entered' value
+			$pParamHash['edit'] = $note;                         // the row's note ('ebook', 'paperback' ...); empty when there is none, which also clears a leftover 'entered' value
 		}
 		return parent::storeXref( $pParamHash );
 	}
@@ -1100,8 +1124,7 @@ class FisheyeBook extends FisheyeMediaImage {
 			$ret['error'] = \Bitweaver\KernelTools::tra( 'The contactwiki package is needed to ask Open Library.' );
 			return $ret;
 		}
-		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
-		$ret['isbns'] = array_values( array_filter( [ trim( (string)( $isbnRow['xkey'] ?? '' ) ), trim( (string)( $isbnRow['xkey_ext'] ?? '' ) ) ] ) );
+		$ret['isbns'] = $this->isbnNumbers();
 		if( !$ret['isbns'] ) {
 			$ret['error'] = \Bitweaver\KernelTools::tra( 'This book has no ISBN to look up.' );
 			return $ret;
@@ -1118,6 +1141,25 @@ class FisheyeBook extends FisheyeMediaImage {
 			$ret['error'] = \Bitweaver\KernelTools::tra( 'Open Library did not answer, so nothing was changed' ).': '.$fetchError;
 		}
 		return $ret;
+	}
+
+	/**
+	 * Every ISBN the book carries, each edition's ISBN-13 then its ISBN-10, in the order the rows are kept (the print edition is stored first). A book has one
+	 * 'isbn' row per edition - a title can have dozens - so a look-up asks for each in turn and stops at the first the service knows. $pMax bounds the asking.
+	 *
+	 * @return list<string>
+	 */
+	public function isbnNumbers( int $pMax = 12 ): array {
+		$out = [];
+		foreach( $this->mDb->getAll( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL ORDER BY `xorder`, `xref_id`", [ $this->mContentId ] ) ?: [] as $row ) {
+			foreach( [ $row['xkey'], $row['xkey_ext'] ] as $number ) {
+				$number = trim( (string)$number );
+				if( $number !== '' && !in_array( $number, $out, true ) ) {
+					$out[] = $number;
+				}
+			}
+		}
+		return array_slice( $out, 0, $pMax );
 	}
 
 	/** The ISBN the stored cover was fetched for ('openlibrary:<isbn>' / 'googlebooks:<isbn>' in its row), or '' when it did not come from a lookup. */
@@ -1139,8 +1181,7 @@ class FisheyeBook extends FisheyeMediaImage {
 		if( $source === '' ) {
 			return null;
 		}
-		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
-		$current = array_filter( [ (string)( $isbnRow['xkey'] ?? '' ), (string)( $isbnRow['xkey_ext'] ?? '' ) ] );
+		$current = $this->isbnNumbers();
 		return $current && !in_array( $source, $current, true )
 			? sprintf( \Bitweaver\KernelTools::tra( 'The cover was fetched for ISBN %s, but this book\'s ISBN is now %s.' ), $source, reset( $current ) )
 			: null;
@@ -1281,8 +1322,7 @@ class FisheyeBook extends FisheyeMediaImage {
 			$summary['error'] = \Bitweaver\KernelTools::tra( 'The contactwiki package is needed to ask Open Library.' );
 			return $summary;
 		}
-		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
-		$isbns = array_values( array_filter( [ trim( (string)( $isbnRow['xkey'] ?? '' ) ), trim( (string)( $isbnRow['xkey_ext'] ?? '' ) ) ] ) );
+		$isbns = $this->isbnNumbers();
 		if( !$isbns ) {
 			$summary['error'] = \Bitweaver\KernelTools::tra( 'This book has no ISBN to look up.' );
 			return $summary;
@@ -1501,8 +1541,7 @@ class FisheyeBook extends FisheyeMediaImage {
 			$ret['error'] = \Bitweaver\KernelTools::tra( 'No Google Books API key is set (Media Library Settings).' );
 			return $ret;
 		}
-		$isbnRow = $this->mDb->getRow( "SELECT `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $this->mContentId ] );
-		$isbns = array_values( array_filter( [ trim( (string)( $isbnRow['xkey'] ?? '' ) ), trim( (string)( $isbnRow['xkey_ext'] ?? '' ) ) ] ) );
+		$isbns = $this->isbnNumbers();
 		// A book with no ISBN may hold a Google Books volume id instead (a classic found by title): that volume is read as it is.
 		$volumeId = trim( (string)$this->mDb->getOne( "SELECT `xkey` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'google_books' AND `end_date` IS NULL", [ $this->mContentId ] ) );
 		if( !$isbns && $volumeId === '' ) {

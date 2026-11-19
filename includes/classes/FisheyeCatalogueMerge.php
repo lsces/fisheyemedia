@@ -307,7 +307,7 @@ class FisheyeCatalogueMerge {
 		}
 		$in = implode( ',', array_map( 'intval', $pIds ) );
 		foreach( $gBitDb->getAll( "SELECT `content_id`, `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` IN ( $in )" ) as $r ) {
-			$books[(int)$r['content_id']] = [ 'title' => trim( (string)$r['title'] ), 'isbn13' => '', 'isbn10' => '', 'authors' => [], 'publisher' => '', 'year' => '', 'series' => '', 'pos' => '', 'wikidata_work' => '', 'gutenberg' => '', 'ol_work' => '' ];
+			$books[(int)$r['content_id']] = [ 'title' => trim( (string)$r['title'] ), 'isbn13' => '', 'isbn10' => '', 'editions' => [], 'authors' => [], 'publisher' => '', 'year' => '', 'series' => '', 'pos' => '', 'wikidata_work' => '', 'gutenberg' => '', 'ol_work' => '' ];
 		}
 		foreach( $gBitDb->getAll( "SELECT `content_id`, `item`, `xkey`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref`
 			WHERE `end_date` IS NULL AND `item` IN ( 'isbn', 'author', 'publisher', 'published', 'wikidata_work', 'gutenberg', 'ol_work' ) AND `content_id` IN ( $in ) ORDER BY `xorder`" ) as $r ) {
@@ -315,8 +315,14 @@ class FisheyeCatalogueMerge {
 			$ext = trim( (string)$r['xkey_ext'] );
 			switch( $r['item'] ) {
 				case 'isbn':
-					$b['isbn13'] = trim( (string)$r['xkey'] );
-					$b['isbn10'] = $ext;
+					// the first edition (the rows are in order) is the one the sheet's row is compared with
+					if( $b['isbn13'] === '' && $b['isbn10'] === '' ) {
+						$b['isbn13'] = trim( (string)$r['xkey'] );
+						$b['isbn10'] = $ext;
+					}
+					if( trim( (string)$r['xkey'] ) !== '' ) {
+						$b['editions'][trim( (string)$r['xkey'] )] = $ext;   // every edition the book holds: ISBN-13 => ISBN-10
+					}
 					break;
 				case 'author':
 					if( $ext !== '' && !in_array( $ext, $b['authors'], true ) ) {
@@ -390,24 +396,60 @@ class FisheyeCatalogueMerge {
 			}
 			[ $plan['head'], $plan['body'] ] = $read;
 		}
-		$byIsbn = $byTitle = [];
+		// A row finds its Book - the Book is the work, its content_id the key - by the work ids the Book holds (Wikidata, Gutenberg, Open Library work), then by
+		// title and author, and only then by an ISBN: a book has a number for each edition, or none, so a number is evidence, never the key.
+		$byIsbn = $byWork = $byTitle = [];
 		foreach( $books as $id => $b ) {
-			if( $b['isbn13'] !== '' ) {
-				$byIsbn[$b['isbn13']] = $id;
+			foreach( array_keys( $b['editions'] ) as $edition ) {
+				$byIsbn[$edition] ??= $id;
 			}
-			$byTitle[self::titleKey( $b['title'] )] ??= $id;
+			if( $b['isbn13'] !== '' ) {
+				$byIsbn[$b['isbn13']] ??= $id;
+			}
+			foreach( [ 'wikidata_work', 'gutenberg', 'ol_work' ] as $item ) {
+				if( trim( (string)$b[$item] ) !== '' ) {
+					$byWork[$item.':'.strtoupper( trim( (string)$b[$item] ) )][] = $id;
+				}
+			}
+			$byTitle[self::titleKey( $b['title'] )][] = $id;
 		}
+		$lower = fn( string $pName ): string => mb_strtolower( trim( $pName ) );
 		$used = [];
 		foreach( $plan['body'] as $ri => &$row ) {
 			$isbn = trim( $row['ISBN-13'] );
-			$id = $isbn !== '' ? ( $byIsbn[$isbn] ?? null ) : null;
-			$id ??= $byTitle[self::titleKey( $row['Title'] )] ?? null;
+			$id = null;
+			// 1. a work id the Book holds and the row names
+			foreach( FisheyeBookCatalogue::workIds( (string)( $row['Wikidata'] ?? '' ), (string)( $row['Gutenberg'] ?? '' ), (string)( $row['OL work'] ?? '' ) ) as $item => $value ) {
+				$held = array_values( array_diff( $byWork[$item.':'.strtoupper( $value )] ?? [], array_keys( $used ) ) );
+				if( count( $held ) === 1 ) {
+					$id = $held[0];
+					break;
+				}
+			}
+			// 2. the title, with the author when both sides name one (two books of one title by different authors are not one book)
+			if( $id === null ) {
+				$sheetAuthors = array_filter( array_map( $lower, explode( '|', (string)$row['Authors'] ) ) );
+				$fits = [];
+				foreach( array_diff( $byTitle[self::titleKey( $row['Title'] )] ?? [], array_keys( $used ) ) as $candidate ) {
+					$bookAuthors = array_map( $lower, $books[$candidate]['authors'] );
+					if( !$sheetAuthors || !$bookAuthors || array_intersect( $sheetAuthors, $bookAuthors ) ) {
+						$fits[] = $candidate;
+					}
+				}
+				$id = count( $fits ) === 1 ? $fits[0] : null;
+			}
+			// 3. an ISBN the Book holds for any of its editions
+			$id ??= $isbn !== '' ? ( $byIsbn[$isbn] ?? null ) : null;
 			if( $id === null || isset( $used[$id] ) ) {
 				$plan['loose'][] = $row['Title'];
 				continue;
 			}
 			$used[$id] = true;
 			$b = $books[$id];
+			if( $isbn !== '' && isset( $b['editions'][$isbn] ) ) {
+				$b['isbn13'] = $isbn;   // the sheet names one of the book's editions: that edition is what it is compared with
+				$b['isbn10'] = $b['editions'][$isbn];
+			}
 			$want = [ 'ISBN-13' => $b['isbn13'], 'ISBN-10' => $b['isbn10'], 'Publisher' => $b['publisher'], 'Year' => $b['year'], 'Authors' => implode( '|', $b['authors'] ),
 				'Series' => $b['series'], 'Series no' => $b['pos'] ];
 			foreach( $want as $col => $val ) {

@@ -19,6 +19,14 @@
 				{/forminput}
 			</div>
 
+			<div class="form-group">
+				{formlabel label="Note" for="edit"}
+				{forminput}
+					<input type="text" class="form-control input-small" name="edit" id="edit" value="{$xrefInfo.data|escape}" />
+					{formhelp note="Which edition this is, for example ebook or paperback. Optional."}
+				{/forminput}
+			</div>
+
 			<div class="form-group submit">
 				<input type="submit" class="btn btn-default" name="fCancel"   value="{tr}Cancel{/tr}" />
 				<input type="submit" class="btn btn-primary" name="fSaveXref" value="{tr}Save{/tr}" />
