@@ -340,24 +340,30 @@ class FisheyeBookCatalogue {
 			}
 		}
 		$zip->close();
-		$raw = [];
+		// the book's own metadata names its ISBN; the numbers on its front pages (other editions, a publisher's list) are looked at only when the metadata has none
+		$sources = [ [] , [] ];
 		if( preg_match_all( '#<dc:identifier[^>]*>([^<]*)</dc:identifier>#i', $opf, $ids ) ) {
-			$raw = array_merge( $raw, $ids[1] );
+			$sources[0] = array_merge( $sources[0], $ids[1] );
 		}
 		if( preg_match_all( '/isbn[^0-9]{0,12}([0-9][0-9\- ]{8,16}[0-9Xx])/i', $opf, $text ) ) {
-			$raw = array_merge( $raw, $text[1] );
+			$sources[0] = array_merge( $sources[0], $text[1] );
 		}
 		if( $pages !== '' && preg_match_all( '/isbn[^0-9]{0,12}([0-9][0-9\- ]{8,16}[0-9Xx])/i', $pages, $text ) ) {
-			$raw = array_merge( $raw, $text[1] );
+			$sources[1] = $text[1];
 		}
-		$found = [];
-		foreach( $raw as $value ) {
-			$isbn = FisheyeBook::normaliseIsbn( preg_replace( '/^urn:isbn:/i', '', trim( (string)$value ) ) );
-			if( $isbn['isbn13'] !== '' && !in_array( $isbn['isbn13'], $found, true ) ) {
-				$found[] = $isbn['isbn13'];
+		foreach( $sources as $raw ) {
+			$found = [];
+			foreach( $raw as $value ) {
+				$isbn = FisheyeBook::normaliseIsbn( preg_replace( '/^urn:isbn:/i', '', trim( (string)$value ) ) );
+				if( $isbn['isbn13'] !== '' && !in_array( $isbn['isbn13'], $found, true ) ) {
+					$found[] = $isbn['isbn13'];
+				}
+			}
+			if( $found ) {
+				return $found;
 			}
 		}
-		return $found;
+		return [];
 	}
 
 	/**

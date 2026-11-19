@@ -26,7 +26,7 @@ $continue = false;
 if( !empty( $_REQUEST['tag_isbn'] ) ) {
 	$keepGoing = !empty( $_REQUEST['keep_going'] );
 	$done = FisheyeArchiveIsbn::tag( $kind, $keepGoing ? FisheyeDocsWorkbench::KEEP_GOING_SECONDS : 0 );
-	$messages[] = $done['read'].' '.KernelTools::tra( 'files read' ).': '.$done['tagged'].' '.KernelTools::tra( 'tagged' ).', '.$done['none'].' '.KernelTools::tra( 'with no ISBN' ).( $done['kept'] ? ', '.$done['kept'].' '.KernelTools::tra( 'already had one' ) : '' ).'.';
+	$messages[] = $done['read'].' '.KernelTools::tra( 'files read' ).': '.$done['tagged'].' '.KernelTools::tra( 'tagged' ).', '.$done['none'].' '.KernelTools::tra( 'with no ISBN' ).( $done['kept'] ? ', '.$done['kept'].' '.KernelTools::tra( 'already had one' ) : '' ).( $done['several'] ? ', '.$done['several'].' '.KernelTools::tra( 'name several ISBNs and were left for you to choose' ) : '' ).'.';
 	$errors = $done['errors'];
 	$continue = $keepGoing && $done['read'] > 0 && !$done['errors'];
 }
