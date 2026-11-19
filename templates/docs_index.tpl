@@ -36,12 +36,19 @@
 		{if !$root}
 			<div class="alert alert-warning"><p>{tr}No {$topTitle|escape} folder was found: set the {$topTitle|escape} Storage Path in Media Library Settings.{/tr}</p></div>
 		{else}
-			{if $kind ne 'magazines'}<p class="help-block"><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}archive_isbn.php?kind={$kind}">{tr}Tag the loaded books with their ISBN{/tr}</a></p>{/if}
 			{if !$hasTop}
 				<div class="alert alert-warning"><p>{tr}There is no top-level gallery called{/tr} {$topTitle|escape}{tr}, so nothing can be filed.{/tr}</p>
 					{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php"}
 						<input type="hidden" name="kind" value="{$kind}" />
 						<input type="submit" class="btn btn-default" name="make_top" value="{tr}Make the gallery{/tr}" />
+					{/form}
+				</div>
+			{/if}
+			{if $hasTop && $catalogueMissing}
+				<div class="alert alert-info"><p>{$catalogueMissing} {tr}of the folders in Catalogue.csv have no gallery yet. Make them, each in the style of its type, so they are ready to be filled.{/tr}</p>
+					{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php"}
+						<input type="hidden" name="kind" value="{$kind}" />
+						<input type="submit" class="btn btn-primary" name="make_galleries" value="{tr}Make the galleries{/tr}" />
 					{/form}
 				</div>
 			{/if}

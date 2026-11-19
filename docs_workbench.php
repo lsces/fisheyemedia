@@ -31,6 +31,13 @@ $errors = [];
 $topic = htmlspecialchars_decode( trim( (string)( $_REQUEST['topic'] ?? '' ) ), ENT_NOQUOTES );
 
 if( $topic === '' ) {
+	if( !empty( $_REQUEST['make_galleries'] ) ) {
+		$made = FisheyeDocsWorkbench::makeCatalogueGalleries();
+		$made['made'] ? $messages[] = $made['made'].' '.KernelTools::tra( 'galleries were made from Catalogue.csv.' ) : null;
+		foreach( $made['errors'] as $e ) {
+			$errors[] = $e;
+		}
+	}
 	if( !empty( $_REQUEST['make_top'] ) ) {
 		FisheyeDocsWorkbench::makeTop() ? $messages[] = KernelTools::tra( 'The top-level gallery was made.' ) : $errors[] = KernelTools::tra( 'The top-level gallery could not be made.' );
 	}
@@ -64,6 +71,7 @@ if( $topic === '' ) {
 	$gBitSmarty->assign( 'showAll', $showAll );
 	$gBitSmarty->assign( 'root', FisheyeDocsWorkbench::root() );
 	$gBitSmarty->assign( 'hasTop', (bool)FisheyeDocsWorkbench::topContentId() );
+	$gBitSmarty->assign( 'catalogueMissing', FisheyeDocsWorkbench::catalogueGalleriesMissing() );
 	$gBitSmarty->assign( 'topTitle', FisheyeDocsWorkbench::topTitle() );
 	$gBitSystem->display( 'bitpackage:fisheyemedia/docs_index.tpl', KernelTools::tra( $kind === 'magazines' ? 'Magazines workbench' : 'Docs workbench' ), [ 'display_mode' => 'admin' ] );
 	exit;

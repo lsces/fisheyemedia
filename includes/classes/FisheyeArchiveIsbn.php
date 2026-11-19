@@ -114,7 +114,6 @@ class FisheyeArchiveIsbn {
 	 * @return array{read:int,tagged:int,none:int,kept:int,errors:list<string>}
 	 */
 	public static function tag( string $pKind, int $pSeconds = 0 ): array {
-		global $gBitDb;
 		$started = microtime( true );
 		$out = [ 'read' => 0, 'tagged' => 0, 'none' => 0, 'kept' => 0, 'errors' => [] ];
 		$root = FisheyeDocsWorkbench::rootFor( $pKind );
@@ -133,30 +132,40 @@ class FisheyeArchiveIsbn {
 				$out['errors'][] = 'Book '.$row['content_id'].': its file was not found.';
 				continue;   // not marked read: tried again next press
 			}
-			$found = self::fileIsbns( $file );
 			$path = $path !== '' ? $path : basename( $file );
-			$out['read']++;
-			$mark = '-';
-			if( $found ) {
-				$cid = (int)$row['content_id'];
-				if( $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $cid ] ) ) {
-					$out['kept']++;   // a number already there (set by hand) is not replaced
-					$mark = '=';
-				} else {
-					$isbn = FisheyeBook::normaliseIsbn( $found[0] );
-					if( LibertyContent::upsertXrefByContentId( $cid, 'isbn', [ 'xkey' => $isbn['isbn13'], 'xkey_ext' => $isbn['isbn10'], 'edit' => '' ] ) ) {
-						$out['tagged']++;
-						$mark = $isbn['isbn13'];
-					} else {
-						$out['errors'][] = $path.': the ISBN could not be stored.';
-						continue;   // not marked read: tried again next press
-					}
-				}
-			} else {
-				$out['none']++;
+			$mark = self::tagFile( (int)$row['content_id'], (int)$row['attachment_id'], $file );
+			if( $mark === null ) {
+				$out['errors'][] = $path.': the ISBN could not be stored.';
+				continue;   // not marked read: tried again next press
 			}
-			LibertyMime::storeAttachmentPreference( (int)$row['attachment_id'], self::PREF, $mark );
+			$out['read']++;
+			match( $mark ) { '-' => $out['none']++, '=' => $out['kept']++, default => $out['tagged']++ };
 		}
 		return $out;
+	}
+
+	/**
+	 * Read one file and tag its Book with the ISBN it carries, then mark the file read (the attachment preference). Used by the tag pass and, at the moment a
+	 * Book is made from an archive file, by the workbench's load, so the record starts with its ISBN. A number already on the Book (set by hand) is not replaced.
+	 *
+	 * @return ?string  the ISBN-13 stored, '=' when the Book already had one, '-' when the file gives none, null when the number could not be stored (the file is not marked read)
+	 */
+	public static function tagFile( int $pContentId, int $pAttachmentId, string $pFile, ?array $pFound = null ): ?string {
+		global $gBitDb;
+		$found = $pFound ?? self::fileIsbns( $pFile );   // a caller that has already read the file passes what it found
+		$mark = '-';
+		if( $found ) {
+			if( $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $pContentId ] ) ) {
+				$mark = '=';
+			} else {
+				$isbn = FisheyeBook::normaliseIsbn( $found[0] );
+				if( !LibertyContent::upsertXrefByContentId( $pContentId, 'isbn', [ 'xkey' => $isbn['isbn13'], 'xkey_ext' => $isbn['isbn10'], 'edit' => '' ] ) ) {
+					return null;
+				}
+				$mark = $isbn['isbn13'];
+			}
+		}
+		LibertyMime::storeAttachmentPreference( $pAttachmentId, self::PREF, $mark );
+		return $mark;
 	}
 }

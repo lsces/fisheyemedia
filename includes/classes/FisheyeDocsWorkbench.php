@@ -77,6 +77,103 @@ class FisheyeDocsWorkbench {
 	/** The handlers whose files are Books (a PDF or epub, which can carry an ISBN); the pictures a registered archive loads stay plain Images. */
 	public const DOCUMENT_HANDLERS = [ 'mimeextpdf', 'mimeextepub' ];
 
+	/** What a folder holds when the archive's Catalogue.csv says nothing about it: drawings, maps and extra files load as plain Images (matched on any folder of the path). */
+	public const PLAIN_FOLDERS = [ 'pictures', 'models', 'extras' ];
+
+	/** The two things a folder can hold, the content types of what is loaded into it. */
+	public const TYPE_IMAGE = 'fisheyeimage';
+	public const TYPE_BOOK = 'fisheyebook';
+
+	/** @var array<string,list<array{0:string,1:string}>> kind => [ folder path as written, content type ] rows of the archive root's Catalogue.csv */
+	private static array $sCatalogues = [];
+
+	/**
+	 * The archive's Catalogue.csv, one row per folder: Path (relative to the archive root, no closing slash) and Type (fisheyeimage or fisheyebook). It is how a new
+	 * clean gallery is added without a code change: a folder with a row is made a gallery of that type's style (Images Grid for fisheyeimage, Docs Grid for fisheyebook),
+	 * loads that type into it, and the row covers every folder below it until a deeper row says otherwise. Folders with no row are decided by name (PLAIN_FOLDERS)
+	 * and by what they hold, as before. Any other Type is ignored; extra columns are ignored.
+	 *
+	 * @return list<array{0:string,1:string}>
+	 */
+	public static function catalogueRows(): array {
+		if( isset( self::$sCatalogues[self::$sKind] ) ) {
+			return self::$sCatalogues[self::$sKind];
+		}
+		$rows = [];
+		$file = self::root().'Catalogue.csv';
+		if( self::root() !== '' && is_file( $file ) && ( $fh = fopen( $file, 'r' ) ) ) {
+			$head = fgetcsv( $fh, 0, ',', '"', '' ) ?: [];
+			$head = array_map( fn( $h ) => strtolower( trim( (string)preg_replace( '/^\xEF\xBB\xBF/', '', (string)$h ) ) ), $head );
+			$pathCol = array_search( 'path', $head, true );
+			$typeCol = array_search( 'type', $head, true );
+			while( $pathCol !== false && $typeCol !== false && ( $row = fgetcsv( $fh, 0, ',', '"', '' ) ) !== false ) {
+				$type = strtolower( trim( (string)( $row[$typeCol] ?? '' ) ) );
+				$path = trim( trim( (string)( $row[$pathCol] ?? '' ) ), '/' );
+				if( $path !== '' && !str_contains( $path, '..' ) && in_array( $type, [ self::TYPE_IMAGE, self::TYPE_BOOK ], true ) ) {
+					$rows[] = [ $path, $type ];
+				}
+			}
+			fclose( $fh );
+		}
+		return self::$sCatalogues[self::$sKind] = $rows;
+	}
+
+	/** @return array<string,string> lower-case folder path => content type */
+	public static function catalogue(): array {
+		$map = [];
+		foreach( self::catalogueRows() as [ $path, $type ] ) {
+			$map[strtolower( $path )] = $type;
+		}
+		return $map;
+	}
+
+	/** The type the Catalogue.csv gives a FOLDER (its own row, else the nearest row above) and how deep that row is, or null when there is none. @return ?array{0:string,1:int} */
+	private static function catalogueMatch( string $pDir ): ?array {
+		$parts = array_values( array_filter( explode( '/', $pDir ), fn( $d ) => $d !== '' && $d !== '.' ) );
+		$map = self::catalogue();
+		for( $n = count( $parts ); $n >= 1; $n-- ) {
+			$key = strtolower( implode( '/', array_slice( $parts, 0, $n ) ) );
+			if( isset( $map[$key] ) ) {
+				return [ $map[$key], $n ];
+			}
+		}
+		return null;
+	}
+
+	/** The type the Catalogue.csv gives a FOLDER, or null when it has none. */
+	public static function catalogueType( string $pDir ): ?string {
+		return self::catalogueMatch( $pDir )[0] ?? null;
+	}
+
+	/**
+	 * What a FOLDER holds as far as the Catalogue.csv and the folder names say, or null when neither does. The deepest decision wins: a row governs its folder and every
+	 * folder below it, but a Pictures, Models or Extras folder below that row is still plain Images unless a row deeper still says otherwise.
+	 */
+	public static function decidedType( string $pDir ): ?string {
+		$parts = array_values( array_filter( explode( '/', $pDir ), fn( $d ) => $d !== '' && $d !== '.' ) );
+		$plain = 0;
+		foreach( $parts as $i => $part ) {
+			if( in_array( strtolower( $part ), self::PLAIN_FOLDERS, true ) ) {
+				$plain = $i + 1;
+			}
+		}
+		$row = self::catalogueMatch( $pDir );
+		if( $row !== null && $row[1] >= $plain ) {
+			return $row[0];
+		}
+		return $plain > 0 ? self::TYPE_IMAGE : null;
+	}
+
+	/** What a FILE path (under the archive root) is loaded as: TYPE_IMAGE or TYPE_BOOK (see decidedType()). */
+	public static function typeFor( string $pPath ): string {
+		return self::decidedType( dirname( $pPath ) ) ?? self::TYPE_BOOK;
+	}
+
+	/** Whether a FILE path is loaded as a plain Image (see typeFor()); pass a folder as `<dir>/x`. */
+	public static function isPlainPath( string $pPath ): bool {
+		return self::typeFor( $pPath ) === self::TYPE_IMAGE;
+	}
+
 	/** The preference value is a VARCHAR(250). */
 	private const SPEC_MAX = 250;
 
@@ -308,7 +405,10 @@ class FisheyeDocsWorkbench {
 			}
 			self::activatePlugin( $file['handler'] );
 			// a magazine file is a Magazine Issue, any other PDF or epub a Book (which holds the file itself, as an attachment kept in place), a picture a plain Image
-			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : ( in_array( $file['handler'], self::DOCUMENT_HANDLERS, true ) ? new FisheyeBook() : new FisheyeImage() );
+			// every PDF or epub is a Book (with or without an ISBN) except in a Pictures, Models or Extras folder, which hold plain Images
+			$document = self::$sKind !== 'magazines' && in_array( $file['handler'], self::DOCUMENT_HANDLERS, true ) && !self::isPlainPath( $file['path'] );
+			$found = $document ? FisheyeArchiveIsbn::fileIsbns( self::root().$file['path'] ) : [];
+			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : ( $document ? new FisheyeBook() : new FisheyeImage() );
 			$hash = [
 				'title' => pathinfo( $file['name'], PATHINFO_FILENAME ),
 				'mimeplugin' => [ $file['handler'] => [ 'root' => self::$sKind, 'path' => $file['path'] ] ],
@@ -321,6 +421,14 @@ class FisheyeDocsWorkbench {
 			if( $image->store( $hash ) && $image->mContentId ) {
 				$image->addToGalleries( [ $galleryId ] );
 				$result['loaded']++;
+				// a Book made from a document starts with the ISBN its file carries (a magazine issue or a picture has none to read)
+				if( $image instanceof FisheyeBook && self::$sKind !== 'magazines' ) {
+					global $gBitDb;
+					$attId = (int)$gBitDb->getOne( "SELECT MAX(`attachment_id`) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` LIKE 'mimeext%'", [ (int)$image->mContentId ] );
+					if( $attId ) {
+						FisheyeArchiveIsbn::tagFile( (int)$image->mContentId, $attId, self::root().$file['path'], $found );
+					}
+				}
 			} else {
 				$result['errors'][] = $file['path'].': '.implode( '; ', array_map( 'strval', array_values( $image->mErrors ) ) );
 			}
@@ -334,8 +442,8 @@ class FisheyeDocsWorkbench {
 	 */
 	public static function plainImageIssues(): array {
 		global $gBitDb;
-		$rows = $gBitDb->getCol(
-			"SELECT DISTINCT a.`content_id` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
+		$rows = $gBitDb->getAll(
+			"SELECT DISTINCT a.`content_id`, p.`pref_value` AS spec FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
 			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id`
 			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE 'magazines|%' AND lc.`content_type_guid` = 'fisheyeimage'" ) ?: [];
@@ -374,12 +482,14 @@ class FisheyeDocsWorkbench {
 		if( self::$sKind === 'magazines' ) {
 			return [];
 		}
-		$rows = $gBitDb->getCol(
-			"SELECT DISTINCT a.`content_id` FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
+		$rows = $gBitDb->getAll(
+			"SELECT DISTINCT a.`content_id`, p.`pref_value` AS spec FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
 			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id`
 			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ? AND a.`attachment_plugin_guid` IN ( 'mimeextpdf', 'mimeextepub' )
 			   AND lc.`content_type_guid` = 'fisheyeimage'", [ self::$sKind.'|%' ] ) ?: [];
+		// drawings, maps and extra files stay plain Images
+		$rows = array_column( array_filter( $rows, fn( $r ) => !self::isPlainPath( substr( (string)$r['spec'], strlen( self::$sKind ) + 1 ) ) ), 'content_id' );
 		// and the PDFs and epubs uploaded into the archive's galleries (a zip or the upload page store the file with the item, mimepdf/mimeepub): the same Images
 		$galleries = self::galleryTreeContentIds();
 		if( $galleries ) {
@@ -390,7 +500,9 @@ class FisheyeDocsWorkbench {
 				 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`content_id` = lc.`content_id`
 				 WHERE m.`gallery_content_id` IN ( $marks ) AND a.`attachment_plugin_guid` IN ( 'mimepdf', 'mimeepub' ) AND lc.`content_type_guid` = 'fisheyeimage'", $galleries ) ?: [] );
 		}
-		return array_values( array_unique( array_map( 'intval', $rows ) ) );
+		// the documents of a project Book are Images by design (listed through the Book's ebook rows, filed in no gallery): not offered
+		$items = array_map( 'intval', $gBitDb->getCol( "SELECT DISTINCT `xref` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'ebook' AND `xref` > 0 AND `end_date` IS NULL" ) ?: [] );
+		return array_values( array_diff( array_unique( array_map( 'intval', $rows ) ), $items ) );
 	}
 
 	/**
@@ -451,6 +563,10 @@ class FisheyeDocsWorkbench {
 	 * gallery; a folder called Extras always stays a gallery). Magazines keeps a gallery for every folder, as it always has.
 	 */
 	public static function isSingleDocumentFolder( string $pDir ): bool {
+		// a folder with a row in the Catalogue.csv is a gallery, whatever it holds, and so is any folder that holds plain Images (Pictures, Models, Extras)
+		if( isset( self::catalogue()[strtolower( trim( $pDir, '/' ) )] ) || self::isPlainPath( rtrim( $pDir, '/' ).'/x' ) ) {
+			return false;
+		}
 		$root = self::root();
 		if( $pDir === '' || $pDir === '.' || strcasecmp( basename( $pDir ), 'Extras' ) === 0 || $root === '' || self::oldRules() || !is_dir( $root.$pDir ) ) {
 			return false;
@@ -562,7 +678,7 @@ class FisheyeDocsWorkbench {
 		}
 		$out = [];
 		foreach( $byDir as $dir => $paths ) {
-			if( $dir === $pTopic || str_contains( '/'.$dir.'/', '/Extras/' ) || count( array_unique( array_map( fn( $p ) => strtolower( pathinfo( $p, PATHINFO_FILENAME ) ), $paths ) ) ) < 2 ) {
+			if( $dir === $pTopic || self::isPlainPath( $dir.'/x' ) || count( array_unique( array_map( fn( $p ) => strtolower( pathinfo( $p, PATHINFO_FILENAME ) ), $paths ) ) ) < 2 ) {
 				continue;
 			}
 			foreach( array_keys( $byDir ) as $other ) {
@@ -570,11 +686,64 @@ class FisheyeDocsWorkbench {
 					continue 2;
 				}
 			}
+			if( !self::looksLikeProject( $paths ) || self::differentIsbns( $paths ) >= 2 ) {
+				continue;   // differently named books, or files that each carry an ISBN of their own (a series folder): Load files loads each as a Book of its own
+			}
 			$bookId = self::projectBookId( $dir );
 			$book = $bookId ? \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => $bookId ] ) : null;
 			$out[] = [ 'dir' => $dir, 'files' => $paths, 'contentId' => $bookId, 'url' => $book && $book->isValid() ? (string)$book->getDisplayUrl() : '' ];
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether the documents of a folder read as the parts of ONE thing (a model's manual and instructions) and not as separate books: their names begin with the same
+	 * two or more words and what is left to tell them apart is a word or three ("Acme Kit 498 Model Ship Instructions" / "... Manual"). Separate books
+	 * (Al-Qadim - Arabian Adventures, Maztica - Campaign Setting) share no such beginning. Only a folder that passes is held back from Load files for a Make Book.
+	 */
+	private static function looksLikeProject( array $pPaths ): bool {
+		$words = array_map( fn( $p ) => preg_split( '/\s+/', trim( pathinfo( $p, PATHINFO_FILENAME ) ), -1, PREG_SPLIT_NO_EMPTY ) ?: [], $pPaths );
+		$common = 0;
+		while( true ) {
+			$w = strtolower( $words[0][$common] ?? '' );
+			if( $w === '' ) {
+				break;
+			}
+			foreach( $words as $list ) {
+				if( strtolower( $list[$common] ?? '' ) !== $w ) {
+					break 2;
+				}
+			}
+			$common++;
+		}
+		if( $common < 2 ) {
+			return false;
+		}
+		$numbered = true;
+		foreach( $words as $list ) {
+			$left = count( $list ) - $common;
+			if( $left < 1 || $left > 3 ) {
+				return false;
+			}
+			// what is left is only a number or a Roman numeral (Volume I, II, III ... / Part 2): the volumes of a series, not the parts of one thing
+			$numbered = $numbered && !array_filter( array_slice( $list, $common ), fn( $w ) => !preg_match( '/^(?:\d+|[ivxlc]+)[,.]?$/i', $w ) );
+		}
+		return !$numbered;
+	}
+
+	/** How many different ISBNs the first file of each of these documents gives (it stops reading at two): a manual and its instructions give none or one, separate books one each. */
+	private static function differentIsbns( array $pPaths ): int {
+		$seen = [];
+		foreach( $pPaths as $path ) {
+			$found = FisheyeArchiveIsbn::fileIsbns( self::root().$path );
+			if( $found ) {
+				$seen[$found[0]] = true;
+				if( count( $seen ) >= 2 ) {
+					break;
+				}
+			}
+		}
+		return count( $seen );
 	}
 
 	/** What tells each file of a project apart: its name without the words they all begin with ("Manual", "Instructions"). */
@@ -695,6 +864,57 @@ class FisheyeDocsWorkbench {
 	}
 
 	/** content_id of the gallery for a folder path under Documentation (Architecture, Architecture/Sub), each level made when missing. */
+	/** The gallery for a folder path if it has been made (no gallery is made), else null. */
+	private static function findGallery( string $pDir, int $pTop ): ?int {
+		global $gBitDb;
+		$parent = $pTop;
+		foreach( array_filter( explode( '/', $pDir ), fn( $d ) => $d !== '' && $d !== '.' ) as $part ) {
+			$found = $gBitDb->getOne(
+				"SELECT lc.`content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
+				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				 WHERE m.`gallery_content_id` = ? AND lc.`title` = ? AND lc.`content_type_guid` = 'fisheyegallery'", [ $parent, $part ] );
+			if( !$found ) {
+				return null;
+			}
+			$parent = (int)$found;
+		}
+		return $parent;
+	}
+
+	/** How many of the Catalogue.csv's folders have no gallery yet. */
+	public static function catalogueGalleriesMissing(): int {
+		$top = self::topContentId();
+		if( !$top ) {
+			return 0;
+		}
+		$missing = 0;
+		foreach( self::catalogueRows() as [ $path ] ) {
+			$missing += self::findGallery( $path, $top ) ? 0 : 1;
+		}
+		return $missing;
+	}
+
+	/**
+	 * Make a gallery for every folder in the Catalogue.csv (and for the folders above it), styled for its type, so they are there to be filled: by the workbench for
+	 * a book folder, by an uploaded zip (the archive's Zips folder) for an image folder. A gallery that exists is left as it is.
+	 *
+	 * @return array{made:int,errors:list<string>}
+	 */
+	public static function makeCatalogueGalleries(): array {
+		$out = [ 'made' => 0, 'errors' => [] ];
+		if( !( $top = self::topContentId() ) ) {
+			$out['errors'][] = 'There is no top-level '.self::topTitle().' gallery.';
+			return $out;
+		}
+		foreach( self::catalogueRows() as [ $path ] ) {
+			if( self::findGallery( $path, $top ) ) {
+				continue;
+			}
+			self::galleryFor( $path, $top ) ? $out['made']++ : $out['errors'][] = $path.': the gallery could not be made.';
+		}
+		return $out;
+	}
+
 	private static function galleryFor( string $pDir, int $pTop ): ?int {
 		$parent = $pTop;
 		$walked = '';
@@ -722,6 +942,9 @@ class FisheyeDocsWorkbench {
 	 * anything else - and every folder of Magazines - a Docs Grid. Decided once, when the gallery is made.
 	 */
 	private static function styleFor( string $pRel ): string {
+		if( ( $type = self::decidedType( $pRel ) ) !== null ) {
+			return $type === self::TYPE_IMAGE ? FISHEYE_PAGINATION_IMAGES_GRID : FISHEYE_PAGINATION_DOCS_GRID;
+		}
 		if( self::oldRules() || ( $root = self::root() ) === '' || !is_dir( $root.$pRel ) ) {
 			return FISHEYE_PAGINATION_DOCS_GRID;
 		}

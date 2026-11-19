@@ -83,8 +83,24 @@ function fisheyemedia_content_post_upload( $pGallery, &$pParamHash ) {
 			$documents[] = (int)$object->mContentId;
 		}
 	}
-	if( $documents && \Bitweaver\Fisheyemedia\FisheyeArchives::forGallery( $pGallery ) ) {
+	// ...unless the folder it went into holds plain Images (the archive's Catalogue.csv, else a Pictures, Models or Extras folder)
+	$archive = $documents ? \Bitweaver\Fisheyemedia\FisheyeArchives::forGallery( $pGallery ) : null;
+	$plain = false;
+	if( $archive ) {
+		\Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::setKind( $archive['kind'] );
+		$trail = array_values( $pGallery->getBreadcrumbLinks( false ) );   // the top gallery first
+		$plain = \Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::isPlainPath( implode( '/', array_slice( array_map( 'strval', $trail ), 1 ) ).'/x' );
+	}
+	if( $documents && !$plain && $archive ) {
 		\Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::makeBooks( $documents );
+		// each starts with the ISBN its file carries; a failure to read one is left for the ISBN tag pass
+		foreach( $documents as $cid ) {
+			$book = \Bitweaver\Fisheyemedia\FisheyeBook::lookup( [ 'content_id' => $cid ] );
+			$attId = (int)$pGallery->mDb->getOne( "SELECT MAX(`attachment_id`) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` IN ( 'mimepdf', 'mimeepub' )", [ $cid ] );
+			if( $book && $book->isValid() && $attId && ( $file = (string)$book->ownFilePath() ) !== '' ) {
+				\Bitweaver\Fisheyemedia\FisheyeArchiveIsbn::tagFile( $cid, $attId, $file );
+			}
+		}
 	}
 	$uploaded = reset( $pParamHash['uploaded_objects'] );
 	if( !$pGallery->isValid() || $pGallery->getContentType() !== 'fisheyegallery' || !$uploaded || empty( $uploaded->mContentId ) ) {
