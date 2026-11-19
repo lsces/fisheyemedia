@@ -3,7 +3,7 @@
  * Tags the Books (the PDFs and epubs) a folder archive has loaded with their ISBN; plain Images are left alone until the workbench has made them Books. Each loaded PDF or epub is read where it is kept (an epub by FisheyeBookCatalogue::epubIsbns(),
  * a PDF from the text of its first pages) and the first valid number found becomes the item's 'isbn' row - the ISBN-13 in xkey and the ISBN-10 in xkey_ext, as a
  * book's is - for later use (looking up the book's other details). Nothing else about the item is touched. Whether a file has been looked at is kept in the
- * attachment preference extdoc_isbn (the ISBN-13 found, or '-' when there is none), so a press only reads files it has not read yet, a file with an ISBN
+ * attachment preference extdoc_isbn (the first ISBN-13 found with a '+' once every edition is stored, '-' when there is none, '?' when only doubtful numbers were found), so a press only reads files it has not read yet, a file with an ISBN
  * already set by hand is left alone, and the pass can be repeated as more of an archive is loaded.
  *
  * @package fisheyemedia
@@ -156,7 +156,7 @@ class FisheyeArchiveIsbn {
 	 */
 	public static function status( string $pKind ): array {
 		$books = self::books( $pKind );
-		$read = array_filter( $books, fn( $b ) => $b['mark'] !== null && !in_array( $b['mark'], [ '*', '~' ], true ) );
+		$read = array_filter( $books, fn( $b ) => $b['mark'] !== null && !in_array( $b['mark'], [ '*', '~' ], true ) && !preg_match( '/^\d{13}$/', (string)$b['mark'] ) );
 		$tagged = array_filter( $read, fn( $b ) => !in_array( $b['mark'], [ '-', '?' ], true ) );
 		return [ 'loaded' => count( $books ), 'read' => count( $read ), 'tagged' => count( $tagged ), 'todo' => count( $books ) - count( $read ) ];
 	}
@@ -174,8 +174,8 @@ class FisheyeArchiveIsbn {
 			$out['errors'][] = 'The archive folder was not found.';
 			return $out;
 		}
-		// '*' and '~' were the marks of readers that left files naming several ISBNs unread: they are read again
-		$rows = array_values( array_filter( self::books( $pKind ), fn( $b ) => $b['mark'] === null || in_array( $b['mark'], [ '*', '~' ], true ) ) );
+		// '*' and '~' were the marks of readers that left files naming several ISBNs unread, and a bare ISBN-13 that of one that stored a single number: they are read again
+		$rows = array_values( array_filter( self::books( $pKind ), fn( $b ) => $b['mark'] === null || in_array( $b['mark'], [ '*', '~' ], true ) || preg_match( '/^\d{13}$/', (string)$b['mark'] ) ) );
 		foreach( $pSeconds > 0 ? $rows : array_slice( $rows, 0, self::BATCH ) as $row ) {
 			if( $pSeconds > 0 && ( microtime( true ) - $started ) >= $pSeconds ) {
 				break;
@@ -212,16 +212,30 @@ class FisheyeArchiveIsbn {
 		if( $found && $unsure ) {
 			$mark = '?';   // numbers were found, but only among other titles' (a catalogue page): nothing says they are this book's, so a person looks
 		} elseif( $found ) {
-			if( $gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL", [ $pContentId ] ) ) {
+			// What this file was marked before: a bare ISBN-13 is the mark of the earlier reader, which stored one number and no more - the Book is its own
+			// work, so the other editions the file names are added beside it. A Book with numbers and no such mark had them set by hand: left exactly as it is.
+			$previous = (string)$gBitDb->getOne( "SELECT MAX( `pref_value` ) FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` WHERE `attachment_id` = ? AND `pref_name` = ?", [ $pAttachmentId, self::PREF ] );
+			$held = $gBitDb->getAll( "SELECT `xkey`, `xkey_ext`, `xorder` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'isbn' AND `end_date` IS NULL ORDER BY `xorder`, `xref_id`", [ $pContentId ] ) ?: [];
+			if( $held && !preg_match( '/^\d{13}$/', $previous ) ) {
 				$mark = '=';
 			} else {
-				// a row for each edition the file names, the print edition's first; the Book is the reference, its numbers are what it is looked up by
+				// a row for each edition the file names, the print edition's first; rows the Book already holds stay as they are, new ones follow them
 				$wanted = [];
-				foreach( $found as $i => $number ) {
-					$isbn = FisheyeBook::normaliseIsbn( $number );
-					if( $isbn['isbn13'] !== '' ) {
-						$wanted[] = [ 'key' => $isbn['isbn13'], 'xorder' => $i, 'xkey' => $isbn['isbn13'], 'xkey_ext' => $isbn['isbn10'] ];
+				$next = 0;
+				foreach( $held as $row ) {
+					$key = trim( (string)$row['xkey'] );
+					if( $key !== '' ) {
+						$wanted[] = [ 'key' => $key, 'xorder' => (int)$row['xorder'], 'xkey' => $key, 'xkey_ext' => trim( (string)$row['xkey_ext'] ) ];
+						$next = max( $next, (int)$row['xorder'] + 1 );
 					}
+				}
+				$first = '';
+				foreach( $found as $number ) {
+					$isbn = FisheyeBook::normaliseIsbn( $number );
+					if( $isbn['isbn13'] !== '' && !in_array( $isbn['isbn13'], array_column( $wanted, 'key' ), true ) ) {
+						$wanted[] = [ 'key' => $isbn['isbn13'], 'xorder' => $next++, 'xkey' => $isbn['isbn13'], 'xkey_ext' => $isbn['isbn10'] ];
+					}
+					$first = $first !== '' ? $first : $isbn['isbn13'];
 				}
 				$book = $wanted ? FisheyeBook::lookup( [ 'content_id' => $pContentId ] ) : null;
 				if( !$book || !$book->isValid() ) {
@@ -231,7 +245,7 @@ class FisheyeArchiveIsbn {
 				if( !empty( $done['failed'] ) || $book->mErrors ) {
 					return null;
 				}
-				$mark = $wanted[0]['xkey'];
+				$mark = $first.'+';   // all the editions the file names are stored (a bare number is the earlier reader's mark)
 			}
 		}
 		LibertyMime::storeAttachmentPreference( $pAttachmentId, self::PREF, $mark );
