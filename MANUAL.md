@@ -412,3 +412,7 @@ Films, episodes and tracks play from links on their pages. Browsers play `.mp4` 
   administrator.
 - Retagging in Picard then **Reload Tracks** is the normal way to correct album and track details.
 - Loaders work in batches (20 films/shows, 10 albums, 10 people) to keep each page quick.
+
+### Re-reading the text of a book
+
+When a scanned PDF has been replaced by an OCR'd copy, the book still holds the text it had when it was loaded. Open the gallery's order page, tick the books, choose **Re-read text from file** and submit. The text of each file is read again and stored, the summary is replaced if the book had none (or only stray characters), and the book becomes searchable by its text. A file that still has no text is left as it was. Twenty books are done per press; press again for the rest.

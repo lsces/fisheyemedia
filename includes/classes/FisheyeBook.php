@@ -762,6 +762,61 @@ class FisheyeBook extends FisheyeMediaImage {
 		return $real && is_file( $real ) && str_starts_with( $real, $root.'/' ) ? $real : null;
 	}
 
+	/** Less than this many non-space characters is a scan's stray text (page breaks, a page number), not a text layer: it is not stored, and what is stored of that size is replaced. */
+	public const STRAY_TEXT = 200;
+
+	/**
+	 * Read the text of the book's own file again - after the file was replaced by an OCR'd copy, say - and store it as a load does: the whole text as the content's
+	 * 'text' data, a short summary as the description, and the search index rebuilt. Used by the gallery's "Re-read text from file" batch command.
+	 *
+	 * The stored text is replaced when the file now has a real text layer (STRAY_TEXT characters or more). A file that still has none leaves everything as it was. The
+	 * description is replaced only when it is empty or stray (under STRAY_TEXT characters with fewer than four words in it), so one written by hand stays.
+	 *
+	 * @return array{status:string,chars:int} status: 'stored', 'none' (the file has no text layer), 'nofile' (not a book that holds a PDF or epub, or the file is missing)
+	 */
+	public function rereadText(): array {
+		global $gBitSystem;
+		$file = $this->ownFilePath();
+		if( $file === null ) {
+			return [ 'status' => 'nofile', 'chars' => 0 ];
+		}
+		$summary = null;
+		$text = '';
+		switch( strtolower( pathinfo( $file, PATHINFO_EXTENSION ) ) ) {
+			case 'pdf':
+				$pdftotext = trim( $gBitSystem->getConfig( 'pdftotext_path', trim( (string)shell_exec( 'which pdftotext' ) ) ?: '/usr/bin/pdftotext' ) );
+				if( is_executable( $pdftotext ) ) {
+					$text = (string)shell_exec( escapeshellarg( $pdftotext ).' -enc UTF-8 '.escapeshellarg( $file ).' -' );
+				}
+				break;
+			case 'epub':
+				if( function_exists( '\\Bitweaver\\Liberty\\mime_epub_read' ) ) {
+					$epub = \Bitweaver\Liberty\mime_epub_read( $file );
+					$text = (string)$epub['text'];
+					$summary = $epub['summary'];
+				}
+				break;
+			default:
+				return [ 'status' => 'nofile', 'chars' => 0 ];
+		}
+		$chars = strlen( (string)preg_replace( '/\s+/u', '', $text ) );
+		if( $chars < self::STRAY_TEXT ) {
+			return [ 'status' => 'none', 'chars' => $chars ];
+		}
+		$this->storeData( $text, 'text' );
+		if( $summary === null && function_exists( '\\Bitweaver\\Liberty\\mime_pdf_summary' ) ) {
+			$summary = \Bitweaver\Liberty\mime_pdf_summary( $text );
+		}
+		$current = (string)$this->mDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] );
+		$stray = strlen( (string)preg_replace( '/\s+/u', '', $current ) ) < self::STRAY_TEXT && preg_match_all( '/\p{L}{3,}/u', $current ) < 4;
+		if( (string)$summary !== '' && $stray ) {
+			$this->mDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `data` = ? WHERE `content_id` = ?", [ $summary, $this->mContentId ] );
+		}
+		$hash = [ 'content_id' => $this->mContentId ];
+		$this->invokeServices( 'content_index_function', $hash );
+		return [ 'status' => 'stored', 'chars' => $chars ];
+	}
+
 	/**
 	 * The tile of a book that holds its own file: only its thumbs/ are rebuilt from the picture, beside the link to the file. The base attachThumbnail()
 	 * stores the picture as the content's attachment, which for this book would replace the file itself.
