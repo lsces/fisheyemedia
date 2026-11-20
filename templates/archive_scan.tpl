@@ -4,7 +4,7 @@
 
 <div class="admin liberty">
 	<div class="header">
-		<h1>{tr}Archive scan{/tr}</h1>
+		<h1>{tr}Archive Workbench{/tr}</h1>
 	</div>
 
 	<div class="body">
@@ -34,6 +34,7 @@
 							<td>{$f.name|escape}</td>
 							<td class="text-muted">{if $f.kind == 'archive'}{tr}archive{/tr}{else}{tr}own loader{/tr}{/if}</td>
 							<td><a href="{$f.url|escape}">{$f.label|escape}</a></td>
+							<td>{if $f.details_url}<a href="{$f.details_url|escape}">{tr}ISBNs and file details{/tr}</a>{/if}</td>
 						</tr>
 					{/if}
 				{/foreach}

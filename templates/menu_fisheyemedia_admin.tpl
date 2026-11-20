@@ -2,14 +2,13 @@
 {if $packageMenuTitle}<a href="#"> {tr}{$packageMenuTitle|capitalize}{/tr}</a>{/if}
 <ul class="{$packageMenuClass}">
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}admin/admin_fisheyemedia_settings.php">{tr}Media Library Settings{/tr}</a></li>
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}archive_scan.php">{tr}Folder archives: scan and register{/tr}</a></li>
+	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}archive_scan.php">{tr}Archive Workbench{/tr}</a></li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}apply_access.php">{tr}Gallery access{/tr}</a></li>
 	<li class="divider"></li>
 	<li class="dropdown-header">{tr}Folder archive workbenches{/tr}</li>
 	{foreach ''|archive_entries as $entry}
 		<li><a class="item" href="{$entry.url|escape}">{tr}{$entry.title}{/tr}</a></li>
 	{/foreach}
-	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}archive_isbn.php">{tr}ISBNs from archive files{/tr}</a></li>
 	<li class="divider"></li>
 	<li class="dropdown-header">{tr}Library books{/tr}</li>
 	<li><a class="item" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}author_workbench.php">{tr}Author workbench{/tr}</a></li>

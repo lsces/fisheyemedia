@@ -55,4 +55,4 @@ $gBitSmarty->assign( 'kindMade', $kindMade );
 $gBitSmarty->assign( 'archives', FisheyeArchives::all() );
 $gBitSmarty->assign( 'folderArchive', array_values( array_filter( FisheyeArchives::all(), fn( $a ) => strcasecmp( $a['folder'], $base ) === 0 ) )[0] ?? null );
 $gBitSmarty->assign( 'suggestKind', $base !== '' ? FisheyeArchives::suggestKind( $base ) : '' );
-$gBitSystem->display( 'bitpackage:fisheyemedia/archive_scan.tpl', KernelTools::tra( 'Archive scan' ), [ 'display_mode' => 'admin' ] );
+$gBitSystem->display( 'bitpackage:fisheyemedia/archive_scan.tpl', KernelTools::tra( 'Archive Workbench' ), [ 'display_mode' => 'admin' ] );
