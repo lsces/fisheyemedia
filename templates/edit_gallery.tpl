@@ -67,6 +67,7 @@
 
 			<div class="form-group submit">
 				<input type="submit" class="btn btn-default" name="cancelgallery" value="{tr}Cancel{/tr}" />
+				{if $canDelete}<a class="btn btn-danger" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}edit_gallery.php?gallery_id={$gContent->mGalleryId}&amp;delete=1">{tr}Delete gallery and contents{/tr}</a>{/if}
 				<input type="submit" class="btn btn-primary" name="savegallery" value="{tr}Save{/tr}" />
 			</div>
 		{/form}

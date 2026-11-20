@@ -109,7 +109,7 @@ class FisheyeDocsWorkbench {
 			while( $pathCol !== false && $typeCol !== false && ( $row = fgetcsv( $fh, 0, ',', '"', '' ) ) !== false ) {
 				$type = strtolower( trim( (string)( $row[$typeCol] ?? '' ) ) );
 				$path = trim( trim( (string)( $row[$pathCol] ?? '' ) ), '/' );
-				if( $path !== '' && !str_contains( $path, '..' ) && in_array( $type, [ self::TYPE_IMAGE, self::TYPE_BOOK ], true ) ) {
+				if( $path !== '' && !self::hasParentSegment( $path ) && in_array( $type, [ self::TYPE_IMAGE, self::TYPE_BOOK ], true ) ) {
 					$rows[] = [ $path, $type ];
 				}
 			}
@@ -242,7 +242,7 @@ class FisheyeDocsWorkbench {
 	public static function filesIn( string $pTopic ): array {
 		$root = self::root();
 		$dir = $root.$pTopic;
-		if( $root === '' || $pTopic === '' || str_contains( $pTopic, '..' ) || !is_dir( $dir ) ) {
+		if( $root === '' || $pTopic === '' || self::hasParentSegment( $pTopic ) || !is_dir( $dir ) ) {
 			return [];
 		}
 		$files = [];
@@ -409,6 +409,7 @@ class FisheyeDocsWorkbench {
 			$document = self::$sKind !== 'magazines' && in_array( $file['handler'], self::DOCUMENT_HANDLERS, true ) && !self::isPlainPath( $file['path'] );
 			$unsure = false;
 			$found = $document ? FisheyeArchiveIsbn::fileIsbns( self::root().$file['path'], $unsure ) : [];
+			$meta = $document ? FisheyeArchiveMeta::fileMeta( self::root().$file['path'] ) : [];
 			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : ( $document ? new FisheyeBook() : new FisheyeImage() );
 			$hash = [
 				'title' => pathinfo( $file['name'], PATHINFO_FILENAME ),
@@ -422,12 +423,13 @@ class FisheyeDocsWorkbench {
 			if( $image->store( $hash ) && $image->mContentId ) {
 				$image->addToGalleries( [ $galleryId ] );
 				$result['loaded']++;
-				// a Book made from a document starts with the ISBN its file carries (a magazine issue or a picture has none to read)
+				// a Book made from a document starts with the ISBN, the people, the publisher and the date its file carries (a magazine issue or a picture has none to read)
 				if( $image instanceof FisheyeBook && self::$sKind !== 'magazines' ) {
 					global $gBitDb;
 					$attId = (int)$gBitDb->getOne( "SELECT MAX(`attachment_id`) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` LIKE 'mimeext%'", [ (int)$image->mContentId ] );
 					if( $attId ) {
 						FisheyeArchiveIsbn::tagFile( (int)$image->mContentId, $attId, self::root().$file['path'], $found, $unsure );
+						FisheyeArchiveMeta::tagFile( (int)$image->mContentId, $attId, self::root().$file['path'], $meta );
 					}
 				}
 			} else {
@@ -653,6 +655,29 @@ class FisheyeDocsWorkbench {
 	/** The preference a project Book carries to say which folder it was made from (<kind>|<folder path>): the folder is its identity, not its title. */
 	public const PROJECT_PREF = 'docs_project_folder';
 
+	/** Whether a path has a '..' folder in it (a way out of the root). Dots inside a name - a title ending "Title....epub" - are not one. */
+	public static function hasParentSegment( string $pPath ): bool {
+		return (bool)preg_match( '#(^|[\\/])\.\.([\\/]|$)#', $pPath );
+	}
+
+	/** The trailing edition token of a title ("V2", "V3"), or ''. */
+	private static function editionToken( string $pStem ): string {
+		return preg_match( '/\s+(V\d+)$/i', $pStem, $m ) ? strtoupper( $m[1] ) : '';
+	}
+
+	/**
+	 * Whether the documents of a folder are editions of ONE book: two or more files whose titles are the same once a trailing edition token (V2) is taken off - the
+	 * same book in another format (an epub and a PDF) or in a second version. A folder of such files is made one Book with a row for each, like a model's manual and
+	 * instructions.
+	 */
+	private static function editionsOfOne( array $pPaths ): bool {
+		if( count( $pPaths ) < 2 ) {
+			return false;
+		}
+		$titles = array_unique( array_map( fn( $p ) => strtolower( trim( (string)preg_replace( '/\s+V\d+$/i', '', pathinfo( $p, PATHINFO_FILENAME ) ) ) ), $pPaths ) );
+		return count( $titles ) === 1 && $titles[array_key_first( $titles )] !== '';
+	}
+
 	/** content_id of the project Book made from a folder (path under the root), or null when there is none yet. */
 	public static function projectBookId( string $pDir ): ?int {
 		global $gBitDb;
@@ -679,7 +704,8 @@ class FisheyeDocsWorkbench {
 		}
 		$out = [];
 		foreach( $byDir as $dir => $paths ) {
-			if( $dir === $pTopic || self::isPlainPath( $dir.'/x' ) || count( array_unique( array_map( fn( $p ) => strtolower( pathinfo( $p, PATHINFO_FILENAME ) ), $paths ) ) ) < 2 ) {
+			$editions = self::editionsOfOne( $paths );
+			if( $dir === $pTopic || self::isPlainPath( $dir.'/x' ) || ( !$editions && count( array_unique( array_map( fn( $p ) => strtolower( pathinfo( $p, PATHINFO_FILENAME ) ), $paths ) ) ) < 2 ) ) {
 				continue;
 			}
 			foreach( array_keys( $byDir ) as $other ) {
@@ -687,7 +713,7 @@ class FisheyeDocsWorkbench {
 					continue 2;
 				}
 			}
-			if( !self::looksLikeProject( $paths ) || self::differentIsbns( $paths ) >= 2 ) {
+			if( !$editions && ( !self::looksLikeProject( $paths ) || self::differentIsbns( $paths ) >= 2 ) ) {
 				continue;   // differently named books, or files that each carry an ISBN of their own (a series folder): Load files loads each as a Book of its own
 			}
 			$bookId = self::projectBookId( $dir );
@@ -749,6 +775,22 @@ class FisheyeDocsWorkbench {
 
 	/** What tells each file of a project apart: its name without the words they all begin with ("Manual", "Instructions"). */
 	private static function editionLabels( array $pPaths ): array {
+		if( self::editionsOfOne( $pPaths ) ) {
+			// the edition token when the file has one (V2), else its format (EPUB, PDF); a label two files share gets the format added
+			$labels = [];
+			foreach( $pPaths as $path ) {
+				$token = self::editionToken( pathinfo( $path, PATHINFO_FILENAME ) );
+				$labels[$path] = $token !== '' ? $token : strtoupper( pathinfo( $path, PATHINFO_EXTENSION ) );
+			}
+			foreach( array_count_values( $labels ) as $label => $n ) {
+				if( $n > 1 ) {
+					foreach( $labels as $path => $l ) {
+						$labels[$path] = $l === $label ? $label.' '.strtoupper( pathinfo( $path, PATHINFO_EXTENSION ) ) : $l;
+					}
+				}
+			}
+			return $labels;
+		}
 		$stems = array_map( fn( $p ) => pathinfo( $p, PATHINFO_FILENAME ), $pPaths );
 		$prefix = $stems[0];
 		foreach( $stems as $stem ) {
@@ -850,6 +892,26 @@ class FisheyeDocsWorkbench {
 				$result['errors'][] = $path.': the item was made (content_id '.$itemId.') but its ebook row was not stored: '.implode( '; ', array_map( 'strval', array_values( $book->mErrors ) ) );
 			}
 		}
+		// the Book is the work and its files are its editions, so it takes what they say about themselves: the people, publisher and date of the first file that gives
+		// them, and the ISBN of every file as an edition of its own. Nothing the Book already holds is replaced. (The files are items, not Books: they are not read one by one.)
+		$meta = [ 'authors' => [], 'publisher' => '', 'date' => '' ];
+		$isbns = [];
+		foreach( $folder['files'] as $path ) {
+			$fileMeta = FisheyeArchiveMeta::fileMeta( self::root().$path );
+			$meta['authors'] = $meta['authors'] ?: $fileMeta['authors'];
+			$meta['publisher'] = $meta['publisher'] !== '' ? $meta['publisher'] : $fileMeta['publisher'];
+			$meta['date'] = $meta['date'] !== '' ? $meta['date'] : $fileMeta['date'];
+			$unsure = false;
+			foreach( FisheyeArchiveIsbn::fileIsbns( self::root().$path, $unsure ) as $number ) {
+				if( !$unsure && !in_array( $number, $isbns, true ) ) {
+					$isbns[] = $number;
+				}
+			}
+		}
+		$book->addArchiveMetadata( $meta );
+		if( $isbns ) {
+			FisheyeArchiveIsbn::addIsbns( (int)$book->mContentId, $isbns );
+		}
 		// a Book with no file of its own has no thumbnail until it is given one: the first page of the first PDF of the folder (a Book that already has a cover keeps it)
 		if( !$book->hasThumbnail() ) {
 			foreach( $folder['files'] as $path ) {
@@ -860,6 +922,10 @@ class FisheyeDocsWorkbench {
 					break;
 				}
 			}
+		}
+		// a folder of epubs only has no PDF to draw a cover from: the cover its epub carries (a Book that already has a cover keeps it)
+		if( !$book->hasThumbnail() && ( $cover = $book->coverFromEpub() ) && $cover['error'] !== '' ) {
+			$result['errors'][] = $pDir.': '.$cover['error'];
 		}
 		return $result;
 	}

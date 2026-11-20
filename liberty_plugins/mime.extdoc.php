@@ -28,7 +28,7 @@ use Bitweaver\KernelTools;
 /**
  * The real file for "<root key>|<path under that root>" (a bare path means the Documentation root), or null. The root comes from the
  * kernel_config entry mimeext_root_<key> (the Documentation Storage Path setting for 'documentation', which falls back to Documentation/ under the External Disk Storage Path); it must exist,
- * '..' is refused, and the resolved file has to lie under the root (a link pointing out of it is refused too).
+ * a '..' folder is refused (dots inside a file name are not one), and the resolved file has to lie under the root (a link pointing out of it is refused too).
  */
 function mime_extdoc_resolve( string $pSpec ): ?string {
 	global $gBitSystem;
@@ -38,7 +38,7 @@ function mime_extdoc_resolve( string $pSpec ): ?string {
 	}
 	// a collection's root falls back to its folder under the External Disk Storage Path (FisheyeDocsWorkbench::rootFor()); another key has only its setting
 	$root = realpath( \Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::rootFor( $key ) ?: '/nonexistent' );
-	if( !$root || $rel === '' || str_contains( $rel, '..' ) ) {
+	if( !$root || $rel === '' || \Bitweaver\Fisheyemedia\FisheyeDocsWorkbench::hasParentSegment( $rel ) ) {
 		return null;
 	}
 	$real = realpath( $root.'/'.ltrim( $rel, '/' ) );

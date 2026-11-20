@@ -1,7 +1,8 @@
 <?php
 /**
- * ISBN tags for a folder archive: reads the loaded PDFs and epubs of the kind and writes an 'isbn' row on each that has one (see FisheyeArchiveIsbn). Recomputed
- * from the database after every press, so it can be repeated as more of the archive is loaded.
+ * ISBN tags and file details for a folder archive: reads the loaded PDFs and epubs of the kind and writes an 'isbn' row on each that has one (see FisheyeArchiveIsbn), and
+ * adds the people, publisher and edition date a file gives about itself to its Book (see FisheyeArchiveMeta). Recomputed from the database after every press, so each
+ * can be repeated as more of the archive is loaded.
  *
  * @package fisheyemedia
  */
@@ -31,7 +32,18 @@ if( !empty( $_REQUEST['tag_isbn'] ) ) {
 	$continue = $keepGoing && $done['read'] > 0 && !$done['errors'];
 }
 
+$metaContinue = false;
+if( !empty( $_REQUEST['tag_meta'] ) ) {
+	$keepGoing = !empty( $_REQUEST['keep_going'] );
+	$done = FisheyeArchiveMeta::tag( $kind, $keepGoing ? FisheyeDocsWorkbench::KEEP_GOING_SECONDS : 0 );
+	$messages[] = $done['read'].' '.KernelTools::tra( 'files read' ).': '.$done['filled'].' '.KernelTools::tra( 'gave details the book lacked' ).', '.$done['none'].' '.KernelTools::tra( 'had nothing to add' ).'.';
+	$errors = array_merge( $errors, $done['errors'] );
+	$metaContinue = $keepGoing && $done['read'] > 0 && !$done['errors'];
+}
+
 $gBitSmarty->assign( 'kind', $kind );
+$gBitSmarty->assign( 'meta', FisheyeArchiveMeta::status( $kind ) );
+$gBitSmarty->assign( 'metaContinue', $metaContinue );
 $gBitSmarty->assign( 'topTitle', FisheyeDocsWorkbench::topTitle() );
 $gBitSmarty->assign( 'st', FisheyeArchiveIsbn::status( $kind ) );
 $gBitSmarty->assign( 'plainBooks', count( FisheyeDocsWorkbench::plainImageBooks() ) );
@@ -41,4 +53,4 @@ $gBitSmarty->assign( 'keepGoingChecked', !empty( $_REQUEST['keep_going'] ) );
 $gBitSmarty->assign( 'continue', $continue );
 $gBitSmarty->assign( 'messages', $messages );
 $gBitSmarty->assign( 'errors', $errors );
-$gBitSystem->display( 'bitpackage:fisheyemedia/archive_isbn.tpl', KernelTools::tra( 'ISBN tags' ), [ 'display_mode' => 'edit' ] );
+$gBitSystem->display( 'bitpackage:fisheyemedia/archive_isbn.tpl', KernelTools::tra( 'ISBN tags and file details' ), [ 'display_mode' => 'edit' ] );

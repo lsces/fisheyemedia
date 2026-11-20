@@ -511,7 +511,7 @@ class FisheyeBookFiles {
 			return $real && is_file( $real ) && str_starts_with( $real, $archiveReal.'/' ) ? $real : null;
 		}
 		$root = realpath( self::libraryRoot() );
-		if( !$root || $pXkeyExt === '' || str_contains( $pXkeyExt, '..' ) ) {
+		if( !$root || $pXkeyExt === '' || FisheyeDocsWorkbench::hasParentSegment( $pXkeyExt ) ) {
 			return null;
 		}
 		$path = self::libraryRoot().$pXkeyExt;

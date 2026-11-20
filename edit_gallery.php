@@ -33,6 +33,33 @@ if( !empty( $_REQUEST['cancelgallery'] ) ) {
 }
 
 $feedback = [];
+// delete the gallery with everything in it: fisheye's own delete removes only the links and leaves the items behind. A top-level gallery (an archive's root, the
+// Library) is not deleted here, and only an administrator may.
+$parentIds = FisheyeManagedGallery::parentGalleryIds( $gContent );
+$canDelete = !empty( $parentIds ) && $gContent->hasUserPermission( 'p_fisheye_admin' );
+if( !empty( $_REQUEST['delete'] ) ) {
+	$gContent->hasUserPermission( 'p_fisheye_admin', true );
+	if( empty( $parentIds ) ) {
+		$feedback['error'][] = KernelTools::tra( 'A top-level gallery cannot be deleted from here.' );
+	} elseif( empty( $_REQUEST['cancel'] ) ) {
+		if( empty( $_REQUEST['confirm'] ) ) {
+			$plan = FisheyeManagedGallery::deletePlan( $gContent );
+			$gBitSystem->confirmDialog( [ 'delete' => 1, 'gallery_id' => $gContent->mGalleryId ], [
+				'warning' => KernelTools::tra( 'Delete this gallery and everything in it?' ).' '.$gContent->getTitle().' - '.( count( $plan['galleries'] ) - 1 ).' '.KernelTools::tra( 'galleries below it and' ).' '.count( $plan['items'] ).' '.KernelTools::tra( 'items' ).( $plan['documents'] ? ' (+ '.count( $plan['documents'] ).' '.KernelTools::tra( 'documents of project books' ).')' : '' ).'.'.( $plan['kept'] ? ' '.count( $plan['kept'] ).' '.KernelTools::tra( 'items also filed in another gallery are kept.' ) : '' ).' '.KernelTools::tra( 'Files kept in place on disk are not touched.' ),
+				'error' => KernelTools::tra( 'This cannot be undone!' ),
+			] );
+		} else {
+			$parentId = $parentIds[0];
+			$done = FisheyeManagedGallery::deleteTree( $gContent );
+			$parent = FisheyeGallery::lookup( [ 'gallery_id' => $parentId ] );
+			if( !$done['errors'] && $parent && $parent->isValid() ) {
+				KernelTools::bit_redirect( $parent->getDisplayUrl() );
+			}
+			$feedback['error'] = $done['errors'] ?: [ KernelTools::tra( 'Deleted, but the gallery above could not be shown.' ) ];
+			$feedback['success'][] = $done['galleries'].' '.KernelTools::tra( 'galleries and' ).' '.$done['items'].' '.KernelTools::tra( 'items deleted.' );
+		}
+	}
+}
 // the "add a gallery inside this one" form: the new gallery takes this one's layout (FisheyeManagedGallery::create)
 $addTitle = '';
 $addEdit = '';
@@ -94,6 +121,7 @@ $gBitSmarty->assign( 'placements', FisheyeManagedGallery::placements( $gContent 
 $gBitSmarty->assign( 'childGalleries', $childGalleries );
 $gBitSmarty->assign( 'keptOut', $keptOut );
 $gBitSmarty->assign( 'feedback', $feedback );
+$gBitSmarty->assign( 'canDelete', $canDelete );
 $gBitSmarty->assign( 'formTitle', $formTitle );
 $gBitSmarty->assign( 'formEdit', $formEdit );
 $gBitSmarty->assign( 'addTitle', $addTitle );

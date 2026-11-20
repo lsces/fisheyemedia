@@ -124,7 +124,7 @@ class FisheyeSection extends FisheyeSeason {
 	/** The real path of a file registered under xkey_ext, only when it lies under the tutorials root; null otherwise. */
 	public static function extraFilePath( string $pXkeyExt ): ?string {
 		$root = realpath( FisheyeProgram::getTutorialsRoot() );
-		if( !$root || $pXkeyExt === '' || str_contains( $pXkeyExt, '..' ) ) {
+		if( !$root || $pXkeyExt === '' || FisheyeDocsWorkbench::hasParentSegment( $pXkeyExt ) ) {
 			return null;
 		}
 		$real = realpath( FisheyeProgram::getTutorialsRoot().$pXkeyExt );

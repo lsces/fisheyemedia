@@ -59,6 +59,80 @@ class FisheyeManagedGallery {
 		return array_keys( $seen );
 	}
 
+	/** @return list<int> the gallery_id of each gallery this one is filed in (none for a top-level gallery); FisheyeBase::getParentGalleries() also returns previous/next links in the same array */
+	public static function parentGalleryIds( FisheyeGallery $pGallery ): array {
+		global $gBitDb;
+		return array_map( 'intval', $gBitDb->getCol( "SELECT g.`gallery_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."fisheye_gallery` g ON g.`content_id` = m.`gallery_content_id` WHERE m.`item_content_id` = ? ORDER BY g.`gallery_id`", [ (int)$pGallery->mContentId ] ) ?: [] );
+	}
+
+	/**
+	 * What deleting a gallery together with everything in it would remove: the gallery and every gallery below it, and the items in them (Books, Images ...) that are
+	 * filed in no gallery outside this tree - one also filed elsewhere is only taken out of this tree, never deleted. The documents of a project Book (items
+	 * filed in no gallery, listed through the Book's ebook rows) go with the Book. Files kept in place on disk are never touched: such an item holds only a link.
+	 *
+	 * @return array{galleries:list<int>,items:list<int>,documents:list<int>,kept:list<int>}  content ids; galleries deepest first, this gallery last
+	 */
+	public static function deletePlan( FisheyeGallery $pGallery ): array {
+		global $gBitDb;
+		$nodes = self::tree();
+		$me = (int)$pGallery->mContentId;
+		$below = self::below( $nodes, $me );
+		$galleries = array_merge( [ $me ], $below );
+		$in = fn( array $pIds ) => implode( ',', array_fill( 0, count( $pIds ), '?' ) );
+		$items = array_values( array_diff( array_map( 'intval', $gBitDb->getCol( "SELECT DISTINCT `item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `gallery_content_id` IN ( ".$in( $galleries )." )", $galleries ) ?: [] ), $galleries ) );
+		$kept = [];
+		if( $items ) {
+			$kept = array_map( 'intval', $gBitDb->getCol( "SELECT DISTINCT `item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` IN ( ".$in( $items )." ) AND `gallery_content_id` NOT IN ( ".$in( $galleries )." )", array_merge( $items, $galleries ) ) ?: [] );
+		}
+		$items = array_values( array_diff( $items, $kept ) );
+		$documents = [];
+		if( $items ) {
+			$linked = array_map( 'intval', $gBitDb->getCol( "SELECT DISTINCT `xref` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` IN ( ".$in( $items )." ) AND `item` = 'ebook' AND `end_date` IS NULL AND `xref` > 0", $items ) ?: [] );
+			$linked = array_values( array_diff( $linked, $items ) );
+			if( $linked ) {
+				$filed = array_map( 'intval', $gBitDb->getCol( "SELECT DISTINCT `item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` IN ( ".$in( $linked )." )", $linked ) ?: [] );
+				$documents = array_values( array_diff( $linked, $filed ) );
+			}
+		}
+		return [ 'galleries' => array_merge( array_reverse( $below ), [ $me ] ), 'items' => $items, 'documents' => $documents, 'kept' => $kept ];
+	}
+
+	/**
+	 * Delete a gallery with everything in it, as deletePlan() lists it: items first, then the galleries from the deepest up. Each is expunged in its own right, so
+	 * its rows, thumbnails and search entries go with it. Stops nothing on one failure: what could not be deleted is reported.
+	 *
+	 * @return array{galleries:int,items:int,errors:list<string>}
+	 */
+	public static function deleteTree( FisheyeGallery $pGallery ): array {
+		set_time_limit( 0 );
+		$plan = self::deletePlan( $pGallery );
+		$out = [ 'galleries' => 0, 'items' => 0, 'errors' => [] ];
+		global $gBitDb;
+		foreach( array_merge( $plan['items'], $plan['documents'] ) as $contentId ) {
+			if( !$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $contentId ] ) ) {
+				continue;   // already gone: a project Book takes its file items with it
+			}
+			$item = \Bitweaver\Liberty\LibertyBase::getLibertyObject( $contentId );
+			if( !$item || !$item->load() && !$item->isValid() ) {
+				$out['errors'][] = 'Item '.$contentId.' could not be loaded.';
+				continue;
+			}
+			if( $item->expunge() ) {
+				$out['items']++;
+			} else {
+				$out['errors'][] = 'Item '.$contentId.': '.implode( '; ', array_map( 'strval', array_values( $item->mErrors ) ) );
+			}
+		}
+		foreach( $plan['galleries'] as $contentId ) {
+			$gallery = FisheyeGallery::lookup( [ 'content_id' => $contentId ] );
+			if( $gallery && $gallery->isValid() ) {
+				$gallery->expunge();
+				$out['galleries']++;
+			}
+		}
+		return $out;
+	}
+
 	/**
 	 * Every gallery in the same tree(s) as a gallery: the top-level gallery above each of its parents (Documentation, Library ...) and everything below
 	 * it, the gallery itself included. What Image Order's Copy/Move-to-gallery picker offers for a managed gallery.

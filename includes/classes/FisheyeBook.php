@@ -488,6 +488,87 @@ class FisheyeBook extends FisheyeMediaImage {
 		return true;
 	}
 
+	/**
+	 * Add what an archive file says about itself (FisheyeArchiveMeta::fileMeta()) to a Book, filling only what the Book lacks: the people if it holds no credit
+	 * of any role, the publisher if it has none, the edition date if it has none. Nothing held is replaced, so a value set by hand or by a catalogue stands, and
+	 * the pass can be repeated. The credits carry the name as written (a contact is linked later, or at once when the name already belongs to one).
+	 *
+	 * @param array{authors?:list<array{name:string,role:string}>,publisher?:string,date?:string} $pMeta
+	 * @return array{credits:int,publisher:int,edition_date:int}  rows added
+	 */
+	public function addArchiveMetadata( array $pMeta ): array {
+		$added = [ 'credits' => 0, 'publisher' => 0, 'edition_date' => 0 ];
+		if( !$this->isValid() ) {
+			return $added;
+		}
+		$creditKey = fn( array $pXrefRow ) => 'name:'.mb_strtolower( (string)$pXrefRow['xkey_ext'] );
+		$live = fn( string $pItems ) => (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ( $pItems ) AND `end_date` IS NULL", [ $this->mContentId ] );
+		if( !empty( $pMeta['authors'] ) && !$live( "'".implode( "','", FISHEYEBOOK_CREDIT_ITEMS )."'" ) ) {
+			$byRole = [];
+			foreach( $pMeta['authors'] as $person ) {
+				if( in_array( $person['role'], FISHEYEBOOK_CREDIT_ITEMS, true ) ) {
+					$byRole[$person['role']][] = $person['name'];
+				}
+			}
+			foreach( $byRole as $role => $names ) {
+				$wanted = [];
+				foreach( array_unique( $names ) as $name ) {
+					$wanted[] = [ 'key' => 'name:'.mb_strtolower( $name ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $name, 'data' => [ 'source' => 'file' ] ];
+				}
+				$added['credits'] += (int)( $this->reconcileXrefItem( $role, $wanted, $creditKey, true, true )['inserted'] ?? 0 );
+			}
+			if( $added['credits'] ) {
+				FisheyeBookCredits::linkBookCredits( (int)$this->mContentId );   // a name that already belongs to a contact is linked at once
+			}
+		}
+		$publisher = trim( (string)( $pMeta['publisher'] ?? '' ) );
+		if( $publisher !== '' && !$live( "'publisher'" ) ) {
+			$added['publisher'] = (int)( $this->reconcileXrefItem( 'publisher', [ [ 'key' => 'name:'.mb_strtolower( $publisher ), 'xorder' => 1, 'xkey_ext' => $publisher, 'data' => [ 'source' => 'file' ] ] ], $creditKey, true, true )['inserted'] ?? 0 );
+		}
+		$date = trim( (string)( $pMeta['date'] ?? '' ) );
+		if( $date !== '' && $this->getItemText( 'edition_date' ) === '' && $this->setEditionDate( $date ) ) {
+			$added['edition_date'] = 1;
+		}
+		return $added;
+	}
+
+	/**
+	 * The file items of a project Book (a Book made from a folder of documents - FisheyeDocsWorkbench::makeProjectBook()): the items its ebook rows point at that are
+	 * filed in no gallery and used by no other Book. Such an item exists only to be listed by this Book, so it goes with it. A Book that is not a project Book has none:
+	 * the files of a Library Book are its own editions and are not deleted with it.
+	 *
+	 * @return list<int> content ids
+	 */
+	public function projectDocuments(): array {
+		if( !$this->isValid() || (string)$this->getPreference( FisheyeDocsWorkbench::PROJECT_PREF ) === '' ) {
+			return [];
+		}
+		$linked = array_map( 'intval', $this->mDb->getCol( "SELECT DISTINCT `xref` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'ebook' AND `end_date` IS NULL AND `xref` > 0", [ (int)$this->mContentId ] ) ?: [] );
+		$ret = [];
+		foreach( $linked as $id ) {
+			$filed = $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` = ?", [ $id ] );
+			$shared = $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `item` = 'ebook' AND `end_date` IS NULL AND `xref` = ? AND `content_id` <> ?", [ $id, (int)$this->mContentId ] );
+			if( !$filed && !$shared ) {
+				$ret[] = $id;
+			}
+		}
+		return $ret;
+	}
+
+	/** A Book is deleted as any picture is; a project Book takes its file items with it (projectDocuments()), whose files on disk are never touched. */
+	public function expunge(): bool {
+		$documents = $this->projectDocuments();
+		if( !parent::expunge() ) {
+			return false;
+		}
+		foreach( $documents as $id ) {
+			if( $this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $id ] ) && ( $item = \Bitweaver\Liberty\LibertyBase::getLibertyObject( $id ) ) && $item->load() ) {
+				$item->expunge();
+			}
+		}
+		return true;
+	}
+
 	/** The text of a single-valued plain-text item (its xkey_ext), '' when the book has none. */
 	public function getItemText( string $pItem ): string {
 		return $this->isValid() ? trim( (string)$this->mDb->getOne( "SELECT `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] ) ) : '';
@@ -538,7 +619,7 @@ class FisheyeBook extends FisheyeMediaImage {
 
 	/** Whether $pRelativePath names a picture file of this book: a plain file name (the earlier layout) or one directly inside images/. */
 	private function isImageFileRef( string $pRelativePath ): bool {
-		if( $pRelativePath === '' || str_contains( $pRelativePath, '..' ) || str_starts_with( $pRelativePath, '/' ) ) {
+		if( $pRelativePath === '' || FisheyeDocsWorkbench::hasParentSegment( $pRelativePath ) || str_starts_with( $pRelativePath, '/' ) ) {
 			return false;
 		}
 		return basename( $pRelativePath ) === $pRelativePath || dirname( $pRelativePath ).'/' === $this->imageSubfolder();
@@ -590,7 +671,7 @@ class FisheyeBook extends FisheyeMediaImage {
 		}
 		[ $key, $rel ] = explode( '|', $spec, 2 );   // the same rule as mime_extdoc_resolve(): under the archive's root, no '..', a real file
 		$root = preg_match( '/^[a-z]+$/', $key ) ? realpath( FisheyeDocsWorkbench::rootFor( $key ) ?: '/nonexistent' ) : false;
-		$real = $root && $rel !== '' && !str_contains( $rel, '..' ) ? realpath( $root.'/'.ltrim( $rel, '/' ) ) : false;
+		$real = $root && $rel !== '' && !FisheyeDocsWorkbench::hasParentSegment( $rel ) ? realpath( $root.'/'.ltrim( $rel, '/' ) ) : false;
 		return $real && is_file( $real ) && str_starts_with( $real, $root.'/' ) ? $real : null;
 	}
 
