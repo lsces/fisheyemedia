@@ -333,17 +333,62 @@ them.
 
 ### Pages that are not on the menu
 
-The Media menu lists what is used day to day. These pages are kept, reached by their address under the package folder, because each is the
+The admin menu lists what is used day to day (**Link credits to contacts** is on it, with the authors and sheet loaders). These pages are kept, reached by their address under the package folder, because each is the
 simplest way to do a job in bulk, or once, when a library is being set up on a new installation:
 
 | Page | What it is for |
 |---|---|
 | `load_book_files.php` | Book Files from the Library: scan any set of books (a search, twenty a press) and write their ebook, audio book and other-file rows, and list the folders that hold no catalogued book. The workbenches do this per author or series as they open. |
 | `load_various_authors.php` | Various Authors series: file every `SeriesCatalogue.csv` series in one pass (a dry run first). The Series workbench does one series at a time. |
-| `link_book_credits.php` | Link Books: link book credits that name a person who has an author contact. For books loaded before their author's contact existed; a dry run unless `apply=1`. |
 | `load_book_covers.php` | Book Covers from a Gallery: bring covers in from another site's gallery whose images are titled with the book's ISBN-13. A one-off import when moving a library between sites. |
 | `retag_book_authors.php` | Tag every contact credited as an author on a book or series with the Book Author type. A dry run unless `apply=1`. |
+| `merge_contact_credits.php` | Move what the books hold against one contact onto another (an organisation made as a person by the authors pass, then made properly). `?from=<content_id>&to=<content_id>`; a dry run unless `apply=1`. |
+| `mpeg2_tidy.php` | One-off library tidy: find video files still encoded as mpeg2 and re-encode them to h264/aac in an .mp4 before they are loaded; originals are moved aside, never deleted. Meant to be run in batches from cron. |
 | `load_program.php?local=tutorials` | Load the courses of the Local Tutorials folder (and `?local=1` the Local Videos series). The Tutorial workbench does the same course by course. |
+
+## Folder archives: PDFs and epubs kept where they are
+
+A folder archive is a folder of PDFs and epubs (technical documentation, a games library, a collection of reference books) that is **loaded in place**:
+the files stay where they are on disk and each one becomes a Book that links to its file. Deleting the Book removes only the link, never the file.
+The **Documentation** and **Magazines** archives are built in; any other folder in the media storage folder can be registered.
+
+**The Archive Workbench page** (admin menu, *Archive Workbench*) is where archives are managed. It lists the folders of the media storage folder that
+already have a workbench or a loader of their own, with a link to each. For an archive it also links its **ISBNs and file details** page. To add an
+archive, choose the folder under *Choose a folder* and press **Scan**: the scan only reads the folder's structure and reports what loading it would
+make. Below the report, **Register this folder as an archive** takes a short code and the name of the top-level gallery. The archive then has its own
+entry under *Folder archive workbenches* in the admin menu.
+
+**An archive's workbench.** Its front page lists the topics, the first-level folders, and what is left to do in each:
+1. **Make the top gallery** (once), then **make the galleries** for the folders named in the archive's `Catalogue.csv` (below). These are separate presses.
+2. Open a topic and press **Load files**. Press it **once** and wait: a second press while the first is still running can make a second Book for the same file.
+3. Image folders (maps, pictures, models) are filled by uploading a zip into the gallery rather than by Load files. A zip that starts with its own
+   folder is uploaded into the gallery above it; a zip without a top folder is uploaded into the gallery it belongs to.
+
+**`Catalogue.csv`** sits in the archive's folder, with the columns `Path` and `Type`. A row names a folder (`Rules/Character Sheets`) and says what its
+files become: `fisheyebook` (each PDF or epub is a Book) or `fisheyeimage` (each is a plain Image). The deepest row wins for a folder and everything
+below it, and a folder named Pictures, Models or Extras holds Images unless a row says otherwise. The rows also decide which galleries are made. A folder
+with no row follows the folder names.
+
+**ISBNs, people, publisher and date.** As a Book is made its file is read: the ISBNs (a row for each edition, the print edition first), the authors
+and other credits an epub names with their roles (a PDF gives only its Author field), the publisher, and the date of the copy. Names are kept exactly as
+written and placeholders such as "unknown" are skipped. Nothing a Book already holds is replaced. For books loaded before this existed, or whose file
+could not be read at the time, the archive's **ISBNs and file details** page reads the files not yet seen, a press at a time, with *Keep going* to carry
+on by itself. A file whose numbers may belong to other books is marked for a person to check instead of guessed.
+
+**One book in several files.** A folder holding the same book twice (an epub and a PDF, or a second version named `... V2`) or the parts of one thing
+(a model's manual and instructions) is held back from Load files and offered on the workbench front page as **Make Book**. That makes one Book titled for
+the folder, with a row for each file labelled with what tells it apart (`EPUB`, `PDF`, `V2`, `Manual`), the ISBN of each file as an edition, and the
+people, publisher and date of the first file that gives them. Separate books that merely share a folder are loaded one by one as usual. Two copies of a
+book that differ only in their embedded details (the same text and pictures) are one book, not two editions: keep the copy with the better details.
+
+**A description that is only an advert.** A PDF's description is the start of its text. A line that repeats on many pages (a watermark, a running header or
+footer) is left out of it, so a file stamped on every page with a web address no longer shows that as its description.
+
+**Deleting.** A gallery's edit page has **Delete gallery and contents** for an administrator: it deletes the gallery, the galleries below it and the items
+in them (the confirmation says how many first). An item that is also filed in a gallery outside the tree is only taken out of this one. A top-level gallery
+cannot be deleted from here. Deleting a project Book on its own also deletes its file items, which exist only to be listed by it.
+
+**Names with dots.** A file name may contain dots, including a title that ends in "...". Only a real `..` folder in a path is refused.
 
 ## Playing
 

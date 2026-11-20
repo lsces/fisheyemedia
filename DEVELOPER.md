@@ -906,5 +906,53 @@ belongs in the site's `config/local/import/` folder as a **Local Imports** descr
 `ensurePicturesFolder()`, file the pictures, and report a dry run first.
 
 ### Not built
-magazines (the scheme carries
-`fisheyemagazine` / `fisheyeissue` items but nothing loads them); a library-wide Open Library series match.
+A library-wide Open Library series match. (Magazine Issues are loaded by the Magazines archive: see *Folder archives* below.)
+
+## Folder archives (Documentation, Magazines and registered folders)
+
+A folder archive is a folder under the media storage root whose PDFs and epubs are loaded **in place**: the item's attachment is a `mimeextpdf` / `mimeextepub` /
+`mimeextimage` attachment whose preference `extdoc_path` is `<kind>|<path under the archive root>`; `mime_extdoc_resolve()` turns that into the real file
+(the root comes from `FisheyeDocsWorkbench::rootFor( $kind )`, the resolved file must lie under it, and a `..` *folder* in the path is refused through
+`FisheyeDocsWorkbench::hasParentSegment()`; dots inside a name are not). Expunging such an item removes the link only.
+
+**Registry.** `FisheyeArchives` keeps the list: `BUILTIN` (documentation, magazines) plus registered kinds stored as kernel config entries (`all()`,
+`get()`, `register()`, `unregister()`, `suggestKind()`, `forGallery()` to find the archive a gallery belongs to by the top gallery's content_id).
+`menuEntries()` feeds the `archive_entries` Smarty modifier (`bit_setup_inc.php`), which lists each archive's workbench in the admin menu, and
+`folderOverview()` the **Archive Workbench** page (`archive_scan.php`): the media-root folders that have a workbench (an archive) or a loader of their own
+(`LOADERS`, keyed by lower-case folder name). `FisheyeArchiveScan` reads a folder's structure without writing.
+
+**Workbench.** `docs_workbench.php?kind=` and `FisheyeDocsWorkbench` (`setKind()`, `root()`, `topContentId()`): front page per topic; **make the top gallery**,
+**make the galleries** (`makeCatalogueGalleries()`), **Load files**. Which type a file becomes is `typeFor()` / `decidedType()`: the deepest `Catalogue.csv` row
+(`catalogueRows()`, columns `Path`, `Type` = `fisheyebook` | `fisheyeimage`) wins, a Pictures / Models / Extras folder is Images unless a deeper row says otherwise.
+The load makes a `FisheyeBook` (or `FisheyeIssue` for magazines) per document, reads the file (below) and stores the ISBN and details on the new Book.
+A second Load files running at the same time can make two Books for one file: the loader does not yet re-check for an existing Book just before creating.
+
+**Project Books (one Book, several files).** `projectFolders( $topic )` finds the folders that become ONE Book, held back from the load and offered as **Make Book**:
+a folder holding two or more documents directly and none below it, where either the names begin with the same two or more words and differ by one to three
+(`looksLikeProject()`, and the files give fewer than two different ISBNs), or the files are editions of one title (`editionsOfOne()`: the same title once a trailing `V<n>` is
+taken off, so `X.epub` + `X V2.epub`, or `X.epub` + `X.pdf`). `makeProjectBook( $dir )` makes a Book with no file of its own, titled for the folder and preferenced
+`docs_project_folder` (`<kind>|<folder>`), with an `ebook` row per file (`xkey_ext` = `<kind>|<path>`, `xref` = the in-place item, data `{format,size,edition}`; `editionLabels()` gives
+`V2`, or the format, or the words that tell the files apart). The file items are plain Images in no gallery. The Book then takes the people, publisher and date of the first file that
+gives them (`FisheyeBook::addArchiveMetadata()`), every file's ISBN as an edition (`FisheyeArchiveIsbn::addIsbns()`), and a cover from the first PDF or epub
+(`coverFromPdfFile()`, `coverFromEpub()`). Repeatable: a Book already made only gains what it lacks.
+
+**Reading the files.** `FisheyeArchiveIsbn` (ISBNs, see the section above) and `FisheyeArchiveMeta`:
+`fileMeta( $path )` returns `authors` (name and credit role), `publisher`, `date`. An epub is read from its OPF (container.xml, then the first `.opf`): `dc:creator` with
+`opf:role` (`aut`, `edt`, `ill`, `trl`, `nrt`; no role is an author; any other role is not a credit), `dc:publisher`, `dc:date` (a date before year 1000 or after next year is dropped,
+a 1 January is taken as the year alone). A PDF gives only `Author` from `pdfinfo` (its other fields are the software and the scan date), and a single-word value is refused there. A creator field
+is split at `;`, `&` and ` and ` (not inside brackets) and at commas when it is a list of full names; a degree after a comma (`M.D.`, `Jr.`) stays with the name; placeholders and program names are
+skipped (`PLACEHOLDER`, `SOFTWARE`, `NOT_A_PERSON`). `tagFile()` hands the result to `FisheyeBook::addArchiveMetadata()`, which only ADDS: credits if the Book holds none of any role, a
+publisher if it has none, `edition_date` if it has none (the date of this copy, not the work's `published`); credit rows carry `data.source = 'file'` and are linked at once to an
+existing contact by name (`FisheyeBookCredits::linkBookCredits()`). The attachment preference `extdoc_meta` is `+<n>` (rows added) or `-`; `status()` / `tag()` drive the repair pass on
+`archive_isbn.php?kind=` (linked per archive from the Archive Workbench page and the workbench front page). Both readers run at load time from the workbench.
+
+**Deleting.** `edit_gallery.php?gallery_id=&delete=1` (administrator; refused for a top-level gallery): `FisheyeManagedGallery::deletePlan()` lists the gallery, the galleries below it, the
+items in them that are in no gallery outside the tree, and the file items of project Books; `deleteTree()` expunges the items, then the galleries from the deepest up, and skips an item already gone.
+(`FisheyeGallery::expunge()` itself removes only the links and the sub-galleries; its recursive-delete option is not implemented.) `FisheyeBook::expunge()` also expunges the file items of a
+project Book (`projectDocuments()`: the `ebook` rows' items that are in no gallery and listed by no other Book); a Book without the `docs_project_folder` preference takes nothing along.
+`FisheyeManagedGallery::parentGalleryIds()` is the reliable list of parents (`FisheyeBase::getParentGalleries()` also returns previous/next links in the same array).
+
+**Descriptions.** A PDF's description is `mime_pdf_summary()` (liberty): the first 400 characters of its text with any line of 12 or more characters that occurs at least five times and on at least a
+fifth of the pages removed first (`mime_pdf_drop_running_lines()`), so a watermark or running header is not the description. Books whose description was made before this keep it until reloaded
+or run through the summary repair.
+
