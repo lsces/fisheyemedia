@@ -39,8 +39,11 @@ class FisheyeIssueDetails {
 		$file = pathinfo( array_pop( $parts ), PATHINFO_FILENAME );
 		$dirs = $parts;
 
-		// not an issue: an Extras folder, an index volume
+		// not an issue: an Extras folder, an index volume; a Specials folder holds issues of a kind of their own, which are still read (a name may give a date)
 		foreach( $dirs as $dir ) {
+			if( preg_match( '/^specials?$/i', $dir ) ) {
+				$out['category'] = 'Special';
+			}
 			if( preg_match( '/^extras?$/i', $dir ) ) {
 				$out['category'] = 'Extras';
 				return $out;
