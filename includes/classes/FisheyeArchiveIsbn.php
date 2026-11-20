@@ -117,14 +117,15 @@ class FisheyeArchiveIsbn {
 	 *
 	 * @return list<array{attachment_id:int,content_id:int,path:string,mark:?string}>
 	 */
-	public static function books( string $pKind, string $pPref = self::PREF ): array {
+	public static function books( string $pKind, string $pPref = self::PREF, string $pGuid = 'fisheyebook' ): array {
 		global $gBitDb;
 		$pref = $pPref;
+		$guid = isset( FisheyeBook::SCHEMAS[$pGuid] ) ? $pGuid : 'fisheyebook';   // a schema of FisheyeBook only: it goes into the SQL text
 		$mark = "( SELECT MAX( q.`pref_value` ) FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` q WHERE q.`attachment_id` = a.`attachment_id` AND q.`pref_name` = '$pref' )";
 		$rows = $gBitDb->getAll(
 			"SELECT p.`attachment_id`, a.`content_id`, p.`pref_value` AS path, $mark AS mark FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
 			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
-			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id` AND lc.`content_type_guid` = 'fisheyebook'
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id` AND lc.`content_type_guid` = '$guid'
 			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ?
 			 ORDER BY p.`attachment_id`", [ $pKind.'|%' ] ) ?: [];
 		$out = [];
@@ -139,7 +140,7 @@ class FisheyeArchiveIsbn {
 			$marks = implode( ',', array_fill( 0, count( $galleries ), '?' ) );
 			foreach( $gBitDb->getAll(
 				"SELECT DISTINCT a.`attachment_id`, a.`content_id`, $mark AS mark FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m
-				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id` AND lc.`content_type_guid` = 'fisheyebook'
+				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id` AND lc.`content_type_guid` = '$guid'
 				 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`content_id` = lc.`content_id`
 				 WHERE m.`gallery_content_id` IN ( $marks ) AND a.`attachment_plugin_guid` IN ( 'mimepdf', 'mimeepub' )
 				 ORDER BY a.`attachment_id`", $galleries ) ?: [] as $row ) {

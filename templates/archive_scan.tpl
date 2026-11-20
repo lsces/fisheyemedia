@@ -34,11 +34,13 @@
 							<td>{$f.name|escape}</td>
 							<td class="text-muted">{if $f.kind == 'archive'}{tr}archive{/tr}{else}{tr}own loader{/tr}{/if}</td>
 							<td><a href="{$f.url|escape}">{$f.label|escape}</a></td>
+							<td class="text-muted">{if $f.loads_as}{tr}loads as{/tr} {$f.loads_as|escape}{/if}</td>
 							<td>{if $f.details_url}<a href="{$f.details_url|escape}">{tr}ISBNs and file details{/tr}</a>{/if}</td>
 						</tr>
 					{/if}
 				{/foreach}
 			</table>
+			<p class="help-block">{tr}Item types{/tr}: {foreach from=$itemTypes key=guid item=name name=types}{$name|escape} ({$guid|escape}){if !$smarty.foreach.types.last}, {/if}{/foreach}. {tr}A folder's type comes from the archive's Catalogue.csv (Type column), else from the folder names.{/tr}</p>
 
 			{if $result}
 				{assign var=t value=$result.totals}

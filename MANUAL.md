@@ -353,7 +353,7 @@ the files stay where they are on disk and each one becomes a Book that links to 
 The **Documentation** and **Magazines** archives are built in; any other folder in the media storage folder can be registered.
 
 **The Archive Workbench page** (admin menu, *Archive Workbench*) is where archives are managed. It lists the folders of the media storage folder that
-already have a workbench or a loader of their own, with a link to each. For an archive it also links its **ISBNs and file details** page. To add an
+already have a workbench or a loader of their own, with a link to each and, for an archive, what it loads its files as (Book, Magazine Issue, Image). For an archive it also links its **ISBNs and file details** page. To add an
 archive, choose the folder under *Choose a folder* and press **Scan**: the scan only reads the folder's structure and reports what loading it would
 make. Below the report, **Register this folder as an archive** takes a short code and the name of the top-level gallery. The archive then has its own
 entry under *Folder archive workbenches* in the admin menu.
@@ -365,7 +365,7 @@ entry under *Folder archive workbenches* in the admin menu.
    folder is uploaded into the gallery above it; a zip without a top folder is uploaded into the gallery it belongs to.
 
 **`Catalogue.csv`** sits in the archive's folder, with the columns `Path` and `Type`. A row names a folder (`Rules/Character Sheets`) and says what its
-files become: `fisheyebook` (each PDF or epub is a Book) or `fisheyeimage` (each is a plain Image). The deepest row wins for a folder and everything
+files become: `fisheyebook` (each PDF or epub is a Book), `fisheyeissue` (each is a Magazine Issue, which has issue number, volume and date items instead of a Book's ISBN and authors; the Magazines archive uses this without a catalogue) or `fisheyeimage` (each is a plain Image). The deepest row wins for a folder and everything
 below it, and a folder named Pictures, Models or Extras holds Images unless a row says otherwise. The rows also decide which galleries are made. A folder
 with no row follows the folder names.
 
@@ -380,6 +380,16 @@ on by itself. A file whose numbers may belong to other books is marked for a per
 the folder, with a row for each file labelled with what tells it apart (`EPUB`, `PDF`, `V2`, `Manual`), the ISBN of each file as an edition, and the
 people, publisher and date of the first file that gives them. Separate books that merely share a folder are loaded one by one as usual. Two copies of a
 book that differ only in their embedded details (the same text and pictures) are one book, not two editions: keep the copy with the better details.
+
+**Magazines.** A magazine archive loads each PDF as a Magazine Issue. A scan carries no details of its own, but its name does: the **ISBNs and file details**
+page of a Magazines archive reads each issue's file name (and the year or volume folder it is in) and adds the issue number, the volume and the cover date,
+which also sets the date issues are sorted by. A name such as `Title No3610 - 1979-06-01`, `Title - Vol 29 No 01`, `Title 202508`, `Title - March 2022` or a
+bare `7908` in a 1979 folder is understood; a name that says nothing leaves the field empty rather than guessing, and index volumes and extras are marked as such.
+Nothing an issue already holds is replaced, and issues loaded after this are read as they are made. An Issue also has fields for the publisher, editor, cover price,
+frequency and the title as printed, which a file name cannot give. A title's folder may hold an **`IssueIndex.csv`** beside its issues, one row per issue with the columns
+`Issue`, `Volume`, `Published`, `Publisher`, `Price`, `Frequency` and `Title as printed` (the facts whoever indexed the run recorded: who published it when, what it cost, how
+often it came out, what the cover called it). The **Index sheets** section of the same page matches each issue to its row by issue number and adds what the issue lacks;
+an issue that is not in the sheet is marked and left. A column may be empty for the years the sheet does not record, and nothing is assumed for them.
 
 **A description that is only an advert.** A PDF's description is the start of its text. A line that repeats on many pages (a watermark, a running header or
 footer) is left out of it, so a file stamped on every page with a web address no longer shows that as its description.

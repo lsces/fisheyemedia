@@ -32,6 +32,22 @@ if( !empty( $_REQUEST['tag_isbn'] ) ) {
 	$continue = $keepGoing && $done['read'] > 0 && !$done['errors'];
 }
 
+$indexContinue = false;
+if( !empty( $_REQUEST['apply_index'] ) ) {
+	$keepGoing = !empty( $_REQUEST['keep_going'] );
+	$done = FisheyeIssueIndex::apply( $kind, $keepGoing ? FisheyeDocsWorkbench::KEEP_GOING_SECONDS : 0 );
+	$messages[] = $done['read'].' '.KernelTools::tra( 'issues read' ).': '.$done['filled'].' '.KernelTools::tra( 'were given details' ).', '.$done['none'].' '.KernelTools::tra( 'had nothing to add' ).', '.$done['missing'].' '.KernelTools::tra( 'are not in the sheet' ).'.';
+	$errors = array_merge( $errors, $done['errors'] );
+	$indexContinue = $keepGoing && $done['read'] > 0 && !$done['errors'];
+}
+$issueContinue = false;
+if( !empty( $_REQUEST['tag_issue'] ) ) {
+	$keepGoing = !empty( $_REQUEST['keep_going'] );
+	$done = FisheyeIssueDetails::tag( $kind, $keepGoing ? FisheyeDocsWorkbench::KEEP_GOING_SECONDS : 0 );
+	$messages[] = $done['read'].' '.KernelTools::tra( 'issues read' ).': '.$done['filled'].' '.KernelTools::tra( 'were given details' ).', '.$done['none'].' '.KernelTools::tra( 'had nothing to add' ).'.';
+	$errors = array_merge( $errors, $done['errors'] );
+	$issueContinue = $keepGoing && $done['read'] > 0 && !$done['errors'];
+}
 $metaContinue = false;
 if( !empty( $_REQUEST['tag_meta'] ) ) {
 	$keepGoing = !empty( $_REQUEST['keep_going'] );
@@ -44,6 +60,11 @@ if( !empty( $_REQUEST['tag_meta'] ) ) {
 $gBitSmarty->assign( 'kind', $kind );
 $gBitSmarty->assign( 'meta', FisheyeArchiveMeta::status( $kind ) );
 $gBitSmarty->assign( 'metaContinue', $metaContinue );
+$gBitSmarty->assign( 'issue', FisheyeIssueDetails::status( $kind ) );
+$gBitSmarty->assign( 'issueContinue', $issueContinue );
+$gBitSmarty->assign( 'index', FisheyeIssueIndex::status( $kind ) );
+$gBitSmarty->assign( 'indexContinue', $indexContinue );
+$gBitSmarty->assign( 'isMagazines', $kind === 'magazines' );
 $gBitSmarty->assign( 'topTitle', FisheyeDocsWorkbench::topTitle() );
 $gBitSmarty->assign( 'st', FisheyeArchiveIsbn::status( $kind ) );
 $gBitSmarty->assign( 'plainBooks', count( FisheyeDocsWorkbench::plainImageBooks() ) );

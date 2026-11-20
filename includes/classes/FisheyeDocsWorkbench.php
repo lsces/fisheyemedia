@@ -14,6 +14,7 @@ namespace Bitweaver\Fisheyemedia;
 
 use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\Fisheye\FisheyeImage;
+use Bitweaver\KernelTools;
 
 class FisheyeDocsWorkbench {
 	/** Files loaded per press (each PDF is read twice: text and first-page thumbnail). */
@@ -80,16 +81,17 @@ class FisheyeDocsWorkbench {
 	/** What a folder holds when the archive's Catalogue.csv says nothing about it: drawings, maps and extra files load as plain Images (matched on any folder of the path). */
 	public const PLAIN_FOLDERS = [ 'pictures', 'models', 'extras' ];
 
-	/** The two things a folder can hold, the content types of what is loaded into it. */
+	/** What a folder can hold, the content types of what is loaded into it: a plain Image, or a document of one of FisheyeBook's schemas (a Book, a Magazine Issue). */
 	public const TYPE_IMAGE = 'fisheyeimage';
 	public const TYPE_BOOK = 'fisheyebook';
+	public const TYPE_ISSUE = 'fisheyeissue';
 
 	/** @var array<string,list<array{0:string,1:string}>> kind => [ folder path as written, content type ] rows of the archive root's Catalogue.csv */
 	private static array $sCatalogues = [];
 
 	/**
-	 * The archive's Catalogue.csv, one row per folder: Path (relative to the archive root, no closing slash) and Type (fisheyeimage or fisheyebook). It is how a new
-	 * clean gallery is added without a code change: a folder with a row is made a gallery of that type's style (Images Grid for fisheyeimage, Docs Grid for fisheyebook),
+	 * The archive's Catalogue.csv, one row per folder: Path (relative to the archive root, no closing slash) and Type (fisheyeimage, fisheyebook or fisheyeissue). It is how a new
+	 * clean gallery is added without a code change: a folder with a row is made a gallery of that type's style (Images Grid for fisheyeimage, Docs Grid for the documents),
 	 * loads that type into it, and the row covers every folder below it until a deeper row says otherwise. Folders with no row are decided by name (PLAIN_FOLDERS)
 	 * and by what they hold, as before. Any other Type is ignored; extra columns are ignored.
 	 *
@@ -109,7 +111,7 @@ class FisheyeDocsWorkbench {
 			while( $pathCol !== false && $typeCol !== false && ( $row = fgetcsv( $fh, 0, ',', '"', '' ) ) !== false ) {
 				$type = strtolower( trim( (string)( $row[$typeCol] ?? '' ) ) );
 				$path = trim( trim( (string)( $row[$pathCol] ?? '' ) ), '/' );
-				if( $path !== '' && !self::hasParentSegment( $path ) && in_array( $type, [ self::TYPE_IMAGE, self::TYPE_BOOK ], true ) ) {
+				if( $path !== '' && !self::hasParentSegment( $path ) && in_array( $type, [ self::TYPE_IMAGE, self::TYPE_BOOK, self::TYPE_ISSUE ], true ) ) {
 					$rows[] = [ $path, $type ];
 				}
 			}
@@ -164,9 +166,32 @@ class FisheyeDocsWorkbench {
 		return $plain > 0 ? self::TYPE_IMAGE : null;
 	}
 
-	/** What a FILE path (under the archive root) is loaded as: TYPE_IMAGE or TYPE_BOOK (see decidedType()). */
+	/** The names of the content types an archive can load into a folder: guid => name (FisheyeBook::SCHEMAS and the plain Image). */
+	public static function typeLabels(): array {
+		return FisheyeBook::SCHEMAS + [ self::TYPE_IMAGE => 'Image' ];
+	}
+
+	/**
+	 * The content types an archive loads, for the Archive Workbench: what its documents are by default, plus every type its Catalogue.csv names.
+	 *
+	 * @return list<string> guids, the default first
+	 */
+	public static function loadsAs( string $pKind ): array {
+		$previous = self::$sKind;
+		self::setKind( $pKind );
+		$types = array_values( array_unique( array_merge( [ self::defaultType() ], array_column( self::catalogueRows(), 1 ) ) ) );
+		self::setKind( $previous );
+		return $types;
+	}
+
+	/** What a PDF or epub is loaded as when nothing in the Catalogue.csv or the folder names says: a magazine archive holds issues, any other archive books. */
+	public static function defaultType(): string {
+		return self::$sKind === 'magazines' ? self::TYPE_ISSUE : self::TYPE_BOOK;
+	}
+
+	/** What a FILE path (under the archive root) is loaded as: TYPE_IMAGE, TYPE_BOOK or TYPE_ISSUE (see decidedType()). */
 	public static function typeFor( string $pPath ): string {
-		return self::decidedType( dirname( $pPath ) ) ?? self::TYPE_BOOK;
+		return self::decidedType( dirname( $pPath ) ) ?? self::defaultType();
 	}
 
 	/** Whether a FILE path is loaded as a plain Image (see typeFor()); pass a folder as `<dir>/x`. */
@@ -404,13 +429,15 @@ class FisheyeDocsWorkbench {
 				continue;
 			}
 			self::activatePlugin( $file['handler'] );
-			// a magazine file is a Magazine Issue, any other PDF or epub a Book (which holds the file itself, as an attachment kept in place), a picture a plain Image
-			// every PDF or epub is a Book (with or without an ISBN) except in a Pictures, Models or Extras folder, which hold plain Images
-			$document = self::$sKind !== 'magazines' && in_array( $file['handler'], self::DOCUMENT_HANDLERS, true ) && !self::isPlainPath( $file['path'] );
+			// a PDF or epub is a document of the schema its folder gives (typeFor(): a Book, or a Magazine Issue in a magazine archive), which holds the file itself as an
+			// attachment kept in place; except in a Pictures, Models or Extras folder, which hold plain Images, as does a picture
+			$schema = in_array( $file['handler'], self::DOCUMENT_HANDLERS, true ) ? self::typeFor( $file['path'] ) : self::TYPE_IMAGE;
+			$document = $schema !== self::TYPE_IMAGE;
+			$isBook = $schema === self::TYPE_BOOK;   // only a Book carries an ISBN, authors and a publisher to read
 			$unsure = false;
-			$found = $document ? FisheyeArchiveIsbn::fileIsbns( self::root().$file['path'], $unsure ) : [];
-			$meta = $document ? FisheyeArchiveMeta::fileMeta( self::root().$file['path'] ) : [];
-			$image = self::$sKind === 'magazines' ? new FisheyeIssue() : ( $document ? new FisheyeBook() : new FisheyeImage() );
+			$found = $isBook ? FisheyeArchiveIsbn::fileIsbns( self::root().$file['path'], $unsure ) : [];
+			$meta = $isBook ? FisheyeArchiveMeta::fileMeta( self::root().$file['path'] ) : [];
+			$image = $document ? new FisheyeBook( null, null, $schema ) : new FisheyeImage();
 			$hash = [
 				'title' => pathinfo( $file['name'], PATHINFO_FILENAME ),
 				'mimeplugin' => [ $file['handler'] => [ 'root' => self::$sKind, 'path' => $file['path'] ] ],
@@ -423,13 +450,16 @@ class FisheyeDocsWorkbench {
 			if( $image->store( $hash ) && $image->mContentId ) {
 				$image->addToGalleries( [ $galleryId ] );
 				$result['loaded']++;
-				// a Book made from a document starts with the ISBN, the people, the publisher and the date its file carries (a magazine issue or a picture has none to read)
-				if( $image instanceof FisheyeBook && self::$sKind !== 'magazines' ) {
+				// a Book made from a document starts with the ISBN, the people, the publisher and the date its file carries; an Issue with the number, volume and date its name gives (a magazine issue or a picture has none to read)
+				if( $isBook || $schema === self::TYPE_ISSUE ) {
 					global $gBitDb;
 					$attId = (int)$gBitDb->getOne( "SELECT MAX(`attachment_id`) FROM `".BIT_DB_PREFIX."liberty_attachments` WHERE `content_id` = ? AND `attachment_plugin_guid` LIKE 'mimeext%'", [ (int)$image->mContentId ] );
-					if( $attId ) {
+					if( $attId && $isBook ) {
 						FisheyeArchiveIsbn::tagFile( (int)$image->mContentId, $attId, self::root().$file['path'], $found, $unsure );
 						FisheyeArchiveMeta::tagFile( (int)$image->mContentId, $attId, self::root().$file['path'], $meta );
+					} elseif( $attId ) {
+						FisheyeIssueDetails::tagFile( (int)$image->mContentId, $attId, $file['path'] );   // an Issue starts with the number, volume and date its name gives
+						FisheyeIssueIndex::tagFile( self::$sKind, (int)$image->mContentId, $attId, $file['path'] );   // and what its title's index sheet says, when there is one
 					}
 				}
 			} else {
@@ -450,7 +480,7 @@ class FisheyeDocsWorkbench {
 			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id`
 			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE 'magazines|%' AND lc.`content_type_guid` = 'fisheyeimage'" ) ?: [];
-		return array_map( 'intval', $rows );
+		return array_map( 'intval', array_column( $rows, 'content_id' ) );   // the rows are [ content_id, spec ]: it is the id that is wanted
 	}
 
 	/** @return array{converted:int,errors:list<string>} */
@@ -463,13 +493,18 @@ class FisheyeDocsWorkbench {
 		}
 		$gBitDb->StartTrans();
 		foreach( $ids as $cid ) {
-			$gBitDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `content_type_guid` = 'fisheyeissue' WHERE `content_id` = ? AND `content_type_guid` = 'fisheyeimage'", [ $cid ] );
-			$ret['converted']++;
+			$gBitDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `content_type_guid` = ? WHERE `content_id` = ? AND `content_type_guid` = 'fisheyeimage'", [ self::TYPE_ISSUE, $cid ] );
 		}
 		$gBitDb->CompleteTrans();
 		// getLibertyObject() looks a content item's type up through a query cached for an hour: without this flush a converted issue keeps coming back as an Image.
 		if( !empty( $gBitDb->mDb ) && method_exists( $gBitDb->mDb, 'CacheFlush' ) ) {
 			$gBitDb->mDb->CacheFlush();
+		}
+		// what was changed is counted from the database, not from what was attempted
+		$left = count( self::plainImageIssues() );
+		$ret['converted'] = count( $ids ) - $left;
+		if( $left ) {
+			$ret['errors'][] = $left.' '.KernelTools::tra( 'items could not be changed to Magazine Issues.' );
 		}
 		return $ret;
 	}

@@ -86,22 +86,23 @@ class FisheyeArchives {
 	 * type with its own loader, or nothing yet (it can be scanned and registered).
 	 *
 	 * @param list<array{name:string}> $pFolders FisheyeArchiveScan::candidates()
-	 * @return list<array{name:string,kind:string,label:string,url:string,details_url:string}> kind is 'archive', 'loader' or ''
+	 * @return list<array{name:string,kind:string,label:string,url:string,loads_as:string,details_url:string}> kind is 'archive', 'loader' or ''
 	 */
 	public static function folderOverview( array $pFolders ): array {
 		$out = [];
 		foreach( $pFolders as $folder ) {
-			$row = [ 'name' => $folder['name'], 'kind' => '', 'label' => '', 'url' => '', 'details_url' => '' ];
+			$row = [ 'name' => $folder['name'], 'kind' => '', 'label' => '', 'url' => '', 'loads_as' => '', 'details_url' => '' ];
 			foreach( self::all() as $kind => $spec ) {
 				if( strcasecmp( $spec['folder'], $folder['name'] ) === 0 ) {
 					$row = [ 'name' => $folder['name'], 'kind' => 'archive', 'label' => $spec['top'].' workbench', 'url' => FISHEYEMEDIA_PKG_URL.'docs_workbench.php?kind='.$kind,
-						'details_url' => $kind === 'magazines' ? '' : FISHEYEMEDIA_PKG_URL.'archive_isbn.php?kind='.$kind ];   // the ISBN and file details page works on Books, so a magazine archive has none
+						'loads_as' => implode( ', ', array_map( fn( $t ) => FisheyeDocsWorkbench::typeLabels()[$t] ?? $t, FisheyeDocsWorkbench::loadsAs( $kind ) ) ),
+						'details_url' => FISHEYEMEDIA_PKG_URL.'archive_isbn.php?kind='.$kind ];   // ISBNs and file details for a book archive, issue details for a magazine one
 					break;
 				}
 			}
 			if( $row['kind'] === '' && isset( self::LOADERS[strtolower( $folder['name'] )] ) ) {
 				[ $label, $page ] = self::LOADERS[strtolower( $folder['name'] )];
-				$row = [ 'name' => $folder['name'], 'kind' => 'loader', 'label' => $label, 'url' => FISHEYEMEDIA_PKG_URL.$page, 'details_url' => '' ];
+				$row = [ 'name' => $folder['name'], 'kind' => 'loader', 'label' => $label, 'url' => FISHEYEMEDIA_PKG_URL.$page, 'loads_as' => '', 'details_url' => '' ];
 			}
 			$out[] = $row;
 		}

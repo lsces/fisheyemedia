@@ -923,8 +923,13 @@ A folder archive is a folder under the media storage root whose PDFs and epubs a
 
 **Workbench.** `docs_workbench.php?kind=` and `FisheyeDocsWorkbench` (`setKind()`, `root()`, `topContentId()`): front page per topic; **make the top gallery**,
 **make the galleries** (`makeCatalogueGalleries()`), **Load files**. Which type a file becomes is `typeFor()` / `decidedType()`: the deepest `Catalogue.csv` row
-(`catalogueRows()`, columns `Path`, `Type` = `fisheyebook` | `fisheyeimage`) wins, a Pictures / Models / Extras folder is Images unless a deeper row says otherwise.
-The load makes a `FisheyeBook` (or `FisheyeIssue` for magazines) per document, reads the file (below) and stores the ISBN and details on the new Book.
+(`catalogueRows()`, columns `Path`, `Type` = `fisheyebook` | `fisheyeissue` | `fisheyeimage`) wins, a Pictures / Models / Extras folder is Images unless a deeper row says otherwise.
+The load makes a `FisheyeBook` per document with the schema (content type guid) the folder gives, reads the file (below) and, for a Book, stores the ISBN and details on it.
+`FisheyeBook::SCHEMAS` lists the document schemas the one class serves: `fisheyebook` and `fisheyeissue` (a magazine issue). The guid selects the xref scheme (the items and groups, e.g. the Issue
+Details group) and nothing else differs, so an issue has the Book's view and edit pages, `getEditUrl()` and file rows without a class of its own; `FisheyeBook::__construct( $imageId, $contentId, $schema )` takes
+the schema for a NEW item and reads an existing item's guid from the database (an unknown value falls back to `fisheyebook`), and `bit_setup_inc.php` registers both guids with `FisheyeBook` as the handler.
+`defaultType()` is `fisheyeissue` for the magazines archive and `fisheyebook` otherwise; a plain `fisheyeimage` (fisheye's own type, which knows nothing of xrefs) is for raw image folders. Only a Book is read for
+ISBN, people and publisher. `loadsAs( $kind )` and `typeLabels()` feed the "loads as" column and item types line of the Archive Workbench page.
 A second Load files running at the same time can make two Books for one file: the loader does not yet re-check for an existing Book just before creating.
 
 **Project Books (one Book, several files).** `projectFolders( $topic )` finds the folders that become ONE Book, held back from the load and offered as **Make Book**:
@@ -945,6 +950,20 @@ skipped (`PLACEHOLDER`, `SOFTWARE`, `NOT_A_PERSON`). `tagFile()` hands the resul
 publisher if it has none, `edition_date` if it has none (the date of this copy, not the work's `published`); credit rows carry `data.source = 'file'` and are linked at once to an
 existing contact by name (`FisheyeBookCredits::linkBookCredits()`). The attachment preference `extdoc_meta` is `+<n>` (rows added) or `-`; `status()` / `tag()` drive the repair pass on
 `archive_isbn.php?kind=` (linked per archive from the Archive Workbench page and the workbench front page). Both readers run at load time from the workbench.
+
+**Issue details.** `FisheyeIssueDetails::fromPath( $relPath )` reads an issue's number, volume, date and category from its path under the archive root (rules tried in order, the first that fits a part
+wins, nothing guessed): an `Extras` or `Index` folder or an `index` in the name gives `category` and no number; `Title YYYY-MM VVV-N` gives date, volume and number; a bare year-and-month name (`7908` in a
+1979 folder, `54-10` in `Vol30`, `rc9808`) gives `YYYY-MM` and the volume; otherwise `No<n>` / `Issue <n>`, `Vol <n>` (or a `Vol` folder), then the date as `YYYY-MM-DD`, `YYYY-MM`, `Month [Month] YYYY`, `YYYYMM`,
+`YYYY MM`, a season or a bare year. Numbers lose their leading zeros. `FisheyeBook::addIssueDetails()` adds only what the Issue lacks (`issue_number`, `volume`, `category` as single-value rows; `published` through
+`setPublished()`, which sets `event_time`, the cover-date sort). The mark is the attachment preference `extdoc_issue` (`+<n>` / `-`); `FisheyeIssueDetails::status()` / `tag()` drive a section of
+`archive_isbn.php?kind=magazines`, and the workbench load calls `tagFile()` for a new Issue. On a test archive of about 3,800 scans it filled the date of about 97% of the issues that have one; the publisher, price, frequency and printed title (the Issue scheme's `publisher`, `editor`, `price`, `frequency`, `printed_title`) are not read from names.
+
+**Index sheets.** `FisheyeIssueIndex` applies a title's `IssueIndex.csv` (in the title's folder under the archive root; columns `Issue`, `Volume`, `Published`, `Publisher`, `Price`, `Frequency`,
+`Title as printed`, matched on header, order free) to its Issues: an issue is matched to its row by the issue number `FisheyeIssueDetails::fromPath()` reads from its name, and
+`FisheyeBook::addIssueIndexDetails()` adds only what the Issue lacks (volume and date as `addIssueDetails()`, then `price`, `frequency`, `printed_title` and `publisher` as a credit with `data.source = 'index'`).
+`reconcileQuiet()` writes a row without the reload `reconcileXrefItem()` does, since the load of an Issue reads its whole stored text. The mark is the attachment preference `extdoc_index`
+(`+<n>`, `-`, `?` for an issue not in the sheet); the Index sheets section of `archive_isbn.php?kind=magazines` drives `apply()`, and a newly loaded Issue is also given its row.
+A sheet is produced from an indexer's spreadsheet by a one-off script (the spreadsheet is a fill-down change log, so a value is carried down from where it was set until it is set again).
 
 **Deleting.** `edit_gallery.php?gallery_id=&delete=1` (administrator; refused for a top-level gallery): `FisheyeManagedGallery::deletePlan()` lists the gallery, the galleries below it, the
 items in them that are in no gallery outside the tree, and the file items of project Books; `deleteTree()` expunges the items, then the galleries from the deepest up, and skips an item already gone.

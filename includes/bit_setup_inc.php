@@ -124,14 +124,15 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 		'handler_package'   => 'fisheyemedia',
 		'handler_file'      => 'FisheyeExtrasGallery.php',
 	] );
-	// One issue of a magazine (the Magazines workbench): a leaf like a book, with the issue's PDF referenced in place (FisheyeIssue).
+	// One issue of a magazine (the Magazines workbench): a leaf like a book, with the issue's PDF referenced in place. The same class as a book (FisheyeBook, SCHEMAS): the guid selects the xref scheme.
 	$gLibertySystem->registerContentType( 'fisheyeissue', [
 		'content_type_guid' => 'fisheyeissue',
 		'content_name'      => 'Magazine Issue',
-		'handler_class'     => 'FisheyeIssue',
+		'handler_class'     => 'FisheyeBook',
 		'handler_package'   => 'fisheyemedia',
-		'handler_file'      => 'FisheyeIssue.php',
+		'handler_file'      => 'FisheyeBook.php',
 	] );
+
 	$gLibertySystem->registerContentType( 'fisheyesection', [
 		'content_type_guid' => 'fisheyesection',
 		'content_name'      => 'Tutorial Section',

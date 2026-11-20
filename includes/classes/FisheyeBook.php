@@ -1,6 +1,7 @@
 <?php
 /**
- * Book - one EDITION of a book, extends FisheyeMediaImage with content_type_guid='fisheyebook'.
+ * Book - one EDITION of a book, extends FisheyeMediaImage with content_type_guid='fisheyebook'. The same class serves the other document schemas (SCHEMAS: a magazine issue is a
+ * 'fisheyeissue'): the guid chooses the xref scheme and the pages, FisheyeBook's own behaviour is shared.
  *
  * The same unit as a music album (a release): the ISBN is the edition's key, and several editions of
  * one title are separate records tied together by their work ids (ol_work / wikidata_work), the way
@@ -46,17 +47,32 @@ const FISHEYEBOOK_EXTERNAL_ITEMS = [ 'ol_edition', 'ol_work', 'wikidata_work', '
 
 class FisheyeBook extends FisheyeMediaImage {
 
-	public function __construct( $pImageId = null, $pContentId = null ) {
+	/** The document schemas FisheyeBook serves: content type guid => name. The guid selects the xref scheme (the items and groups), nothing else differs. */
+	public const SCHEMAS = [ FISHEYEBOOK_CONTENT_TYPE_GUID => 'Book', 'fisheyeissue' => 'Magazine Issue' ];
+
+	/**
+	 * @param ?string $pSchema the schema (content type guid) of a NEW item - 'fisheyebook' (the default) or 'fisheyeissue'; an existing item keeps the guid it was made with
+	 */
+	public function __construct( $pImageId = null, $pContentId = null, ?string $pSchema = null ) {
 		parent::__construct( $pImageId, $pContentId );
-		$this->mContentTypeGuid = FISHEYEBOOK_CONTENT_TYPE_GUID;
-		$this->registerContentType( FISHEYEBOOK_CONTENT_TYPE_GUID, [
-			'content_type_guid' => FISHEYEBOOK_CONTENT_TYPE_GUID,
-			'content_name'      => 'Book',
-			'handler_class'     => 'FisheyeBook',
-			'handler_package'   => 'fisheyemedia',
-			'handler_file'      => 'FisheyeBook.php',
-			'maintainer_url'    => 'https://www.bitweaver.org',
-		] );
+		$guid = $pSchema;
+		if( !$guid && $this->mContentId ) {
+			$guid = (string)$this->mDb->getOne( "SELECT `content_type_guid` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ (int)$this->mContentId ] );
+		} elseif( !$guid && $this->mImageId ) {
+			$guid = (string)$this->mDb->getOne( "SELECT lc.`content_type_guid` FROM `".BIT_DB_PREFIX."fisheye_image` fi JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = fi.`content_id` WHERE fi.`image_id` = ?", [ (int)$this->mImageId ] );
+		}
+		$guid = isset( self::SCHEMAS[(string)$guid] ) ? (string)$guid : FISHEYEBOOK_CONTENT_TYPE_GUID;
+		foreach( self::SCHEMAS as $schema => $name ) {
+			$this->registerContentType( $schema, [
+				'content_type_guid' => $schema,
+				'content_name'      => $name,
+				'handler_class'     => 'FisheyeBook',
+				'handler_package'   => 'fisheyemedia',
+				'handler_file'      => 'FisheyeBook.php',
+				'maintainer_url'    => 'https://www.bitweaver.org',
+			] );
+		}
+		$this->mContentTypeGuid = $guid;   // after the registrations: registering a type sets the object's own guid to it
 	}
 
 	/**
@@ -567,6 +583,77 @@ class FisheyeBook extends FisheyeMediaImage {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Write one xref row straight in, with no reload of the object afterwards (reconcileXrefItem() reloads it, and the load of an Issue reads its whole stored text). For work over
+	 * thousands of issues. A credit gets its contact-link rules ($pCredit); returns whether a row was added.
+	 */
+	private function reconcileQuiet( string $pItem, array $pWanted, bool $pCredit = false ): bool {
+		$xref = new \Bitweaver\Liberty\LibertyXref();
+		$xref->mContentTypeGuid = $this->mContentTypeGuid;
+		$xref->mPackageGuid     = $this->mPackageGuid;
+		$counts = $pCredit
+			? $xref->reconcileItem( (int)$this->mContentId, $pItem, $pWanted, fn( array $pRow ) => 'name:'.mb_strtolower( (string)$pRow['xkey_ext'] ), true, true )
+			: $xref->reconcileItem( (int)$this->mContentId, $pItem, $pWanted, null );
+		if( !empty( $counts['failed'] ) ) {
+			$this->mErrors['xref_'.$pItem] = implode( ' ', array_unique( $xref->mErrors ) );
+		}
+		return !empty( $counts['inserted'] );
+	}
+
+	/**
+	 * Add the number, volume, date and category a magazine file's name gives (FisheyeIssueDetails::fromPath()) to an Issue, filling only what it lacks: a value set by hand
+	 * or by an index sheet stands. This runs over thousands of issues, each holding hundreds of kilobytes of scanned text, so it writes only what it changes: the rows go straight
+	 * in (no reload of the object after each) and the sort date is one column updated, not a save - a save reads the whole text again to rebuild the search index.
+	 *
+	 * @param array{issue_number?:string,volume?:string,published?:string,category?:string} $pDetails
+	 * @return array{issue_number:int,volume:int,published:int,category:int}  rows added
+	 */
+	public function addIssueDetails( array $pDetails ): array {
+		$added = [ 'issue_number' => 0, 'volume' => 0, 'published' => 0, 'category' => 0 ];
+		if( !$this->isValid() ) {
+			return $added;
+		}
+		foreach( [ 'issue_number', 'volume', 'category' ] as $item ) {
+			$value = trim( (string)( $pDetails[$item] ?? '' ) );
+			if( $value !== '' && $this->getItemText( $item ) === '' && $this->reconcileQuiet( $item, [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => $value ] ] ) ) {
+				$added[$item] = 1;
+			}
+		}
+		$published = trim( (string)( $pDetails['published'] ?? '' ) );
+		$timestamp = $published !== '' ? self::publishedToTimestamp( $published ) : null;
+		if( $timestamp !== null && $this->getItemText( 'published' ) === '' && $this->reconcileQuiet( 'published', [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => $published ] ] ) ) {
+			$this->mDb->query( "UPDATE `".BIT_DB_PREFIX."liberty_content` SET `event_time` = ? WHERE `content_id` = ?", [ $timestamp, (int)$this->mContentId ] );   // the date issues are ordered by
+			$added['published'] = 1;
+		}
+		return $added;
+	}
+
+	/**
+	 * Add what an index sheet (a title's IssueIndex.csv) says about an issue: volume and date as addIssueDetails() does, and the publisher at the time (a credit), the cover price,
+	 * the frequency and the title as printed. Only what the Issue lacks is added, so a value set by hand or read from the name stands.
+	 *
+	 * @param array{volume?:string,published?:string,publisher?:string,price?:string,frequency?:string,printed_title?:string} $pRow
+	 * @return int  rows added
+	 */
+	public function addIssueIndexDetails( array $pRow ): int {
+		if( !$this->isValid() ) {
+			return 0;
+		}
+		$count = array_sum( $this->addIssueDetails( [ 'volume' => $pRow['volume'] ?? '', 'published' => $pRow['published'] ?? '' ] ) );
+		foreach( [ 'price', 'frequency', 'printed_title' ] as $item ) {
+			$value = trim( (string)( $pRow[$item] ?? '' ) );
+			if( $value !== '' && $this->getItemText( $item ) === '' && $this->reconcileQuiet( $item, [ [ 'key' => '', 'xorder' => 0, 'xkey_ext' => $value ] ] ) ) {
+				$count++;
+			}
+		}
+		$publisher = trim( (string)( $pRow['publisher'] ?? '' ) );
+		$has = (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'publisher' AND `end_date` IS NULL", [ (int)$this->mContentId ] );
+		if( $publisher !== '' && !$has && $this->reconcileQuiet( 'publisher', [ [ 'key' => 'name:'.mb_strtolower( $publisher ), 'xorder' => 1, 'xkey_ext' => $publisher, 'data' => [ 'source' => 'index' ] ] ], true ) ) {
+			$count++;
+		}
+		return $count;
 	}
 
 	/** The text of a single-valued plain-text item (its xkey_ext), '' when the book has none. */
