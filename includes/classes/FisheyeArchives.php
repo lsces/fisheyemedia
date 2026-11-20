@@ -57,6 +57,56 @@ class FisheyeArchives {
 		return self::$kept = $all;
 	}
 
+	/**
+	 * The admin menu's entries, one per archive: the top gallery's title and the address of its workbench. Nothing is named in the menu, so an archive
+	 * registered on the Archive scan page appears by itself.
+	 *
+	 * @return list<array{kind:string,title:string,url:string}>
+	 */
+	public static function menuEntries(): array {
+		$entries = [];
+		foreach( self::all() as $kind => $spec ) {
+			$entries[] = [ 'kind' => $kind, 'title' => $spec['top'], 'url' => FISHEYEMEDIA_PKG_URL.'docs_workbench.php?kind='.$kind ];
+		}
+		return $entries;
+	}
+
+	/** Media folders that have a loader of their own rather than being archives: lower-case folder name => [ label, page ]. */
+	private const LOADERS = [
+		'library'         => [ 'Author workbench', 'author_workbench.php' ],
+		'films'           => [ 'Load films', 'load_film.php' ],
+		'tv shows'        => [ 'Load programs', 'load_program.php' ],
+		'music'           => [ 'Load music', 'load_music.php' ],
+		'local videos'    => [ 'Load local videos', 'load_local.php' ],
+		'local tutorials' => [ 'Tutorial workbench', 'tutorial_workbench.php' ],
+	];
+
+	/**
+	 * What handles each folder of the media storage folder, for the Archive scan page: a registered or built-in archive (its workbench), a media
+	 * type with its own loader, or nothing yet (it can be scanned and registered).
+	 *
+	 * @param list<array{name:string}> $pFolders FisheyeArchiveScan::candidates()
+	 * @return list<array{name:string,kind:string,label:string,url:string}> kind is 'archive', 'loader' or ''
+	 */
+	public static function folderOverview( array $pFolders ): array {
+		$out = [];
+		foreach( $pFolders as $folder ) {
+			$row = [ 'name' => $folder['name'], 'kind' => '', 'label' => '', 'url' => '' ];
+			foreach( self::all() as $kind => $spec ) {
+				if( strcasecmp( $spec['folder'], $folder['name'] ) === 0 ) {
+					$row = [ 'name' => $folder['name'], 'kind' => 'archive', 'label' => $spec['top'].' workbench', 'url' => FISHEYEMEDIA_PKG_URL.'docs_workbench.php?kind='.$kind ];
+					break;
+				}
+			}
+			if( $row['kind'] === '' && isset( self::LOADERS[strtolower( $folder['name'] )] ) ) {
+				[ $label, $page ] = self::LOADERS[strtolower( $folder['name'] )];
+				$row = [ 'name' => $folder['name'], 'kind' => 'loader', 'label' => $label, 'url' => FISHEYEMEDIA_PKG_URL.$page ];
+			}
+			$out[] = $row;
+		}
+		return $out;
+	}
+
 	/** One archive by kind, or null. @return array{top:string,folder:string,noun:string,role:string,builtin:bool}|null */
 	public static function get( string $pKind ): ?array {
 		return self::all()[$pKind] ?? null;

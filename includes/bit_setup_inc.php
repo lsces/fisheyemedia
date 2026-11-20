@@ -30,6 +30,8 @@ if( $gBitSystem->isPackageActive( 'fisheyemedia' ) ) {
 	global $gBitSmarty;
 	// {foreach ''|library_entries as $entry} in the menu: the top-level galleries the viewer can open, alphabetically ('title', 'url').
 	$gBitSmarty->registerPlugin( 'modifier', 'library_entries', [ \Bitweaver\Fisheyemedia\FisheyeLibraryMenu::class, 'entries' ] );
+	// {foreach ''|archive_entries as $entry} in the admin menu: every folder archive (built-in or registered) with the url of its workbench ('title', 'url').
+	$gBitSmarty->registerPlugin( 'modifier', 'archive_entries', [ \Bitweaver\Fisheyemedia\FisheyeArchives::class, 'menuEntries' ] );
 	// {if $itemContentId|listed_in:$gContent} in the Library and Docs grids: a sub-gallery its parent keeps out of its list is left out (FisheyeGalleryList).
 	$gBitSmarty->registerPlugin( 'modifier', 'listed_in', [ \Bitweaver\Fisheyemedia\FisheyeGalleryList::class, 'listed' ] );
 

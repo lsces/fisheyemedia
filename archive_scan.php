@@ -46,6 +46,7 @@ if( $base !== '' ) {
 }
 $gBitSmarty->assign( 'parent', $parent );
 $gBitSmarty->assign( 'candidates', $candidates );
+$gBitSmarty->assign( 'folderOverview', FisheyeArchives::folderOverview( $candidates ) );
 $gBitSmarty->assign( 'base', $base );
 $gBitSmarty->assign( 'result', $result );
 $gBitSmarty->assign( 'errors', $errors );

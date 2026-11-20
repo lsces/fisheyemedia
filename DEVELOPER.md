@@ -646,9 +646,8 @@ another film, and otherwise updates the stored path only (title, credits and the
 ## Books and the book pictures folder
 
 ### The book record
-`FisheyeBook` (`content_type_guid = 'fisheyebook'`, extends `FisheyeMediaImage`) is one **edition**: the ISBN
-is the key, several editions of a work are separate records tied by work ids, and print, ebook and audiobook
-editions are each their own record. Like an album it has no attachment of its own; everything is `liberty_xref`
+`FisheyeBook` (`content_type_guid = 'fisheyebook'`, extends `FisheyeMediaImage`) is the **work** (its `content_id` is the key). The ISBN is an optional identifier, not the key: a book carries
+one `isbn` row per edition (print, ebook, audiobook, reprint), and an ISBN never selects a record on its own. Like an album it has no attachment of its own; everything is `liberty_xref`
 rows written through `reconcileXrefItem()` so a re-run never wipes hand edits or contact links. The
 vocabulary is the `fisheyebook` group/items of the site's media xref scheme (apply it from the liberty
 **Local Scheme** page; a database restore removes it, and a store of an item the scheme does not define is
@@ -661,12 +660,33 @@ refused).
 | `FISHEYEBOOK_CREDIT_ITEMS` | `author`, `editor`, `illustrator`, `translator`, `narrator` (name in `xkey_ext`, contact in `xref`) |
 | `FISHEYEBOOK_EXTERNAL_ITEMS` | `ol_edition`, `ol_work`, `wikidata_work`, `google_books`, `isfdb`, `gutenberg` |
 
-`isbn` is one row: `xkey` = ISBN-13, `xkey_ext` = ISBN-10, no data (an old `{entered, note}` value is gone).
-Its row templates are `templates/xref/fisheyebook/view_isbn_item.tpl` and `edit_isbn_item.tpl`, which show both numbers and take
-either; **every manual save goes through `FisheyeBook::storeXref()`**, which normalises an `isbn` row (the number typed in `isbn`,
-`xkey_ext` or `xkey` - ISBN-10 or -13, hyphens allowed - becomes the ISBN-13 in `xkey` and the ISBN-10 in `xkey_ext`), refuses a number
-that fails its check digit, and blanks the row's data. `reloadFromOpenLibrary()` reads `xkey` and `xkey_ext`, so a book given an ISBN
-by hand can be filled in from Open Library at once. `event_time` carries the
+`isbn` is a **multiple** item (`multiple => 1` in the local scheme; apply it from the Local Scheme page): one row per
+edition, `xkey` = ISBN-13, `xkey_ext` = ISBN-10, `data`/`edit` = an optional note, `xorder` = preference, the print edition
+first. Its row templates are `templates/xref/fisheyebook/view_isbn_item.tpl`, `edit_isbn_item.tpl` and, for the generic Add page,
+`edit_isbn_fields.tpl` (ISBN and Note fields). **Every manual save goes through `FisheyeBook::storeXref()`**, which takes the first
+valid ISBN found in `isbn`, `xkey` or `xkey_ext` (ISBN-10 or -13, hyphens allowed), stores 13 in `xkey` and 10 in `xkey_ext`, turns any
+other words into the note, and refuses a number that fails its check digit or is already on a live row of the book.
+`FisheyeBook::isbnNumbers( $max = 12 )` returns every 13 and 10 ordered by `xorder`; the look-ups (Open Library, Google) try each in turn.
+Shops only know the print number, so the bookshop links on Details come from the rows in that order. `reloadFromOpenLibrary()` reads
+`xkey` and `xkey_ext`. `LibertyXrefType::getAvailableItems()` offers an item for adding again when its `multiple` is above zero.
+The additive rule applies everywhere: `reconcileBookXrefs` and the tagger keep held rows and add new editions, so a hand-set number
+is never removed (a number corrected in a catalogue leaves the old one until it is deleted by hand).
+
+### Matching a catalogue row to a book
+`FisheyeCatalogueMerge::plan()` matches in this order: (1) work ids (`wikidata_work`, `gutenberg`, `ol_work`, through
+`FisheyeBookCatalogue::workIds()`); (2) title, narrowed by author when both sides name authors, only when exactly one book fits;
+(3) any ISBN held on the book. A sheet that names one of the book's editions is compared against that edition, not the first.
+
+### ISBNs read from archive files
+`FisheyeArchiveIsbn` reads the ISBNs a PDF or epub names, at load time and as a repair pass (`archive_isbn.php`). `textIsbns( $text, &$unsure )`
+splits the text into pages, treats a page with four or more numbers (most unlabelled) as an advert page and ignores it unless
+nothing else names one, ranks each number by its label (print, then unlabelled, then digital) and takes the numbers on the best-ranked page.
+Epubs read the OPF metadata first (`FisheyeBookCatalogue::epubIsbns()`), page text only when the OPF has none. `tagFile()` writes one
+`isbn` row per edition and a mark on the attachment (`extdoc_isbn`): `<isbn13>+` all editions stored, `-` none found, `?` doubtful (all
+numbers on advert pages, or several unlabelled) and left for a person, `=` the book already had numbers (hand-set, untouched). Earlier
+marks (bare 13 digits, `*`, `~`) are read as unread and retried.
+
+`event_time` carries the
 published date for calendar sorting; the `published` item keeps its precision. Series are galleries
 (`FisheyeSeries`), not xrefs.
 

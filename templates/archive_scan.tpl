@@ -26,10 +26,16 @@
 				<input type="submit" class="btn btn-primary" value="{tr}Scan{/tr}" />
 			{/form}
 
-			<h2>{tr}Archives{/tr}</h2>
+			<h2>{tr}Loaded from a folder{/tr}</h2>
 			<table class="table table-condensed" style="width:auto">
-				{foreach from=$archives key=k item=a}
-					<tr><td>{$a.top|escape}</td><td class="text-muted">{$a.folder|escape}{if $a.builtin} ({tr}built in{/tr}){/if}</td><td><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}docs_workbench.php?kind={$k}">{tr}Workbench{/tr}</a></td></tr>
+				{foreach from=$folderOverview item=f}
+					{if $f.kind}
+						<tr>
+							<td>{$f.name|escape}</td>
+							<td class="text-muted">{if $f.kind == 'archive'}{tr}archive{/tr}{else}{tr}own loader{/tr}{/if}</td>
+							<td><a href="{$f.url|escape}">{$f.label|escape}</a></td>
+						</tr>
+					{/if}
 				{/foreach}
 			</table>
 

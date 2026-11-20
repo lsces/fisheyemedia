@@ -134,8 +134,9 @@ thumbnail only the first time. This needs the TheTVDB key in Media Library Setti
 
 ## Books
 
-Books are catalogued one **edition** at a time (the ISBN is the key), with their credits, publisher, series,
-cover and pictures. A book is a record of its own, filed in a gallery for its author (or in a category gallery
+A book is the **work**: one record per title, with its credits, publisher, series, cover and pictures. An ISBN is an
+optional identifier on it, and a book can carry several - one per edition (print, ebook, audiobook, a reprint) - with a
+note on each. Books are found by title and author first; the ISBN is the last resort. A book is a record of its own, filed in a gallery for its author (or in a category gallery
 when the author has only one or two books), under a top-level **Library** gallery. Authors and publishers are
 Contact records, so a contact's page lists the books that credit them.
 
@@ -249,9 +250,11 @@ downloads. The files are fetched through `view_season_file.php` (or `view_book_f
   picture is kept at no more than 400 pixels). The same page takes a picture from a **web address** - paste the
   address of a bookseller's page, or of the picture itself, and the pictures on it are listed to choose from - or
   a **scan or photograph** from your computer. A book with no ISBN gets an **Add ISBN** box (the number is checked
-  and kept as ISBN-13 and ISBN-10), and **Reload from Open Library** fills the format, genre, pages and description
+  and kept as ISBN-13 and ISBN-10; a book can have more, added from the book's **Add** list as further ISBN rows, each
+  with an optional **Note** such as "ebook"; a number already on the book is refused), and **Reload from Open Library** fills the format, genre, pages and description
   where they are blank. Only an editor of the book can use the page, and a web address must be a public site.
-  The book page's **Links** line also carries Amazon and AbeBooks links made from the ISBN.
+  The book page's **Links** line also carries Amazon and AbeBooks links made from the ISBN (the print edition's number is listed first, since
+  that is the one the shops know).
 - **Books with no ISBN:** the admin menu's **Books with no ISBN** lists every book without one, with its author and year, search links
   (AbeBooks, Open Library, Google Books) made from its title and author, and a box to paste the ISBN into - it is checked, kept as ISBN-13
   and ISBN-10, and the book leaves the list. A book too old to have an ISBN can be added on the **Add Books** page, whose second form takes
