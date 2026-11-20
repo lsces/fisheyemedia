@@ -385,7 +385,7 @@ book that differ only in their embedded details (the same text and pictures) are
 page of a Magazines archive reads each issue's file name (and the year or volume folder it is in) and adds the issue number, the volume and the cover date,
 which also sets the date issues are sorted by. A name such as `Title No3610 - 1979-06-01`, `Title - Vol 29 No 01`, `Title 202508`, `Title - March 2022` or a
 bare `7908` in a 1979 folder is understood; a name that says nothing leaves the field empty rather than guessing, and index volumes and extras are marked as such.
-Nothing an issue already holds is replaced, and issues loaded after this are read as they are made. An Issue also has fields for the publisher, editor, cover price,
+Nothing an issue already holds is replaced, and issues loaded after this are read as they are made. The issue's details panel shows its number, volume, date, publisher, printed title, frequency and cover price. An Issue also has fields for the publisher, editor, cover price,
 frequency and the title as printed, which a file name cannot give. A title's folder may hold an **`IssueIndex.csv`** beside its issues, one row per issue with the columns
 `Issue`, `Volume`, `Published`, `Publisher`, `Price`, `Frequency` and `Title as printed` (the facts whoever indexed the run recorded: who published it when, what it cost, how
 often it came out, what the cover called it). The **Index sheets** section of the same page matches each issue to its row by issue number and adds what the issue lacks;

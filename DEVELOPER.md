@@ -958,6 +958,10 @@ wins, nothing guessed): an `Extras` or `Index` folder or an `index` in the name 
 `setPublished()`, which sets `event_time`, the cover-date sort). The mark is the attachment preference `extdoc_issue` (`+<n>` / `-`); `FisheyeIssueDetails::status()` / `tag()` drive a section of
 `archive_isbn.php?kind=magazines`, and the workbench load calls `tagFile()` for a new Issue. On a test archive of about 3,800 scans it filled the date of about 97% of the issues that have one; the publisher, price, frequency and printed title (the Issue scheme's `publisher`, `editor`, `price`, `frequency`, `printed_title`) are not read from names.
 
+**Details panel.** `FisheyeBookDetails::collect()` builds the read-only details (credits, ISBNs, label/value lines, links) from the item's live xref rows. The label/value lines are a fixed list for the
+Book's own items, plus every other plain-text item (`template` `text`) the scheme defines for the item's schema, shown under the scheme's own title: an Issue's number and volume first, then the fixed lines, then
+its printed title, frequency and cover price, then any others. A new text item added to a schema therefore shows without a code change. A Book's `series` item is left out (its series gallery shows it).
+
 **Index sheets.** `FisheyeIssueIndex` applies a title's `IssueIndex.csv` (in the title's folder under the archive root; columns `Issue`, `Volume`, `Published`, `Publisher`, `Price`, `Frequency`,
 `Title as printed`, matched on header, order free) to its Issues: an issue is matched to its row by the issue number `FisheyeIssueDetails::fromPath()` reads from its name, and
 `FisheyeBook::addIssueIndexDetails()` adds only what the Issue lacks (volume and date as `addIssueDetails()`, then `price`, `frequency`, `printed_title` and `publisher` as a credit with `data.source = 'index'`).

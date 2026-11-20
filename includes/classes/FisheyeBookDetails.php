@@ -23,6 +23,7 @@ class FisheyeBookDetails {
 		$credits = [];
 		$values = [];
 		$lists = [];
+		$extras = [];   // plain-text items the scheme defines that the lists below do not name (an Issue's number, volume, frequency, price ...): shown with the scheme's own title
 		$externalLinks = [];
 		if( $pBook->mXrefInfo ) {
 			foreach( $pBook->liveXrefs() as $xref ) {
@@ -53,6 +54,8 @@ class FisheyeBookDetails {
 					$values[$item] = (string)$xref['xkey_ext'];
 				} elseif( $item === 'genre' || in_array( $item, FISHEYEBOOK_LIST_ITEMS, true ) ) {
 					$lists[$item][] = [ 'text' => (string)$xref['xkey_ext'], 'xorder' => (int)$xref['xorder'] ];
+				} elseif( ( $xref['template'] ?? '' ) === 'text' && $item !== 'series' && trim( (string)$xref['xkey_ext'] ) !== '' ) {   // a Book's series is shown by its series gallery
+					$extras[$item] = [ 'label' => (string)( $xref['xref_title'] ?? ucfirst( str_replace( '_', ' ', $item ) ) ), 'value' => (string)$xref['xkey_ext'] ];
 				}
 			}
 		}
@@ -79,10 +82,20 @@ class FisheyeBookDetails {
 			$detailLabels += [ 'paid' => 'Paid (GBP)' ];
 		}
 		$details = [];
+		// an Issue is identified by its number and volume, so those come first; the rest of the scheme's text items follow the fixed lines in a set order, then any others
+		foreach( [ 'issue_number', 'volume' ] as $item ) {
+			if( isset( $extras[$item] ) ) {
+				$details[] = [ 'label' => KernelTools::tra( $extras[$item]['label'] ), 'value' => $extras[$item]['value'] ];
+				unset( $extras[$item] );
+			}
+		}
 		foreach( $detailLabels as $item => $label ) {
 			if( ( $values[$item] ?? '' ) !== '' ) {
 				$details[] = [ 'label' => KernelTools::tra( $label ), 'value' => $values[$item] ];
 			}
+		}
+		foreach( array_merge( array_intersect_key( array_flip( [ 'printed_title', 'frequency', 'price' ] ), $extras ), array_diff_key( $extras, array_flip( [ 'printed_title', 'frequency', 'price' ] ) ) ) as $item => $unused ) {
+			$details[] = [ 'label' => KernelTools::tra( $extras[$item]['label'] ), 'value' => $extras[$item]['value'] ];
 		}
 		foreach( [ 'category' => 'Category', 'genre' => 'Genre', 'subject' => 'Subject', 'note' => 'Note' ] as $item => $label ) {
 			if( !empty( $lists[$item] ) ) {
