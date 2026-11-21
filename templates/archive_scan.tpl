@@ -66,6 +66,10 @@
 						<div class="form-group"><label for="kind">{tr}Short name (3 to 12 letters; the root key of the loaded files){/tr}</label><input type="text" class="form-control" name="kind" id="kind" value="{$suggestKind|escape}" maxlength="12" /></div>
 						<div class="form-group"><label for="noun">{tr}A folder just under it is called a{/tr}</label>
 							<select name="noun" id="noun" class="form-control"><option value="topic">{tr}topic{/tr}</option><option value="title">{tr}title{/tr}</option><option value="section">{tr}section{/tr}</option></select></div>
+						<div class="form-group"><label for="type">{tr}Its PDFs and epubs are{/tr}</label>
+							<select name="type" id="type" class="form-control"><option value="fisheyebook">{tr}books{/tr}</option><option value="fisheyeissue">{tr}issues of a magazine{/tr}</option></select></div>
+						<div class="form-group"><label for="folders">{tr}A folder holding one document{/tr}</label>
+							<select name="folders" id="folders" class="form-control"><option value="collapse">{tr}is that book, with no gallery of its own{/tr}</option><option value="all">{tr}is still a gallery (every folder is one){/tr}</option></select></div>
 						<input type="submit" class="btn btn-primary" name="register" value="{tr}Register{/tr}" />
 					{/form}
 				{/if}

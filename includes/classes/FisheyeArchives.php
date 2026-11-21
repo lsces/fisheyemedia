@@ -16,11 +16,21 @@ namespace Bitweaver\Fisheyemedia;
 
 class FisheyeArchives {
 
-	/** The built-in kinds: the top-level gallery's title, the folder under the storage root, the noun for one of its folders, the FisheyeMediaBases role. */
+	/**
+	 * The built-in kinds: the top-level gallery's title, the folder under the storage root, the noun for one of its folders, the FisheyeMediaBases role, and the two
+	 * rules of the archive (DEFAULTS when a key is missing): 'type' is what its PDFs and epubs are (a Book, or an Issue of a magazine) and 'folders' is how a folder is
+	 * treated (collapse: a folder holding one document is that book and gets no gallery of its own, and a folder of editions can be made one Book; all: every folder
+	 * is a gallery, however little it holds, and none is a Book).
+	 */
 	public const BUILTIN = [
 		'documentation' => [ 'top' => 'Documentation', 'folder' => 'Documentation', 'noun' => 'topic', 'role' => 'docs' ],
-		'magazines'     => [ 'top' => 'Magazines',     'folder' => 'Magazines',     'noun' => 'title', 'role' => 'magazines' ],
+		'magazines'     => [ 'top' => 'Magazines',     'folder' => 'Magazines',     'noun' => 'title', 'role' => 'magazines', 'type' => 'fisheyeissue', 'folders' => 'all' ],
 	];
+
+	/** What an archive's rules are when its entry does not say. */
+	public const DEFAULTS = [ 'type' => 'fisheyebook', 'folders' => 'collapse' ];
+	public const TYPES = [ 'fisheyebook', 'fisheyeissue' ];
+	public const FOLDER_RULES = [ 'collapse', 'all' ];
 
 	/** Words that already name a media base (FisheyeMediaBases::BASES) or a built-in kind. */
 	private const RESERVED = [ 'library', 'films', 'music', 'tv', 'docs', 'magazines', 'documentation', 'images' ];
@@ -37,7 +47,7 @@ class FisheyeArchives {
 	/**
 	 * Every archive, built-in first: kind => [ top, folder, noun, role, builtin ].
 	 *
-	 * @return array<string,array{top:string,folder:string,noun:string,role:string,builtin:bool}>
+	 * @return array<string,array{top:string,folder:string,noun:string,role:string,type:string,folders:string,builtin:bool}>
 	 */
 	public static function all(): array {
 		global $gBitSystem;
@@ -46,12 +56,13 @@ class FisheyeArchives {
 		}
 		$all = [];
 		foreach( self::BUILTIN as $kind => $spec ) {
-			$all[$kind] = $spec + [ 'builtin' => true ];
+			$all[$kind] = $spec + self::DEFAULTS + [ 'builtin' => true ];
 		}
 		foreach( array_filter( array_map( 'trim', explode( ',', (string)$gBitSystem->getConfig( self::LIST_KEY, '' ) ) ) ) as $kind ) {
 			$spec = json_decode( (string)$gBitSystem->getConfig( self::ENTRY_PREFIX.$kind, '' ), true );
 			if( !isset( $all[$kind] ) && preg_match( self::KIND_PATTERN, $kind ) && is_array( $spec ) && !empty( $spec['top'] ) && !empty( $spec['folder'] ) ) {
-				$all[$kind] = [ 'top' => (string)$spec['top'], 'folder' => (string)$spec['folder'], 'noun' => (string)( $spec['noun'] ?? 'topic' ), 'role' => $kind, 'builtin' => false ];
+				$all[$kind] = [ 'top' => (string)$spec['top'], 'folder' => (string)$spec['folder'], 'noun' => (string)( $spec['noun'] ?? 'topic' ), 'role' => $kind, 'builtin' => false,
+					'type' => in_array( $spec['type'] ?? '', self::TYPES, true ) ? $spec['type'] : self::DEFAULTS['type'], 'folders' => in_array( $spec['folders'] ?? '', self::FOLDER_RULES, true ) ? $spec['folders'] : self::DEFAULTS['folders'] ];
 			}
 		}
 		return self::$kept = $all;
@@ -161,7 +172,7 @@ class FisheyeArchives {
 	/**
 	 * Register a folder as an archive. The folder must be a sub-folder of the media storage root; the kind must be new. Returns an error message, or null when it is done.
 	 */
-	public static function register( string $pKind, string $pTop, string $pFolder, string $pNoun = 'topic' ): ?string {
+	public static function register( string $pKind, string $pTop, string $pFolder, string $pNoun = 'topic', string $pType = 'fisheyebook', string $pFolders = 'collapse' ): ?string {
 		global $gBitSystem;
 		$pKind = strtolower( trim( $pKind ) );
 		$pTop = trim( $pTop );
@@ -186,7 +197,8 @@ class FisheyeArchives {
 		if( in_array( strtolower( $pFolder ), [ 'library', 'music', 'films', 'tv shows', 'oldlibrary', 'oldmusic' ], true ) ) {
 			return 'That folder belongs to a media tree of its own.';
 		}
-		$entry = json_encode( [ 'top' => $pTop, 'folder' => $pFolder, 'noun' => in_array( $pNoun, [ 'topic', 'title', 'section' ], true ) ? $pNoun : 'topic' ] );
+		$entry = json_encode( [ 'top' => $pTop, 'folder' => $pFolder, 'noun' => in_array( $pNoun, [ 'topic', 'title', 'section' ], true ) ? $pNoun : 'topic',
+			'type' => in_array( $pType, self::TYPES, true ) ? $pType : self::DEFAULTS['type'], 'folders' => in_array( $pFolders, self::FOLDER_RULES, true ) ? $pFolders : self::DEFAULTS['folders'] ] );
 		$list = array_filter( array_map( 'trim', explode( ',', (string)$gBitSystem->getConfig( self::LIST_KEY, '' ) ) ) );
 		$list[] = $pKind;
 		$gBitSystem->storeConfig( self::ENTRY_PREFIX.$pKind, $entry, FISHEYEMEDIA_PKG_NAME );

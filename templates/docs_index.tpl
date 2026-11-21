@@ -12,7 +12,7 @@
 		{foreach from=$messages item=message}
 			<div class="alert alert-success"><p>{$message|escape}</p></div>
 		{/foreach}
-		{if $kind != 'magazines'}<p class="help-block"><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}archive_isbn.php?kind={$kind}">{tr}ISBN tags and file details{/tr}</a> - {tr}read the loaded files for their ISBNs, people, publisher and date{/tr}</p>{/if}
+		{if !$isIssues}<p class="help-block"><a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}archive_isbn.php?kind={$kind}">{tr}ISBN tags and file details{/tr}</a> - {tr}read the loaded files for their ISBNs, people, publisher and date{/tr}</p>{/if}
 		{if $plainIssues}
 			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`docs_workbench.php"}
 				<input type="hidden" name="kind" value="{$kind}" />

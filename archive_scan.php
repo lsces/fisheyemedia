@@ -29,7 +29,7 @@ $messages = [];
 // Registering the folder as an archive: the Docs workbench then loads it, one top-level folder at a time (see FisheyeArchives).
 $kindMade = null;
 if( !empty( $_REQUEST['register'] ) && $base !== '' ) {
-	$error = FisheyeArchives::register( (string)( $_REQUEST['kind'] ?? '' ), htmlspecialchars_decode( trim( (string)( $_REQUEST['top'] ?? '' ) ), ENT_NOQUOTES ), $base, (string)( $_REQUEST['noun'] ?? 'topic' ) );
+	$error = FisheyeArchives::register( (string)( $_REQUEST['kind'] ?? '' ), htmlspecialchars_decode( trim( (string)( $_REQUEST['top'] ?? '' ) ), ENT_NOQUOTES ), $base, (string)( $_REQUEST['noun'] ?? 'topic' ), (string)( $_REQUEST['type'] ?? 'fisheyebook' ), (string)( $_REQUEST['folders'] ?? 'collapse' ) );
 	if( $error !== null ) {
 		$errors[] = KernelTools::tra( $error );
 	} else {

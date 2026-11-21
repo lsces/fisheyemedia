@@ -58,21 +58,26 @@ class FisheyeDocsWorkbench {
 	/** The mime plugin for each file extension; a file of any other kind is listed but not loaded until its type has a plugin (mimeextmobi ...). */
 	public const HANDLERS = [ 'pdf' => 'mimeextpdf', 'epub' => 'mimeextepub' ];
 
-	/** The pictures a registered archive loads in place (mimeextimage); the built-in kinds still list them without loading, as they always have. */
+	/** The pictures an archive loads in place (mimeextimage). */
 	public const IMAGE_HANDLERS = [ 'jpg' => 'mimeextimage', 'jpeg' => 'mimeextimage', 'png' => 'mimeextimage', 'gif' => 'mimeextimage', 'webp' => 'mimeextimage', 'bmp' => 'mimeextimage' ];
 
-	/**
-	 * Whether the kind in use still follows the rules the built-in kinds had before archives were registered: pictures listed but not loaded, a gallery for
-	 * every folder, always a Docs Grid. Documentation follows the same rules as any registered archive now; Magazines keeps the old ones until it is moved to books.
-	 */
-	private static function oldRules(): bool {
-		return self::$sKind === 'magazines';
+	/** Other files kept beside the books (a zip of code, a rar of maps) an archive loads in place as plain items (mimeextfile): served and listed, nothing derived from them. */
+	public const FILE_HANDLERS = [ 'zip' => 'mimeextfile', 'rar' => 'mimeextfile', '7z' => 'mimeextfile' ];
+
+	/** The archive's own rules (FisheyeArchives::BUILTIN / DEFAULTS): whether every one of its folders is a gallery, however little it holds, and none is a Book. */
+	public static function foldersAll(): bool {
+		return ( self::kinds()[self::$sKind]['folders'] ?? 'collapse' ) === 'all';
+	}
+
+	/** Whether the archive's PDFs and epubs are issues of a magazine (its rule 'type'), not books. */
+	public static function isIssueArchive(): bool {
+		return ( self::kinds()[self::$sKind]['type'] ?? 'fisheyebook' ) === 'fisheyeissue';
 	}
 
 	/** The mime plugin that loads a file of the kind in use, or null when none does yet. */
 	public static function handlerFor( string $pPath ): ?string {
 		$ext = strtolower( pathinfo( $pPath, PATHINFO_EXTENSION ) );
-		return self::HANDLERS[$ext] ?? ( self::oldRules() ? null : ( self::IMAGE_HANDLERS[$ext] ?? null ) );
+		return self::HANDLERS[$ext] ?? self::IMAGE_HANDLERS[$ext] ?? self::FILE_HANDLERS[$ext] ?? null;
 	}
 
 	/** The handlers whose files are Books (a PDF or epub, which can carry an ISBN); the pictures a registered archive loads stay plain Images. */
@@ -186,7 +191,7 @@ class FisheyeDocsWorkbench {
 
 	/** What a PDF or epub is loaded as when nothing in the Catalogue.csv or the folder names says: a magazine archive holds issues, any other archive books. */
 	public static function defaultType(): string {
-		return self::$sKind === 'magazines' ? self::TYPE_ISSUE : self::TYPE_BOOK;
+		return self::isIssueArchive() ? self::TYPE_ISSUE : self::TYPE_BOOK;
 	}
 
 	/** What a FILE path (under the archive root) is loaded as: TYPE_IMAGE, TYPE_BOOK or TYPE_ISSUE (see decidedType()). */
@@ -450,6 +455,7 @@ class FisheyeDocsWorkbench {
 			if( $image->store( $hash ) && $image->mContentId ) {
 				$image->addToGalleries( [ $galleryId ] );
 				$result['loaded']++;
+				self::pullSiblingsIn( $file['path'], $st['files'], $galleryContentId );
 				// a Book made from a document starts with the ISBN, the people, the publisher and the date its file carries; an Issue with the number, volume and date its name gives (a magazine issue or a picture has none to read)
 				if( $isBook || $schema === self::TYPE_ISSUE ) {
 					global $gBitDb;
@@ -470,16 +476,50 @@ class FisheyeDocsWorkbench {
 	}
 
 	/**
+	 * A folder that was one book on its own (its document filed straight in the gallery above) gains a second loadable file, a zip of code: the folder now
+	 * needs its gallery, and the document already loaded moves into it so the two sit together. Only a document filed in the gallery above and nowhere else is moved.
+	 *
+	 * @param list<array<string,mixed>> $pFiles the topic's files, as status() lists them
+	 */
+	private static function pullSiblingsIn( string $pPath, array $pFiles, int $pGalleryContentId ): void {
+		global $gBitDb;
+		$dir = dirname( $pPath );
+		if( self::isSingleDocumentFolder( $dir ) ) {
+			return;
+		}
+		$parent = self::galleryFor( dirname( $dir ), self::topContentId() );
+		foreach( $pFiles as $f ) {
+			if( dirname( $f['path'] ) !== $dir || empty( $f['contentId'] ) || !in_array( $f['handler'], self::DOCUMENT_HANDLERS, true ) ) {
+				continue;
+			}
+			$in = $gBitDb->getCol( "SELECT `gallery_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` = ?", [ (int)$f['contentId'] ] ) ?: [];
+			if( count( $in ) !== 1 || (int)$in[0] !== (int)$parent ) {
+				continue;
+			}
+			$dest = new FisheyeGallery( null, $pGalleryContentId );
+			$dest->load();
+			if( $dest->addItem( (int)$f['contentId'] ) ) {
+				$old = new FisheyeGallery( null, (int)$parent );
+				$old->load();
+				$old->removeItem( (int)$f['contentId'] );
+			}
+		}
+	}
+
+	/**
 	 * Magazine issues loaded before they had their own type are plain Images: how many, and (convertLoadedIssues) change them to Magazine Issues, keeping
 	 * every row, thumbnail and file reference. Done in the application (not by hand in the database), in one transaction, repeatable.
 	 */
 	public static function plainImageIssues(): array {
 		global $gBitDb;
+		if( !self::isIssueArchive() ) {
+			return [];
+		}
 		$rows = $gBitDb->getAll(
 			"SELECT DISTINCT a.`content_id`, p.`pref_value` AS spec FROM `".BIT_DB_PREFIX."liberty_attachment_prefs` p
 			 JOIN `".BIT_DB_PREFIX."liberty_attachments` a ON a.`attachment_id` = p.`attachment_id`
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = a.`content_id`
-			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE 'magazines|%' AND lc.`content_type_guid` = 'fisheyeimage'" ) ?: [];
+			 WHERE p.`pref_name` = 'extdoc_path' AND p.`pref_value` LIKE ? AND lc.`content_type_guid` = 'fisheyeimage'", [ self::$sKind.'|%' ] ) ?: [];
 		return array_map( 'intval', array_column( $rows, 'content_id' ) );   // the rows are [ content_id, spec ]: it is the id that is wanted
 	}
 
@@ -517,7 +557,7 @@ class FisheyeDocsWorkbench {
 	 */
 	public static function plainImageBooks(): array {
 		global $gBitDb;
-		if( self::$sKind === 'magazines' ) {
+		if( self::isIssueArchive() ) {
 			return [];
 		}
 		$rows = $gBitDb->getAll(
@@ -606,7 +646,7 @@ class FisheyeDocsWorkbench {
 			return false;
 		}
 		$root = self::root();
-		if( $pDir === '' || $pDir === '.' || strcasecmp( basename( $pDir ), 'Extras' ) === 0 || $root === '' || self::oldRules() || !is_dir( $root.$pDir ) ) {
+		if( $pDir === '' || $pDir === '.' || strcasecmp( basename( $pDir ), 'Extras' ) === 0 || $root === '' || self::foldersAll() || !is_dir( $root.$pDir ) ) {
 			return false;
 		}
 		$count = 0;
@@ -728,7 +768,7 @@ class FisheyeDocsWorkbench {
 	 * @return list<array{dir:string,files:list<string>,contentId:?int,url:string}>
 	 */
 	public static function projectFolders( string $pTopic ): array {
-		if( self::oldRules() ) {
+		if( self::foldersAll() ) {
 			return [];
 		}
 		$byDir = [];
@@ -1047,7 +1087,7 @@ class FisheyeDocsWorkbench {
 		if( ( $type = self::decidedType( $pRel ) ) !== null ) {
 			return $type === self::TYPE_IMAGE ? FISHEYE_PAGINATION_IMAGES_GRID : FISHEYE_PAGINATION_DOCS_GRID;
 		}
-		if( self::oldRules() || ( $root = self::root() ) === '' || !is_dir( $root.$pRel ) ) {
+		if( self::foldersAll() || ( $root = self::root() ) === '' || !is_dir( $root.$pRel ) ) {
 			return FISHEYE_PAGINATION_DOCS_GRID;
 		}
 		$pictures = $documents = 0;

@@ -921,6 +921,10 @@ A folder archive is a folder under the media storage root whose PDFs and epubs a
 `folderOverview()` the **Archive Workbench** page (`archive_scan.php`): the media-root folders that have a workbench (an archive) or a loader of their own
 (`LOADERS`, keyed by lower-case folder name). `FisheyeArchiveScan` reads a folder's structure without writing.
 
+**Archive rules.** Each archive's entry in `FisheyeArchives` carries two rules, so the workbench never tests an archive's name: `type` (`fisheyebook`, or `fisheyeissue` for an archive of magazine issues; `FisheyeDocsWorkbench::isIssueArchive()`, which also gives `defaultType()` and the convert-issues / convert-books buttons) and `folders` (`collapse`, the default: a folder holding one document is that book and gets no gallery, a folder of editions can be made one Book; or `all`: every folder is a gallery however little it holds and no folder is a Book; `foldersAll()`). Magazines is `fisheyeissue` / `all`; a registered archive chooses both on the Archive scan page (`register()`, stored in the archive's JSON entry; missing keys give the defaults). Pictures (`IMAGE_HANDLERS`) and other files (`FILE_HANDLERS`) load in every archive.
+
+**Other files beside the books.** A zip, rar or 7z in a folder of a registered or Documentation archive loads in place as a plain item through the `mimeextfile` plugin (`liberty_plugins/mime.extfile.php`, shared code in `mime.extdoc.php`; `FisheyeDocsWorkbench::FILE_HANDLERS`, picked by `handlerFor()`): a link in storage/, nothing derived (no text, no thumbnail), listed in the folder's gallery beside the book. 
+
 **Workbench.** `docs_workbench.php?kind=` and `FisheyeDocsWorkbench` (`setKind()`, `root()`, `topContentId()`): front page per topic; **make the top gallery**,
 **make the galleries** (`makeCatalogueGalleries()`), **Load files**. Which type a file becomes is `typeFor()` / `decidedType()`: the deepest `Catalogue.csv` row
 (`catalogueRows()`, columns `Path`, `Type` = `fisheyebook` | `fisheyeissue` | `fisheyeimage`) wins, a Pictures / Models / Extras folder is Images unless a deeper row says otherwise.

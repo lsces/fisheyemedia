@@ -64,7 +64,7 @@ $gBitSmarty->assign( 'issue', FisheyeIssueDetails::status( $kind ) );
 $gBitSmarty->assign( 'issueContinue', $issueContinue );
 $gBitSmarty->assign( 'index', FisheyeIssueIndex::status( $kind ) );
 $gBitSmarty->assign( 'indexContinue', $indexContinue );
-$gBitSmarty->assign( 'isMagazines', $kind === 'magazines' );
+$gBitSmarty->assign( 'isMagazines', FisheyeDocsWorkbench::isIssueArchive() );
 $gBitSmarty->assign( 'topTitle', FisheyeDocsWorkbench::topTitle() );
 $gBitSmarty->assign( 'st', FisheyeArchiveIsbn::status( $kind ) );
 $gBitSmarty->assign( 'plainBooks', count( FisheyeDocsWorkbench::plainImageBooks() ) );

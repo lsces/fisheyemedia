@@ -23,6 +23,9 @@ FisheyeDocsWorkbench::setKind( $kind );
 $kind = FisheyeDocsWorkbench::kind();
 $gBitSmarty->assign( 'kind', $kind );
 $gBitSmarty->assign( 'noun', FisheyeDocsWorkbench::noun() );
+$issues = FisheyeDocsWorkbench::isIssueArchive();   // the archive's own rules (FisheyeArchives), not its name
+$allFolders = FisheyeDocsWorkbench::foldersAll();
+$gBitSmarty->assign( 'isIssues', $issues );
 $gBitSmarty->assign( 'pageTitle', $kind === 'documentation' ? 'Docs workbench' : FisheyeDocsWorkbench::topTitle().' workbench' );
 
 $messages = [];
@@ -41,24 +44,24 @@ if( $topic === '' ) {
 	if( !empty( $_REQUEST['make_top'] ) ) {
 		FisheyeDocsWorkbench::makeTop() ? $messages[] = KernelTools::tra( 'The top-level gallery was made.' ) : $errors[] = KernelTools::tra( 'The top-level gallery could not be made.' );
 	}
-	if( $kind === 'magazines' && !empty( $_REQUEST['convert_issues'] ) ) {
+	if( $issues && !empty( $_REQUEST['convert_issues'] ) ) {
 		$conv = FisheyeDocsWorkbench::convertLoadedIssues();
 		$conv['converted'] ? $messages[] = $conv['converted'].' '.KernelTools::tra( 'loaded issues are now Magazine Issues.' ) : null;
 		$errors = array_merge( $errors, $conv['errors'] );
 	}
-	if( $kind !== 'magazines' && !empty( $_REQUEST['convert_books'] ) ) {
+	if( !$issues && !empty( $_REQUEST['convert_books'] ) ) {
 		$conv = FisheyeDocsWorkbench::convertLoadedBooks();
 		$conv['converted'] ? $messages[] = $conv['converted'].' '.KernelTools::tra( 'loaded files are now Books.' ) : null;
 		$errors = array_merge( $errors, $conv['errors'] );
 	}
-	if( $kind !== 'magazines' && !empty( $_REQUEST['flatten_singles'] ) ) {
+	if( !$allFolders && !empty( $_REQUEST['flatten_singles'] ) ) {
 		$flat = FisheyeDocsWorkbench::flattenSingleDocuments();
 		$flat['moved'] ? $messages[] = $flat['moved'].' '.KernelTools::tra( 'documents were filed straight into the gallery above.' ) : null;
 		$errors = array_merge( $errors, $flat['errors'] );
 	}
-	$gBitSmarty->assign( 'singleDocuments', $kind !== 'magazines' ? count( FisheyeDocsWorkbench::singleDocumentGalleries() ) : 0 );
-	$gBitSmarty->assign( 'plainBooks', $kind !== 'magazines' ? count( FisheyeDocsWorkbench::plainImageBooks() ) : 0 );
-	$gBitSmarty->assign( 'plainIssues', $kind === 'magazines' ? count( FisheyeDocsWorkbench::plainImageIssues() ) : 0 );
+	$gBitSmarty->assign( 'singleDocuments', !$allFolders ? count( FisheyeDocsWorkbench::singleDocumentGalleries() ) : 0 );
+	$gBitSmarty->assign( 'plainBooks', !$issues ? count( FisheyeDocsWorkbench::plainImageBooks() ) : 0 );
+	$gBitSmarty->assign( 'plainIssues', $issues ? count( FisheyeDocsWorkbench::plainImageIssues() ) : 0 );
 	$gBitSmarty->assign( 'messages', $messages );
 	$gBitSmarty->assign( 'errors', $errors );
 	$all = FisheyeDocsWorkbench::overview();
@@ -73,7 +76,7 @@ if( $topic === '' ) {
 	$gBitSmarty->assign( 'hasTop', (bool)FisheyeDocsWorkbench::topContentId() );
 	$gBitSmarty->assign( 'catalogueMissing', FisheyeDocsWorkbench::catalogueGalleriesMissing() );
 	$gBitSmarty->assign( 'topTitle', FisheyeDocsWorkbench::topTitle() );
-	$gBitSystem->display( 'bitpackage:fisheyemedia/docs_index.tpl', KernelTools::tra( $kind === 'magazines' ? 'Magazines workbench' : 'Docs workbench' ), [ 'display_mode' => 'admin' ] );
+	$gBitSystem->display( 'bitpackage:fisheyemedia/docs_index.tpl', KernelTools::tra( $issues ? 'Magazines workbench' : 'Docs workbench' ), [ 'display_mode' => 'admin' ] );
 	exit;
 }
 
@@ -105,4 +108,4 @@ $gBitSmarty->assign( 'topTitle', FisheyeDocsWorkbench::topTitle() );
 $gBitSmarty->assign( 'batch', FisheyeDocsWorkbench::BATCH );
 $gBitSmarty->assign( 'messages', $messages );
 $gBitSmarty->assign( 'errors', $errors );
-$gBitSystem->display( 'bitpackage:fisheyemedia/docs_workbench.tpl', KernelTools::tra( $kind === 'magazines' ? 'Magazines workbench' : 'Docs workbench' ), [ 'display_mode' => 'edit' ] );
+$gBitSystem->display( 'bitpackage:fisheyemedia/docs_workbench.tpl', KernelTools::tra( $issues ? 'Magazines workbench' : 'Docs workbench' ), [ 'display_mode' => 'edit' ] );
