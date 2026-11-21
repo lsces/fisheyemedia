@@ -7,7 +7,7 @@
  * A registered archive is kept in the site config: the list of kinds in fisheyemedia_archives and, for each, fisheyemedia_archive_<kind> holding a small
  * JSON of its top gallery title, its folder name and the noun for one of its folders. Nothing in it names a machine or a path: the folder is found under the
  * External Disk Storage Path as Documentation's is, so the same registration works wherever the database goes. The kind is also the root key of the mimeext*
- * plugins (mimeext_root_<kind> overrides the folder) and, with the 'role' key, names the top gallery's content_id in FisheyeMediaBases.
+ * plugins (mimeext_root_<kind> names the disk that holds the folder; the folder's name is the registration's) and, with the 'role' key, names the top gallery's content_id in FisheyeMediaBases.
  *
  * @package fisheyemedia
  */

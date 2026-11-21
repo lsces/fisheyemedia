@@ -831,8 +831,8 @@ The item's own `image` xref rows are separate: they are the pictures the item's 
 the item's storage and size-capped (book covers at `FISHEYEBOOK_COVER_MAX`). The folder holds everything else.
 
 ### Book files as Extras
-`FisheyeBookFiles` ties a book to its folder in the Library tree and writes the file rows. `libraryRoot()` is the `fisheye_library_storage_root`
-setting, else the disk storage root plus `Library/`. `candidateFolders( FisheyeBook )` builds `author/series/book` and `author/book` paths from the
+`FisheyeBookFiles` ties a book to its folder in the Library tree and writes the file rows. `libraryRoot()` is `Library/` on the disk named by the `fisheye_library_storage_root`
+setting, else on the External Disk Storage Path. `candidateFolders( FisheyeBook )` builds `author/series/book` and `author/book` paths from the
 galleries the book is in (a series gallery's parent is the author; a series under Various Authors gives `Various Authors/<series>/<book>`);
 `folderFor()` returns the first that exists on disk. `safe()` replaces only `/` in a title, so colons and apostrophes stay.
 
@@ -985,3 +985,4 @@ project Book (`projectDocuments()`: the `ebook` rows' items that are in no galle
 fifth of the pages removed first (`mime_pdf_drop_running_lines()`), so a watermark or running header is not the description. Books whose description was made before this keep it until reloaded
 or run through the summary repair.
 
+**Archive disk paths: one meaning for all (2026-11-21).** `fisheye_library_storage_root`, `fisheye_tutorials_storage_root`, `mimeext_root_documentation`, `mimeext_root_magazines` and `mimeext_root_<kind>` of a registered archive are each the DISK that holds the archive's folder, not the folder: the folder's name belongs to the registration (`FisheyeArchives` `folder`; `Library`, `Local Tutorials` for the two built-ins) and is added by the code, exactly as the External Disk Storage Path and the TV roots already work. Blank = the External Disk Storage Path. A new disk for one archive is that archive's setting; the others stay as they were. `FisheyeDocsWorkbench::rootFor()`, `FisheyeBookFiles::libraryRoot()` and `FisheyeProgram::getTutorialsRoot()` are the three places that apply it. A key that is not a registered kind (none today) takes its setting as the folder.

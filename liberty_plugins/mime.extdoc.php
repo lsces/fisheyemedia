@@ -27,7 +27,7 @@ use Bitweaver\KernelTools;
 
 /**
  * The real file for "<root key>|<path under that root>" (a bare path means the Documentation root), or null. The root comes from the
- * kernel_config entry mimeext_root_<key> (the Documentation Storage Path setting for 'documentation', which falls back to Documentation/ under the External Disk Storage Path); it must exist,
+ * kernel_config entry mimeext_root_<key> (the Documentation Disk Path setting for 'documentation' is the disk holding Documentation/, and a blank one is the External Disk Storage Path; a registered collection's folder name comes from its registration); it must exist,
  * a '..' folder is refused (dots inside a file name are not one), and the resolved file has to lie under the root (a link pointing out of it is refused too).
  */
 function mime_extdoc_resolve( string $pSpec ): ?string {

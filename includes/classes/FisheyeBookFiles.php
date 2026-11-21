@@ -8,7 +8,7 @@
  * file as an 'extra'. Each becomes a liberty_xref row on the book (items ebook / audiobook / extra, xkey_ext = path under the Library root, data =
  * a small JSON blob), written by register() as a rebuild, like a season's featurettes; view_book_file.php serves them by xref_id only.
  *
- * The Library root is the fisheye_library_storage_root setting (its own disk later if wanted), else Library/ under the disk storage root.
+ * The Library root is Library/ on the disk named by the fisheye_library_storage_root setting (its own disk if wanted), else on the External Disk Storage Path.
  *
  * @package fisheyemedia
  */
@@ -27,9 +27,10 @@ class FisheyeBookFiles {
 	/** The Library folder, with its closing slash; '' when nothing is set up. */
 	public static function libraryRoot(): string {
 		global $gBitSystem;
+		// the setting is the disk that holds Library/ (as the External Disk Storage Path does), blank = that path
 		$set = trim( (string)$gBitSystem->getConfig( 'fisheye_library_storage_root', '' ) );
 		if( $set !== '' ) {
-			return rtrim( $set, '/' ).'/';
+			return rtrim( $set, '/' ).'/Library/';
 		}
 		$disk = function_exists( '\\Bitweaver\\Liberty\\mime_film_get_storage_root' ) ? \Bitweaver\Liberty\mime_film_get_storage_root() : '';
 		return $disk !== '' ? $disk.'Library/' : '';

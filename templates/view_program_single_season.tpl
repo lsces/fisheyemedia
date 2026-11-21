@@ -19,7 +19,11 @@
 				   $reloadCandidates - see FisheyeSeason::getEpisodeFileCountOnDisk()) for exactly
 				   this show's one season whenever its folder has more files than are registered -
 				   the common case worth a direct icon here, unlike the multi-season page. *}
+				{if $gContent->mContentTypeGuid eq 'fisheyecourse'}
+					{if $gBitUser->hasPermission( 'p_fisheye_admin' )}<a title="{tr}This course in the tutorial workbench{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}tutorial_workbench.php?course={$gContent->getTitle()|escape:"url"}">{biticon ipackage="icons" iname="applications-education" iexplain="Tutorial workbench"}</a>{/if}
+				{else}
 				<a title="{tr}Reload Episodes{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?gallery_id={$gContent->mGalleryId}&amp;show={$gContent->getTitle()|escape:"url"}">{biticon ipackage="icons" iname="view-refresh" iexplain="Reload Episodes"}</a>
+				{/if}
 			{/if}
 		</div>
 		<h1>{foreach from=$gContent->getBreadcrumbTrail() item=crumb}<a href="{$crumb.url|escape}">{$crumb.title|escape}</a> - {/foreach}{$gContent->getTitle()|escape}{include file="bitpackage:fisheyemedia/extras_inc.tpl"}</h1>

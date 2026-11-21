@@ -14,7 +14,7 @@
 		{/foreach}
 
 		{if !$libraryRoot}
-			<div class="alert alert-warning"><p>{tr}No Library folder is set: give the Book Library Storage Path in Media Library Settings.{/tr}</p></div>
+			<div class="alert alert-warning"><p>{tr}No Library folder is set: give the Book Library Disk Path in Media Library Settings.{/tr}</p></div>
 		{elseif !$catalogues}
 			<p>{tr}No series catalogues found: each series folder under{/tr} <code>{$libraryRoot|escape}Various Authors/</code> {tr}needs a SeriesCatalogue.csv.{/tr}</p>
 

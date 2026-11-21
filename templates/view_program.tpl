@@ -5,7 +5,11 @@
 			{include file="bitpackage:liberty/services_inc.tpl" serviceLocation='icon' serviceHash=$gContent->mInfo}
 			{if $gContent->hasUpdatePermission()}
 				<a title="{tr}Edit{/tr}" href="{$gContent->getEditUrl()|escape}">{biticon ipackage="icons" iname="edit" iexplain="Edit"}</a>
+				{if $gContent->mContentTypeGuid eq 'fisheyecourse'}
+					{if $gBitUser->hasPermission( 'p_fisheye_admin' )}<a title="{tr}This course in the tutorial workbench{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}tutorial_workbench.php?course={$gContent->getTitle()|escape:"url"}">{biticon ipackage="icons" iname="applications-education" iexplain="Tutorial workbench"}</a>{/if}
+				{else}
 				<a title="{tr}Load More Seasons{/tr}" href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?gallery_id={$gContent->mGalleryId}&amp;show={$gContent->getTitle()|escape:"url"}">{biticon ipackage="icons" iname="bwfm-tv-load" iexplain="Load More Seasons"}</a>
+				{/if}
 				<a title="{tr}Season Order{/tr}" href="{$smarty.const.FISHEYE_PKG_URL}image_order.php?gallery_id={$gContent->mGalleryId}">{biticon ipackage="icons" iname="view-sort-ascending" iexplain="Season Order"}</a>
 			{/if}
 			{foreach from=$programTools item=tool}

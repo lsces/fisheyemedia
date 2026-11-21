@@ -179,7 +179,7 @@ the screen), and a row whose book is not loaded yet is left exactly as it is. Th
 ### Book files from the Library folder
 
 A book's ebooks, audio books and other files are its **Extras**, listed on the book's page beside its pictures. They live in the
-Library folder (the **Book Library Storage Path** in Media Library Settings; otherwise `Library/` inside the disk root) as
+Library folder (`Library/` on the disk named by the **Book Library Disk Path** in Media Library Settings, or on the External Disk Storage Path when that is blank; the Documentation, Magazines and Tutorials disk paths work the same way) as
 `Library/<author>/<series>/<book>/`, with the ebook files at the top of the book's folder, a single audio file (one `.mp3` or `.m4b`) beside them,
 an `Audio` folder for a recording in many files (a second recording is `Audio2`) and anything else beside them. A book with no series is `Library/<author>/<book>/`. Folder names are
 the gallery and book titles exactly.

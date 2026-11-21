@@ -12,7 +12,7 @@
 		{formfeedback error=$errors}
 
 		{if !$libraryRoot}
-			<div class="alert alert-warning"><p>{tr}No Library folder is set: give the Book Library Storage Path in Media Library Settings.{/tr}</p></div>
+			<div class="alert alert-warning"><p>{tr}No Library folder is set: give the Book Library Disk Path in Media Library Settings.{/tr}</p></div>
 		{else}
 			<p>{tr}Library folder{/tr}: <code>{$libraryRoot|escape}</code></p>
 			<form method="get" action="{$smarty.server.SCRIPT_NAME}" class="form-inline">

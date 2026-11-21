@@ -6,7 +6,7 @@
  * the disk, so it can be repeated; a file counts as loaded when an attachment holds its path (the extdoc_path preference).
  *
  * Smaller documents can instead be uploaded into the gallery as archives (a stored copy), so this is for the big ones. The root is the Documentation
- * Storage Path setting (kernel_config mimeext_root_documentation); the same plugin takes a 'library' root for the Library's extras.
+ * Disk Path setting (kernel_config mimeext_root_documentation: the disk holding Documentation/, blank = the External Disk Storage Path); the same plugin takes a 'library' root for the Library's extras.
  *
  * @package fisheyemedia
  */
@@ -26,7 +26,7 @@ class FisheyeDocsWorkbench {
 	/**
 	 * The collections this workbench loads, each a source folder, a top-level gallery and a root key for the mimeext* plugins - Documentation (one folder per
 	 * topic), Magazines (one folder per title, then year or volume folders) and any folder registered as an archive (FisheyeArchives, from the archive scan
-	 * page). 'folder' is the name looked for under the External Disk Storage Path when the kind's setting (mimeext_root_<kind>) is blank.
+	 * page). 'folder' is the name looked for on the disk named by the kind's setting (mimeext_root_<kind>), or on the External Disk Storage Path when that is blank.
 	 */
 	public static function kinds(): array {
 		return FisheyeArchives::all();
@@ -213,14 +213,15 @@ class FisheyeDocsWorkbench {
 	}
 
 	/**
-	 * The source folder for a root key with its closing slash, or '' when there is none: the Storage Path setting (kernel_config mimeext_root_<key>),
-	 * else the kind's folder under the External Disk Storage Path (as the Library and Tutorials paths fall back). A key that is not a kind has only its setting.
+	 * The source folder for a root key with its closing slash, or '' when there is none: the kind's folder (its name is part of the registration) on the disk named by the
+	 * setting (kernel_config mimeext_root_<key>), else on the External Disk Storage Path - the same rule as the Library and Tutorials. A key that is not a kind takes its setting as the folder.
 	 */
 	public static function rootFor( string $pKey ): string {
 		global $gBitSystem;
 		$set = trim( (string)$gBitSystem->getConfig( 'mimeext_root_'.$pKey, '' ) );
-		if( $set === '' && isset( self::kinds()[$pKey] ) ) {
-			$disk = function_exists( '\\Bitweaver\\Liberty\\mime_film_get_storage_root' ) ? \Bitweaver\Liberty\mime_film_get_storage_root() : '';
+		if( isset( self::kinds()[$pKey] ) ) {
+			// a kind's setting is the disk that holds its folder (the name belongs to the registration); blank is the External Disk Storage Path
+			$disk = $set !== '' ? rtrim( $set, '/' ).'/' : ( function_exists( '\\Bitweaver\\Liberty\\mime_film_get_storage_root' ) ? \Bitweaver\Liberty\mime_film_get_storage_root() : '' );
 			$set = $disk !== '' ? $disk.self::kinds()[$pKey]['folder'].'/' : '';
 		}
 		if( $set === '' && $pKey === 'library' ) {

@@ -34,20 +34,20 @@ $formFisheyeMediaGeneral = [
 		'note' => 'Filesystem path for TV shows whose title starts N-Z - see the A-M path above.',
 	],
 	"fisheye_library_storage_root" => [
-		'label' => 'Book Library Storage Path',
-		'note' => 'The folder that holds the book Library: one folder per author, then series, then book, with the ebook and audio book files inside (e.g. /srv/media/Library/). Leave blank to use the Library folder under the External Disk Storage Path above. Set it to put the Library on its own disk.',
+		'label' => 'Book Library Disk Path',
+		'note' => 'The disk that holds the book Library folder: the folder that contains Library/ (one folder per author, then series, then book, with the ebook and audio book files inside), e.g. /srv/media/ for /srv/media/Library/. Leave blank to use the External Disk Storage Path above. Set it to put the Library on its own disk. Include a trailing slash.',
 	],
 	"fisheye_tutorials_storage_root" => [
-		'label' => 'Tutorials Storage Path',
-		'note' => 'The folder that CONTAINS the Local Tutorials folder (one folder per video course, then Season NN - Section title, then the lessons tagged SnnEnn), e.g. /srv/media/ for /srv/media/Local Tutorials/. Leave blank to use the External Disk Storage Path above. Include a trailing slash.',
+		'label' => 'Tutorials Disk Path',
+		'note' => 'The disk that holds the Local Tutorials folder: the folder that contains Local Tutorials/ (one folder per video course, then Season NN - Section title, then the lessons tagged SnnEnn), e.g. /srv/media/ for /srv/media/Local Tutorials/. Leave blank to use the External Disk Storage Path above. Include a trailing slash.',
 	],
 	"mimeext_root_documentation" => [
-		'label' => 'Documentation Storage Path',
-		'note' => 'The folder of documents (PDFs, epubs) that the Docs workbench loads where they are, without copying them into storage/: one folder per topic, e.g. /srv/media/Documentation/. Leave blank to use the Documentation folder under the External Disk Storage Path above. Include a trailing slash.',
+		'label' => 'Documentation Disk Path',
+		'note' => 'The disk that holds the Documentation folder: the folder that contains Documentation/ (the documents - PDFs, epubs - that the Docs workbench loads where they are, without copying them into storage/: one folder per topic), e.g. /srv/media/ for /srv/media/Documentation/. Leave blank to use the External Disk Storage Path above. Include a trailing slash.',
 	],
 	"mimeext_root_magazines" => [
-		'label' => 'Magazines Storage Path',
-		'note' => 'The folder of magazine scans (PDFs) that the Docs workbench loads where they are, without copying them into storage/: one folder per title, then a folder per year or volume, e.g. /srv/media/Magazines/. Leave blank to use the Magazines folder under the External Disk Storage Path above. Include a trailing slash.',
+		'label' => 'Magazines Disk Path',
+		'note' => 'The disk that holds the Magazines folder: the folder that contains Magazines/ (the magazine scans - PDFs - that the Docs workbench loads where they are, without copying them into storage/: one folder per title, then a folder per year or volume), e.g. /srv/media/ for /srv/media/Magazines/. Leave blank to use the External Disk Storage Path above. Include a trailing slash.',
 	],
 	"fisheye_plex_db_path" => [
 		'label' => 'Plex Library Database File',

@@ -4,7 +4,7 @@
  * tutorial counterpart of FisheyeAuthorWorkbench - a front page lists every course folder and what is left, and each step is recomputed from the
  * database and the disk, so it can be repeated. Not a content type: a course is a FisheyeProgram and a section a FisheyeSeason, as for TV.
  *
- * The tree is Local Tutorials/<course>/Season NN - <section title>/ (see import/tutorials-tidy in webstack), under the Tutorials Storage Path.
+ * The tree is Local Tutorials/<course>/Season NN - <section title>/ (see import/tutorials-tidy in webstack), on the disk named by the Tutorials Disk Path.
  *
  * @package fisheyemedia
  */
@@ -73,9 +73,9 @@ class FisheyeTutorialWorkbench {
 		$st['contentId'] = (int)( $program['content_id'] ?? 0 );
 		$st['galleryId'] = (int)( $program['gallery_id'] ?? 0 );
 		$st['legacy'] = ( $program['content_type_guid'] ?? '' ) === 'fisheyeprogram';
-		if( $st['galleryId'] ) {
-			$urlHash = [ 'gallery_id' => $st['galleryId'] ];   // by reference: a variable, never a literal
-			$st['url'] = FisheyeGallery::getDisplayUrlFromHash( $urlHash );
+		if( $st['contentId'] ) {
+			// a course (or a show registered as a program) has its own view page, as FisheyeProgram::getDisplayUrl() gives it - not the generic gallery view
+			$st['url'] = FISHEYEMEDIA_PKG_URL.'view_program.php?content_id='.$st['contentId'];
 		}
 		$have = [];
 		if( $st['contentId'] ) {

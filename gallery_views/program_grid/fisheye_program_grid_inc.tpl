@@ -49,7 +49,7 @@
 				{/box}
 			</div>
 		{foreachelse}
-			<p class="norecords">{tr}This gallery is empty{/tr}. <a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?gallery_id={$gContent->mGalleryId ?? 0}">Load seasons!</a></p>
+			<p class="norecords">{tr}This gallery is empty{/tr}. {if $gContent->getTitle() eq 'Local Tutorials'}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}tutorial_workbench.php">{tr}Open the tutorial workbench{/tr}</a>{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}load_program.php?gallery_id={$gContent->mGalleryId ?? 0}">Load seasons!</a>{/if}</p>
 		{/foreach}
 		</div>
 		{pagination gallery_id=$gContent->mGalleryId ?? 0}

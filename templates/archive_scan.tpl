@@ -10,7 +10,7 @@
 	<div class="body">
 		{formfeedback error=$errors success=$messages}
 		{if !$parent}
-			<div class="alert alert-warning"><p>{tr}No media storage folder was found: set the Library Storage Path (or the External Disk Storage Path) in Media Library Settings.{/tr}</p></div>
+			<div class="alert alert-warning"><p>{tr}No media storage folder was found: set the Book Library Disk Path (or the External Disk Storage Path) in Media Library Settings.{/tr}</p></div>
 		{else}
 			<p>{tr}Reads a folder from its file structure alone, with no catalogue, and shows what loading it would make: a gallery for each folder that holds other folders, a book for each folder that holds a document (several documents are editions of one book), an Extras gallery for a folder called Extras, and a picture gallery for a folder of images. Nothing is written.{/tr}</p>
 			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`archive_scan.php" method="get"}

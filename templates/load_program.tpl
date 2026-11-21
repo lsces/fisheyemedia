@@ -11,16 +11,6 @@
 
 	<div class="body">
 
-		{if $createTopError}
-			<div class="alert alert-danger">{$createTopError|escape}</div>
-		{/if}
-		{if $needTopGallery}
-			{form legend="" action="`$smarty.const.FISHEYEMEDIA_PKG_URL`load_program.php?local=`$localParam`"}
-				<p>{tr}There is no top-level{/tr} {$localFolder|escape} {tr}gallery yet.{/tr}</p>
-				<input type="submit" class="btn btn-primary" name="fCreateTop" value="{tr}Create the gallery{/tr}" />
-			{/form}
-		{/if}
-
 		{if $showResult.error}
 			<div class="alert alert-danger">{$showResult.error|escape}</div>
 		{elseif $showResult.local}

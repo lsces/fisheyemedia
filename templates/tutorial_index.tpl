@@ -10,7 +10,7 @@
 	<div class="body">
 		{formfeedback error=$errors}
 		{if !$root}
-			<div class="alert alert-warning"><p>{tr}No Local Tutorials folder was found: set the Tutorials Storage Path (or the External Disk Storage Path) in Media Library Settings.{/tr}</p></div>
+			<div class="alert alert-warning"><p>{tr}No Local Tutorials folder was found: set the Tutorials Disk Path (or the External Disk Storage Path) in Media Library Settings.{/tr}</p></div>
 		{else}
 			{if !$hasTopGallery}
 				<div class="alert alert-warning"><p>{tr}There is no top-level Local Tutorials gallery yet, so a course cannot be filed.{/tr}</p>

@@ -57,24 +57,30 @@ const LOAD_PROGRAM_FLAT_SEASON = '.';
 // why (was a literal, install-order-dependent "2" here until 2026-09-03).
 $topGalleryId = FisheyeMediaBases::galleryId( 'tv' );
 
-// ?local=1 lists the series in the Local Videos library instead of the TV library, ?local=tutorials the courses in Local Tutorials -
-// see FisheyeProgram::locateShowFolder().
-$localParam = (string)( $_REQUEST['local'] ?? '' );
+// ?local=1 lists the series in the Local Videos library instead of the TV library - see FisheyeProgram::locateShowFolder().
+// Local Tutorials is not loaded here: the tutorial workbench registers a course and loads its seasons and files (the redirect below).
+$localParam = (string)( $_REQUEST['local'] ?? '' ) === '' ? '' : '1';
 $local = $localParam !== '';
-$localFolder = $localParam === 'tutorials' ? FisheyeProgram::TUTORIALS_FOLDER : FisheyeProgram::LOCAL_FOLDER;
+$localFolder = FisheyeProgram::LOCAL_FOLDER;
 $localGalleryId = FisheyeGallery::getTopGalleryId( $localFolder );
-
-// Local Tutorials has no loose-video loader (load_local.php) to make its top gallery, so this page offers to; a grid of courses is program_grid.
-$createTopError = null;
-if( $localParam === 'tutorials' && !$localGalleryId && !empty( $_REQUEST['fCreateTop'] ) ) {
-	$createTopError = FisheyeTutorialWorkbench::createTopGallery();
-	$localGalleryId = (int)FisheyeGallery::getTopGalleryId( $localFolder );
-}
 
 $galleryIdParam = (int)( $_REQUEST['gallery_id'] ?? 0 );
 // See load_film.php's own comment on this same decode - detoxify() HTML-escapes every $_REQUEST
 // value, which breaks a raw filesystem lookup like this one for any show name containing &, <, or >.
 $showParam = htmlspecialchars_decode( trim( (string)( $_REQUEST['show'] ?? '' ) ), ENT_NOQUOTES );
+
+// An old link into this page for a tutorial (the Local Tutorials list, a course by name or by gallery) goes to the tutorial workbench.
+$tutorialCourse = null;
+if( ( $_REQUEST['local'] ?? '' ) === 'tutorials' ) {
+	$tutorialCourse = '';
+} elseif( $showParam !== '' && FisheyeProgram::locateShowFolder( $showParam )['base'] === FisheyeProgram::TUTORIALS_FOLDER ) {
+	$tutorialCourse = $showParam;
+} elseif( $galleryIdParam && ( $linked = FisheyeGallery::lookup( [ 'gallery_id' => $galleryIdParam ] ) ) instanceof FisheyeCourse && $linked->isValid() ) {
+	$tutorialCourse = $linked->getTitle();
+}
+if( $tutorialCourse !== null ) {
+	KernelTools::bit_redirect( FISHEYEMEDIA_PKG_URL.'tutorial_workbench.php'.( $tutorialCourse !== '' ? '?course='.rawurlencode( $tutorialCourse ) : '' ) );
+}
 
 $scopeShow = null;      // ['content_id'=>, 'title'=>] once a show is known/registered
 $showResult = null;     // registerFromDisk() result, only shown the first time a show is created
@@ -103,8 +109,8 @@ if( $galleryIdParam && $galleryIdParam !== $topGalleryId ) {
 
 if( $scopeShow === null && $local ) {
 
-	// Local Videos / Local Tutorials: folders whose video files are mostly tagged SnnEnn are series, loaded as shows into that library's gallery.
-	$localRoot = $localFolder === FisheyeProgram::TUTORIALS_FOLDER ? FisheyeProgram::getTutorialsRoot() : \Bitweaver\Liberty\mime_film_get_storage_root();
+	// Local Videos: folders whose video files are mostly tagged SnnEnn are series, loaded as shows into that library's gallery.
+	$localRoot = \Bitweaver\Liberty\mime_film_get_storage_root();
 	$localDir = $localRoot.$localFolder.'/';
 	$entries = is_dir( $localDir ) ? scandir( $localDir ) : [];
 	natsort( $entries );
@@ -125,7 +131,7 @@ if( $scopeShow === null && $local ) {
 			continue;
 		}
 		$existingContentId = $gBitDb->getOne(
-			"SELECT content_id FROM liberty_content WHERE content_type_guid IN ( 'fisheyeprogram', 'fisheyecourse' ) AND title = ?",
+			"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeprogram' AND title = ?",
 			[ $entry ]
 		);
 		if( !$existingContentId ) {
@@ -162,7 +168,7 @@ if( $scopeShow === null && $local ) {
 				continue;
 			}
 			$existingContentId = $gBitDb->getOne(
-				"SELECT content_id FROM liberty_content WHERE content_type_guid IN ( 'fisheyeprogram', 'fisheyecourse' ) AND title = ?",
+				"SELECT content_id FROM liberty_content WHERE content_type_guid = 'fisheyeprogram' AND title = ?",
 				[ $entry ]
 			);
 			if( $existingContentId ) {
@@ -219,7 +225,7 @@ if( $scopeShow === null && $local ) {
 	$showDir = $root.$location['base'].'/'.$showTitle.'/';
 	$local = FisheyeProgram::isLocalBase( $location['base'] );
 	$localFolder = $location['base'];
-	$localParam = $location['base'] === FisheyeProgram::TUTORIALS_FOLDER ? 'tutorials' : '1';
+	$localParam = '1';
 	if( !empty( $root ) && is_dir( $showDir ) ) {
 		$entries = scandir( $showDir );
 		natsort( $entries );
@@ -319,8 +325,6 @@ $gBitSmarty->assign( 'topGalleryUrl', FisheyeGallery::getDisplayUrlFromHash( $to
 
 $gBitSmarty->assign( 'local', $local );
 $gBitSmarty->assign( 'localFolder', $localFolder );
-$gBitSmarty->assign( 'needTopGallery', $local && !$localGalleryId );
-$gBitSmarty->assign( 'createTopError', $createTopError );
 $gBitSmarty->assign( 'localParam', $localParam );
 $gBitSmarty->assign( 'candidateLimit', LOAD_PROGRAM_LIMIT );
 $gBitSmarty->assign( 'candidates', $candidates );

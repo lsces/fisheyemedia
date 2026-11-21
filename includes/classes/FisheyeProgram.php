@@ -40,7 +40,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 
 	// The folder under the film storage root, and the title of the top-level gallery, holding shows that are not in the TV library.
 	public const LOCAL_FOLDER = 'Local Videos';
-	// Likewise for downloaded video courses: a course is a show, a section a season. Its root is the Tutorials Storage Path setting, else the film root.
+	// Likewise for downloaded video courses: a course is a show, a section a season. Its root is the disk named by the Tutorials Disk Path setting, else the film root.
 	public const TUTORIALS_FOLDER = 'Local Tutorials';
 
 
@@ -252,7 +252,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	}
 
 	/**
-	 * The root holding the Local Tutorials folder: the Tutorials Storage Path setting, else the film root. Empty string if neither is set.
+	 * The disk holding the Local Tutorials folder (the folder that contains it): the Tutorials Disk Path setting, else the film root. Empty string if neither is set.
 	 */
 	public static function getTutorialsRoot(): string {
 		global $gBitSystem;

@@ -10,7 +10,7 @@
 	<div class="body">
 		{formfeedback error=$errors}
 		{if !$libraryRoot}
-			<div class="alert alert-warning"><p>{tr}No Library folder is set: give the Book Library Storage Path in Media Library Settings.{/tr}</p></div>
+			<div class="alert alert-warning"><p>{tr}No Library folder is set: give the Book Library Disk Path in Media Library Settings.{/tr}</p></div>
 		{else}
 			<p>{tr}Every author folder in the Library and what is left to do for each, in the order the steps come: books to load, series to sort, folders with no book, files to load. An author with nothing left is put away.{/tr}
 				{if $seriesLeft}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}series_workbench.php">{$seriesLeft} {tr}Various Authors series{/tr} {tr}still have work.{/tr}</a>{else}<a href="{$smarty.const.FISHEYEMEDIA_PKG_URL}series_workbench.php">{tr}The Various Authors series are all finished.{/tr}</a>{/if}</p>
