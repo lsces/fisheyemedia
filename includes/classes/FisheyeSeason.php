@@ -203,6 +203,75 @@ class FisheyeSeason extends FisheyeMediaImage {
 	}
 
 	/**
+	 * One of this season's own live 'episode' rows (xref_id, item, xorder, xkey_ext = the video file, data = the JSON packet), or null.
+	 *
+	 * @param int $pXrefId
+	 * @return \ArrayAccess|null  the row, read by key like an array
+	 */
+	public function getEpisodeRow( int $pXrefId ): ?\ArrayAccess {
+		$this->loadXrefInfo();
+		foreach( $this->mXrefInfo ? $this->liveXrefs() : [] as $xref ) {
+			if( $xref['item'] === 'episode' && (int)$xref['xref_id'] === $pXrefId ) {
+				return $xref;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Make a picture this episode's own thumbnail, replacing whatever it showed (a poster another episode also uses included: the picture
+	 * is written under a name only this episode owns, so the others are not touched). The rest of the episode's details are kept.
+	 *
+	 * @param int    $pXrefId      the episode row
+	 * @param string $pSourceFile  any image file (an upload's tmp_name, or a frame just grabbed)
+	 * @return bool
+	 */
+	public function setEpisodeThumbnail( int $pXrefId, string $pSourceFile ): bool {
+		$row = $this->getEpisodeRow( $pXrefId );
+		if( !$row || empty( $row['xkey_ext'] ) || @getimagesize( $pSourceFile ) === false ) {
+			return false;
+		}
+		$imagesDir = $this->getImageStorageBranchPath();
+		KernelTools::mkdir_p( $imagesDir );
+		$fileName = pathinfo( $row['xkey_ext'], PATHINFO_FILENAME ).'.jpg';
+		if( !self::resizeImageFile( $pSourceFile, $imagesDir.$fileName, 400 ) ) {
+			return false;
+		}
+		$data = !empty( $row['data'] ) ? json_decode( $row['data'], true ) : [];
+		$data = is_array( $data ) ? $data : [];
+		$data['thumb'] = $fileName;
+		$hash = [ 'content_id' => $this->mContentId, 'xref_id' => $pXrefId, 'item' => 'episode', 'xorder' => (int)$row['xorder'], 'edit' => json_encode( (object)$data ) ];
+		return $this->storeXref( $hash );
+	}
+
+	/**
+	 * Take this episode's thumbnail from its own video file, at a chosen time.
+	 *
+	 * @param int $pXrefId   the episode row
+	 * @param int $pSeconds  where in the video to take the frame from
+	 * @return bool
+	 */
+	public function grabEpisodeThumbnail( int $pXrefId, int $pSeconds ): bool {
+		global $gBitSystem;
+		$row = $this->getEpisodeRow( $pXrefId );
+		$root = $this->getImageStorageRoot();
+		if( !$row || empty( $row['xkey_ext'] ) || $root === '' || !is_file( $root.$row['xkey_ext'] ) ) {
+			return false;
+		}
+		$ffmpeg = trim( (string)$gBitSystem->getConfig( 'ffmpeg_path', shell_exec( 'which ffmpeg' ) ?? '' ) );
+		if( $ffmpeg === '' || !is_executable( $ffmpeg ) ) {
+			return false;
+		}
+		$tmpFile = tempnam( sys_get_temp_dir(), 'fisheye_ep_frame_' );
+		@unlink( $tmpFile );
+		$tmpFile .= '.jpg';
+		shell_exec( 'timeout 60 '.escapeshellcmd( $ffmpeg ).' -nostdin -ss '.max( 0, $pSeconds ).' -i '.escapeshellarg( $root.$row['xkey_ext'] ).' -an -frames:v 1 -y '.escapeshellarg( $tmpFile ).' 2>&1' );
+		$ok = is_file( $tmpFile ) && filesize( $tmpFile ) > 1 && $this->setEpisodeThumbnail( $pXrefId, $tmpFile );
+		@unlink( $tmpFile );
+		return $ok;
+	}
+
+	/**
 	 * Generic file-lifecycle hook liberty/edit_xref.php calls (via method_exists()) on a real
 	 * hard-delete (expunge=3) of an xref row - see FisheyeFilm::deleteXrefFile()'s identical
 	 * docblock for the fuller reasoning.

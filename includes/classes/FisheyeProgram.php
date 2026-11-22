@@ -123,7 +123,9 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	 * @return bool
 	 */
 	public function expunge(): bool {
-		if( $this->isValid() && $this->loadImages() ) {
+		// every season, not just the first grid page, or a show with more seasons than rows*cols would leave the rest behind
+		$listHash = [ 'page' => -1, 'offset' => 0, 'max_records' => -1 ];
+		if( $this->isValid() && $this->loadImages( $listHash ) ) {
 			foreach( $this->mItems as $season ) {
 				if( $season instanceof FisheyeSeason ) {
 					// abort the whole show delete rather than silently skip a season that fails
@@ -377,7 +379,7 @@ class FisheyeProgram extends FisheyeMediaGallery {
 	 */
 	public function getSingleSeason(): ?FisheyeSeason {
 		// loadImages() takes its param by reference - a literal array fatals.
-		$listHash = [ 'max_records' => -1 ];
+		$listHash = [ 'page' => -1, 'offset' => 0, 'max_records' => -1 ];
 		$this->loadImages( $listHash );
 		return count( (array)$this->mItems ) === 1 ? current( $this->mItems ) : null;
 	}

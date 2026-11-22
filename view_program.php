@@ -106,7 +106,8 @@ $gBitSmarty->assign( 'durationMs', $durationMs );
 $gBitSmarty->assign( 'externalLinks', $externalLinks );
 
 // this show's own season members - real gallery membership, unchanged from plain FisheyeGallery.
-$listHash = [ 'max_records' => -1 ];
+// every season, never a grid page (max_records alone is ignored by a fixed-grid gallery, which cut a 58-season show to the first rows*cols)
+$listHash = [ 'page' => -1, 'offset' => 0, 'max_records' => -1 ];
 $gContent->loadImages( $listHash );
 
 // season card titles drop the "<show> - " prefix, leaving just "Season 1" etc - same split as

@@ -81,6 +81,10 @@ year as the season (`S2003E05`).
 4. On a season's edit page, **Load Episodes** picks up episodes added since; on the show, **Reload
    Metadata**/**Reload Images**. **Delete Show** removes the show with all its seasons and episodes
    (the video files are never touched).
+5. A wrong thumbnail on one episode: open the episode's edit page (its Edit link on the season's edit page) and use
+   **Change thumbnail**. Take a frame from the episode's own video at a time you choose (a quarter of the way in is
+   offered), or upload a picture. Only that episode's thumbnail changes; **Refresh Thumbnails** on the season would
+   fetch every episode's thumbnail again and replace it.
 
 ## Music
 
