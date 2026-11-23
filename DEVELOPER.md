@@ -560,6 +560,7 @@ can, an external player or a download prompt otherwise).
 
 ## Credits: season directories and the shared survey/link class (2026-10-06)
 
+- **Episode titles reach search through the season.** An episode has no `liberty_content` row, so its title is indexed only via `FisheyeSeason::getExtraIndexWords()`. A season is stored before its episodes are registered, so `reloadPlexEpisodes()` is a thin wrapper: `loadEpisodeRows()` does the work, then `refreshSearchIndex()` drops the stale `index_data` and calls `refresh_index()`. Every route that registers episodes (first load of a season, the show page's reload, the season edit page) goes through it.
 - **Season reload never wipes.** `FisheyeSeason::reloadPlexEpisodes()` (Plex) and
   `registerEpisodesFromFilesystem()` (no Plex match) collect the wanted episode rows and reconcile them once
   (`reconcileXrefItem( 'episode', ..., 'xkey_ext' )`, keyed by the episode file path): unchanged rows keep their
