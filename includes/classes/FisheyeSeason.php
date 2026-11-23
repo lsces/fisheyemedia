@@ -982,6 +982,27 @@ class FisheyeSeason extends FisheyeMediaImage {
 	 * @return array Summary of what was found/stored, for the calling page's result display.
 	 */
 	public function reloadPlexEpisodes( bool $pDataOnly = false, bool $pRefreshThumbs = false ): array {
+		$result = $this->loadEpisodeRows( $pDataOnly, $pRefreshThumbs );
+		$this->refreshSearchIndex();
+		return $result;
+	}
+
+	/**
+	 * Episode titles are searchable only through getExtraIndexWords(), which is read when the season is indexed - and a season
+	 * is saved before its episodes are registered, so every route that registers episodes (the first load of a new season, the
+	 * show page's reload, the season's own reload) re-indexes here. verify()'s title-only index_data from that earlier save
+	 * would be reused as it stands, so it is dropped first.
+	 */
+	protected function refreshSearchIndex(): void {
+		global $gBitSystem;
+		if( $gBitSystem->isPackageActive( 'search' ) ) {
+			require_once SEARCH_PKG_INCLUDE_PATH.'refresh_functions.php';
+			unset( $this->mInfo['index_data'] );
+			\Bitweaver\Liberty\refresh_index( $this );
+		}
+	}
+
+	private function loadEpisodeRows( bool $pDataOnly = false, bool $pRefreshThumbs = false ): array {
 		global $gBitSystem;
 		$summary = [ 'matched' => false, 'items' => [] ];
 
